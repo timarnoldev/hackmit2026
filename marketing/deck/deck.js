@@ -128,15 +128,15 @@
     let appNo = 0;
     slides.forEach((s, k) => {
       const appx = s.hasAttribute('data-appendix');
-      const label = appx ? `A${++appNo}` : `${String(++mainNo).padStart(2, '0')} / ${String(mainCount).padStart(2, '0')}`;
-      s.dataset.num = appx ? `A${appNo}` : String(mainNo);
+      const label = appx ? `A${appNo++}` : `${String(++mainNo).padStart(2, '0')} / ${String(mainCount).padStart(2, '0')}`;
+      s.dataset.num = appx ? `A${appNo - 1}` : String(mainNo);
       const foot = document.createElement('div');
       foot.className = 'foot';
       foot.innerHTML = `${window.SlideHooks.markSVG}<span class="name">Erbgut</span><span class="line">Every rule earns its bases.</span><span class="num">${label}</span>`;
       s.appendChild(foot);
       const ov = document.createElement('span');
       ov.className = 'ovnum';
-      ov.textContent = appx ? `A${appNo}` : String(mainNo);
+      ov.textContent = appx ? `A${appNo - 1}` : String(mainNo);
       s.appendChild(ov);
       s.setAttribute('aria-roledescription', 'slide');
       s.setAttribute('aria-label', `${s.dataset.title || ''} (${label})`);
