@@ -72,7 +72,13 @@ class Metrics:
 
 
 class Decoder(Protocol):
-    """Reconstructs each original strand from its cluster of noisy reads."""
+    """Reconstructs each original strand from its cluster of noisy reads.
+
+    Optional attribute `main_process_only: bool` (default False when absent). GPU decoders set it
+    to True: evaluation then runs encode and simulate in worker processes, gathers the clusters of
+    all trials, calls decode() once in the main process (the decoder batches internally on the GPU),
+    and runs recover() in workers again. CPU decoders like the baseline are sent to the workers.
+    """
 
     name: str
 
