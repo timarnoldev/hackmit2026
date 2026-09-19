@@ -340,7 +340,6 @@ def _pool(parts: list[Metrics]) -> Metrics:
     rate = avg([p.recovery_rate or 0.0 for p in parts])
     return replace(
         first,
-        n_strands=sum(p.n_strands for p in parts),
         strand_accuracy=avg([p.strand_accuracy for p in parts]),
         mean_edit_distance=avg([p.mean_edit_distance for p in parts]),
         dropout_rate=avg([p.dropout_rate for p in parts]),
@@ -619,7 +618,7 @@ def estimate_runtime(
 
     g = config.grid
     n_cand = len(g.redundancy) * len(g.strand_length) * len(g.max_homopolymer) * len(g.gc_rule) * len(g.risk_quantile)
-    strands_per_trial = max(1, m.n_strands // max(1, m.n_trials or n_cal))
+    strands_per_trial = max(1, len(encode(data, default_settings).strands))
     # Evaluations: held-out trials at B plus min reads (scan until the target, assume half the grid).
     min_reads = config.eval_trials * max(1, len(config.coverages) // 2)
     per_eval = config.eval_trials + min_reads
@@ -667,6 +666,11 @@ def _evaluate_heldout(
         data, settings, scorer, decoder, profile, seeds, config.target, config.coverages, config.workers
     )
     return metrics, min_reads
+
+
+def matched_default(default_settings: EncoderSettings, chosen: EncoderSettings) -> EncoderSettings:
+    """The default codec (its hard rules, rule scorer) at the chosen codec's bits per base."""
+    return replace(default_settings, redundancy=chosen.redundancy, strand_length=chosen.strand_length)
 
 
 def coverage_curve(
@@ -782,6 +786,13 @@ def run_loop(
 
         # Held-out evaluation of the chosen codec, with the decoder the search used.
         metrics, min_reads = _evaluate_heldout(data, chosen, risk, current, profile, config, comps)
+        # PROJECT.md reading metric is "at matched bits per base": the default rules and scorer
+        # at the chosen redundancy and strand length, same decoder, same held-out seeds.
+        matched = matched_default(default_settings, chosen)
+        matched_reads = comps.min_reads_at_target(
+            data, matched, None, current, profile, heldout_seeds(config.eval_trials),
+            config.target, config.coverages, config.workers,
+        )
         kmers = [(str(k), float(r)) for k, r in risk.top_kmers()] if hasattr(risk, "top_kmers") else []
         screened = sum(c.screen is not None for c in search.candidates)
         notes = (
@@ -790,11 +801,14 @@ def run_loop(
             f"{screened} candidates screened, {search.trials_run} train trials; "
             f"train re-check {search.chosen_candidate.recheck.recovery_rate if search.chosen_candidate.recheck else 'n/a'}"
             f"{'' if search.target_met else '; TARGET NOT MET ON TRAIN SEEDS (best effort)'}; "
-            f"label mean failure {label_mean:.3f}"
+            f"label mean failure {label_mean:.3f}; "
+            f"default rules at matched bits/base ({describe(matched)}): min reads {matched_reads}"
         )
         run.iterations.append(IterationResult(it, chosen, metrics, min_reads, kmers, notes))
         store.save_iteration(it, chosen, risk, current, {
             "target_met_train": search.target_met,
+            "matched_default_settings": asdict(matched),
+            "matched_default_min_reads": matched_reads,
             "train_recheck_rate": search.chosen_candidate.recheck.recovery_rate if search.chosen_candidate.recheck else None,
             "thresholds": {f"len{k[0]} hp{k[1]} gc{'on' if k[2] else 'off'} q{k[3]}": v for k, v in thresholds.items()},
             "search": [

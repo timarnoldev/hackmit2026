@@ -277,6 +277,13 @@ def build_summary(
         d_m, d_r = home[("default", s)]
         t_m, t_r = home[(s, s)]
         summary.firewall += _comparison(s, "sim_a_heldout", d_m, d_r, t_m, t_r, "Simulator A, held-out seeds")
+        last = codecs[s]["iterations"][-1]
+        if "matched_default_min_reads" in last:
+            v = last["matched_default_min_reads"]
+            summary.firewall.append(FirewallEntry(
+                s, "sim_a_heldout", "min_reads_default_matched", NAN if v is None else float(v),
+                f"default rules at the tailored codec's bits per base ({last['matched_default_settings']['redundancy']} "
+                f"redundancy, length {last['matched_default_settings']['strand_length']}), same decoder"))
         if sim_b is None:
             summary.firewall.append(FirewallEntry(s, "sim_b", "not_run", 0.0, "dnacodec.simulator_b not available yet"))
         else:
