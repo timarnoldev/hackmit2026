@@ -121,13 +121,29 @@ A fully learned encoder (an autoencoder trained through the channel) sounds appe
 | Mock results for dashboard development | ✅ Done |
 | Channel simulator and calibration | 🚧 In progress |
 | Fountain encoder | 🚧 In progress |
-| Baseline decoder and evaluation | 🚧 In progress |
+| Baseline decoder and evaluation | ✅ Done |
 | Transformer decoder | 🚧 In progress |
 | Dashboard | 🚧 In progress |
 | Risk model | ⏳ Next |
 | Adaptive loop | ⏳ Next |
 
-No results are published yet. Anything under `results/mock/` is fake data for building the dashboard and is flagged as such.
+Anything under `results/mock/` is fake data for building the dashboard and is flagged as such.
+
+### Baseline on real data
+
+Majority vote baseline on the real Microsoft Nanopore **held-out** split (2,000 clusters, strands of 110 bases). Clusters are subsampled to a maximum number of reads; the decoder uses at most 16.
+
+| Max reads | Reads per strand | Exact strands | Mean edit distance |
+|---|---|---|---|
+| 2 | 2.0 | 4.8% | 5.86 |
+| 4 | 4.0 | 39.2% | 1.61 |
+| 6 | 5.9 | 68.1% | 0.68 |
+| 10 | 9.7 | 85.3% | 0.32 |
+| 16 | 14.4 | 90.6% | 0.21 |
+
+This is the bar every model result is compared against. The baseline is already strong at high coverage, so the main room for the transformer is at **low coverage (2 to 6 reads)**, which is exactly where reading gets cheap.
+
+Reproduce with `uv run python scripts/eval_real.py`.
 
 ## Getting started
 
@@ -151,6 +167,12 @@ Generate mock results for the dashboard:
 
 ```bash
 uv run python -m scripts.make_mock_results
+```
+
+Evaluate the baseline decoder on the real held-out split:
+
+```bash
+uv run python scripts/eval_real.py
 ```
 
 Commands for training, running the loop, and launching the dashboard will be added here as those components land.
