@@ -16,7 +16,7 @@ It reads the same profile but builds the channel from different mechanisms:
 | Substitutions | uniform over the other 3 bases | transitions (A<->G, C<->T) twice as likely as each transversion |
 | Insertions | uniform random base | half duplicate the base, half random |
 | Malformed reads | whole read from another strand | chimera: prefix of the own strand, suffix of another strand |
-| Sequence context | 5-mer table fit on Microsoft train | 5-mer table fit on a different dataset (`<table>_b.json`, DNAformer Nanopore train for nanopore_budget); if missing, A's table with its log multipliers halved |
+| Sequence context | 5-mer table fit on Microsoft train | 5-mer table fit on a different dataset (`<table>_b.json`, DNAformer Nanopore train for nanopore_budget; if missing, A's table with its log multipliers halved), clipped to [0.1, 10] and rescaled to A's mean multiplier on the simulated strands |
 
 Dropout and coverage use the same model as A (they are the situation, not the channel).
 """
@@ -47,6 +47,7 @@ SUB_SCALE, INS_SCALE, DEL_SCALE = 1.3, 0.75, 1.2
 BURST_ENTER, BURST_EXIT, BURST_FACTOR = 0.01, 0.25, 6.0  # mean burst length 4 bases
 SEGMENT_MEAN_LENGTH = 5.0
 MAX_RUN_EVENT_PROB = 0.9
+B_TABLE_MIN, B_TABLE_MAX = 0.1, 10.0  # clip for the context table B uses
 _TRANSITION = np.array([2, 3, 0, 1], dtype=np.uint8)  # A<->G, C<->T
 
 
@@ -141,17 +142,28 @@ def context_multipliers_b(codes: np.ndarray, profile: SituationProfile) -> np.nd
     name = profile.context_table
     if not name:
         return None
+    k_a, table_a = load_context_table(name)
     path = Path(name)
     alt = path.with_name(f"{path.stem}_b{path.suffix}")
     if (alt if alt.is_absolute() else PROFILES_DIR / alt).exists():
         k, table = load_context_table(str(alt))
     else:
-        k, table = load_context_table(name)
-        table = np.sqrt(table)  # same ranking, half the log amplitude
-        table = table / table.mean(axis=1, keepdims=True)
+        k, table = k_a, np.sqrt(table_a)  # same ranking, half the log amplitude
     ids = kmer_ids(codes, k)
     inside = ids >= 0
-    return np.where(inside[None], table[:, np.where(inside, ids, 0)], 1.0)
+    if not inside.any():
+        return None
+    # Clipped: a fitted table can park a whole run's deletions on one k-mer (editops puts
+    # them on one base of the run), which would hit the per-base cap and lose mass here.
+    mult = np.clip(table, B_TABLE_MIN, B_TABLE_MAX)[:, ids[inside]]
+    # Same mean multiplier on these strands as A's table: B changes which contexts err,
+    # not the overall error level (that is perturbed only by the fixed *_SCALE factors).
+    ids_a = kmer_ids(codes, k_a)
+    target = table_a[:, ids_a[ids_a >= 0]].mean(axis=1)
+    mult = mult * (target / np.maximum(mult.mean(axis=1), 1e-12))[:, None]
+    out = np.ones((3,) + codes.shape)
+    out[:, inside] = mult
+    return out
 
 
 def _mutate_b(
