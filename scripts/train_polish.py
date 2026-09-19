@@ -60,9 +60,19 @@ def setup_logging(log_file: Path) -> None:
     log.propagate = False
 
 
+LOW_PROB = 0.5   # share of examples drawn from the low coverage range
+LOW_MAX = 6      # upper end of that range
+
+
 def sample_coverage(rng: np.random.Generator, n: int) -> np.ndarray:
-    hi = np.where(rng.random(n) < 0.5, 6, 16)
+    """Random cluster size per example, with extra weight on low coverage."""
+    hi = np.where(rng.random(n) < LOW_PROB, LOW_MAX, 16)
     return rng.integers(1, hi + 1)
+
+
+def _set_coverage(low_prob: float, low_max: int) -> None:
+    global LOW_PROB, LOW_MAX
+    LOW_PROB, LOW_MAX = low_prob, low_max
 
 
 def subsample_reads(reads, k: int, rng: np.random.Generator) -> list[str]:
@@ -84,7 +94,8 @@ def _stack(examples):
 
 def sim_task(args) -> tuple[int, tuple] | None:
     """One batch of simulated clusters: random channel, random references, random coverage."""
-    seed, n, length = args
+    seed, n, length, low = args
+    _set_coverage(*low)
     rng = np.random.default_rng(train_seed(seed))
     profile = random_profile(rng, coverage_mean=float(rng.uniform(4, 25)))
     refs = random_strands(n, length, rng)
@@ -108,7 +119,8 @@ def _init_real(indices: list[int]) -> None:
 
 def real_task(args) -> tuple[int, tuple] | None:
     """One pass over a slice of the real train clusters at a random coverage each."""
-    seed, start, end = args
+    seed, start, end, low = args
+    _set_coverage(*low)
     rng = np.random.default_rng(train_seed(seed))
     chunk = _REAL[start:end]
     ks = sample_coverage(rng, len(chunk))
@@ -125,13 +137,15 @@ def real_task(args) -> tuple[int, tuple] | None:
 
 def build_dataset(args) -> dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     pool_indices, val = _train_indices(args.val_size)
+    low = (args.low_prob, args.low_max)
+    _set_coverage(*low)
     tasks_sim = [
-        (train_seed(1_000 + i), args.chunk, 140 if (i % 5 == 4) else 110)
+        (train_seed(1_000 + i), args.chunk, 140 if (i % 5 == 4) else 110, low)
         for i in range(math.ceil(args.sim_clusters / args.chunk))
     ]
     n_real = len(pool_indices)
     tasks_real = [
-        (train_seed(500_000 + p * 1000 + s), s, min(s + args.chunk, n_real))
+        (train_seed(500_000 + p * 1000 + s), s, min(s + args.chunk, n_real), low)
         for p in range(args.real_passes)
         for s in range(0, n_real, args.chunk)
     ]
@@ -201,6 +215,8 @@ def main(argv=None) -> None:
     p.add_argument("--channels", type=int, default=128)
     p.add_argument("--eval-every", type=int, default=1_000)
     p.add_argument("--val-size", type=int, default=500)
+    p.add_argument("--low-prob", type=float, default=0.5, help="share of examples at low coverage")
+    p.add_argument("--low-max", type=int, default=6, help="upper end of the low coverage range")
     p.add_argument("--minutes", type=float, default=45.0, help="stop training after this long")
     p.add_argument("--run-name", default="polish")
     p.add_argument("--checkpoint-dir", default=str(Path(__file__).resolve().parents[1] / "checkpoints"))
