@@ -17,7 +17,17 @@ from streamlit.testing.v1 import AppTest  # noqa: E402
 
 import dnacodec.results as results  # noqa: E402
 from dnacodec.profiles import load_profile  # noqa: E402
-from dnacodec.results import CoveragePoint, RunResult, save_run  # noqa: E402
+from dnacodec.results import (  # noqa: E402
+    AblationEntry,
+    CoveragePoint,
+    CrossoverEntry,
+    ExperimentSummary,
+    FirewallEntry,
+    IterationResult,
+    RunResult,
+    save_run,
+    save_summary,
+)
 from dnacodec.types import EncoderSettings, Metrics  # noqa: E402
 
 APP = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
@@ -59,14 +69,17 @@ def test_mock_run_renders_with_banner(mock_run):
     text = markdown_text(at)
     assert "MOCK DATA" in text
     assert "Adaptive DNA codec" in [t.value for t in at.title]
-    assert "Each situation ends up with a different codec" in [h.value for h in at.header][1]
-    assert len(at.metric) == 3  # one accuracy card per mock situation
+    headers = [h.value for h in at.header]
+    for section in ("moves past the default", "wins at home", "Where the gain comes from", "encoder learned"):
+        assert any(section in h for h in headers), (section, headers)
+    assert len(at.metric) == 2  # one reads-needed card per core channel
+    assert "accepted" in text and "rejected" in text  # candidate examples from summary.json
 
 
 def test_every_situation_and_live_mode(mock_run):
     at = run_app()
     situations = at.sidebar.selectbox[1].options
-    assert len(situations) == 4  # "All situations" plus the three profiles
+    assert len(situations) == 3  # "All situations" plus the two core channels
     for option in at.sidebar.selectbox[1].options[1:]:
         at.sidebar.selectbox[1].set_value(at.sidebar.selectbox[1].options[0]).run()
         at.sidebar.selectbox[1].select(option).run()
@@ -83,25 +96,38 @@ def small_metrics(accuracy: float, bits: float | None) -> Metrics:
     )
 
 
-def test_real_and_partial_runs_render_without_banner(results_dir):
-    profile = load_profile("nanopore_budget")
-    # A loop that has not finished an iteration yet, and one with a missing optional metric.
-    save_run(RunResult(situation="nanopore_budget", profile=profile, default_settings=EncoderSettings(),
-                       default_metrics=small_metrics(0.5, 1.4), iterations=[]), "partial")
-    from dnacodec.results import IterationResult
+def run_result(situation: str, iterations, **kwargs) -> RunResult:
+    return RunResult(situation=situation, profile=load_profile(situation), recovery_target=1.0, n_trials=10,
+                     default_settings=EncoderSettings(), default_metrics=small_metrics(0.8, 1.4),
+                     iterations=iterations, **kwargs)
 
-    save_run(RunResult(
-        situation="illumina_standard", profile=load_profile("illumina_standard"),
-        default_settings=EncoderSettings(), default_metrics=small_metrics(0.8, None),
-        iterations=[IterationResult(iteration=0, settings=EncoderSettings(max_homopolymer=None, gc_min=None,
-                                                                          gc_max=None),
-                                    metrics=small_metrics(0.85, None))],
-        coverage_curve=[CoveragePoint("baseline", 2, 0.4), CoveragePoint("baseline", 8, 0.95),
+
+def test_real_and_partial_runs_render_without_banner(results_dir):
+    # A loop that has not finished an alternation, one that never met the target, and no summary.json.
+    save_run(run_result("nanopore_budget", []), "partial")
+    free = EncoderSettings(max_homopolymer=None, gc_min=None, gc_max=None, risk_threshold=0.6)
+    save_run(run_result(
+        "illumina_standard",
+        [IterationResult(iteration=0, settings=free, metrics=small_metrics(0.85, None), min_reads_at_target=None)],
+        default_min_reads_at_target=None,
+        coverage_curve=[CoveragePoint("transformer", 2, 0.4), CoveragePoint("transformer", 8, 0.95),
                         CoveragePoint("tailored", 2, 0.7), CoveragePoint("tailored", 8, 0.99)],
     ), "partial")
     at = run_app()
     assert not at.exception, at.exception
     assert "MOCK DATA" not in markdown_text(at)
+
+
+def test_summary_only_run_renders(results_dir):
+    save_summary(ExperimentSummary(
+        ablation=[AblationEntry("nanopore_budget", "A", small_metrics(0.6, 1.4), None),
+                  AblationEntry("nanopore_budget", "B", small_metrics(0.8, 1.4), 8.0)],
+        crossover=[CrossoverEntry("default", "nanopore_budget", small_metrics(0.8, 1.4), 8.0),
+                   CrossoverEntry("nanopore_budget", "nanopore_budget", small_metrics(0.9, 1.5), None)],
+        firewall=[FirewallEntry("nanopore_budget", "real", "risk_auc", 0.6)],
+    ), "summary_only")
+    at = run_app()
+    assert not at.exception, at.exception
 
 
 def test_no_runs_shows_hint(results_dir):
@@ -118,13 +144,15 @@ def test_coverage_needed_interpolates():
     assert app.coverage_needed(pts, 0.95) is None
 
 
-def test_strictness_and_settings_format():
+def test_setting_changes_and_format():
     app = load_app_module()
     default = EncoderSettings()
-    assert app.strictness(default, EncoderSettings(max_homopolymer=2)) > 0
-    assert app.strictness(default, EncoderSettings(max_homopolymer=4, gc_min=0.3, gc_max=0.7)) < 0
-    free = EncoderSettings(max_homopolymer=None, gc_min=None, gc_max=None)
-    assert app.strictness(free, free) == 0
+    free = EncoderSettings(max_homopolymer=None, gc_min=None, gc_max=None, risk_threshold=0.5)
+    changes = app.setting_changes(default, free)
+    assert "longest allowed letter run switched off" in changes
+    assert any(c.startswith("learned risk filter on") for c in changes)
+    assert app.setting_changes(default, default) == []
     assert app.fmt_setting(default, "gc") == "40 to 60%"
     assert app.fmt_setting(default, "redundancy") == "30%"
-    assert app.fmt_setting(free, "max_homopolymer") == "no limit"
+    assert app.fmt_setting(free, "max_homopolymer") == "off"
+    assert app.highlight_runs("ACAAAAG") == 'AC<span class="run">AAAA</span>G'
