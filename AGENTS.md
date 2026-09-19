@@ -18,6 +18,15 @@ scripts/download_data.sh         # real datasets (--full on the GPU machine)
 uv run pytest -q                 # must stay green
 ```
 
+## Compute: ASUS Ascent GX10
+
+All GPU work runs on one ASUS Ascent GX10 (NVIDIA GB10 Grace Blackwell, the same chip as DGX Spark).
+- **ARM64 (aarch64), not x86.** Every dependency must work on linux-aarch64. The first check on the machine is `python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"` plus a small matmul on the GPU. If the pip wheel doesn't see the GPU, use NVIDIA's NGC PyTorch container instead of fighting wheels.
+- **128 GB unified memory** shared by CPU and GPU. Memory is never the limit for our model sizes; keep simulated datasets in RAM.
+- **Blackwell GPU:** train in bf16 autocast. It's roughly a strong desktop GPU for training, well below a datacenter H100, so don't scale models up because of the name.
+- **20 ARM CPU cores:** the simulator, the baseline decoder, recovery trials and risk labeling are CPU work. Parallelize them across cores with `concurrent.futures.ProcessPoolExecutor`, one seed per task, so results stay deterministic per seed.
+- **One shared GPU.** Long jobs declare themselves in `GPU_JOBS.md` (who, what, expected end). Pretraining has priority until hour 10.
+
 ## Layout
 
 | Path | Owner | What |
