@@ -329,23 +329,23 @@
       list: ['Fountain code', '8 to 32 candidates per slot', 'a checksum in every strand', 'a scorer keeps one'] },
     { f: 1, x: 654, y: 40, w: 300, h: 232, title: 'Simulator A',
       list: ['dropouts, uneven coverage', 'per-read quality', 'errors every read shares', '5-mer context errors'] },
-    { f: 1, x: 981, y: 16, w: 340, h: 324, title: 'Decoder chain', subs: [
+    { f: 1, x: 981, y: 12, w: 340, h: 342, title: 'Decoder chain', subs: [
       { f: 1, title: 'Baseline', text: 'aligns the reads, votes a draft' },
       { f: 2, learned: true, title: 'Polisher', text: 'dilated 1D CNN, 0.8M parameters<br>17 vote features per position<br>heads: keep, substitute, delete, insert' },
     ] },
     { f: 1, x: 1348, y: 40, w: 330, h: 232, title: 'Recover',
       list: ['the checksum turns a wrong strand into a missing one', 'the Fountain code rebuilds the file'] },
-    { f: 4, x: 654, y: 346, w: 300, h: 150, firewall: true, title: 'Simulator B',
-      list: ['different mechanisms, never optimized on, only to check that a gain survives'] },
+    { f: 4, x: 654, y: 328, w: 300, h: 182, firewall: true, title: 'Simulator B',
+      list: ['different mechanisms, never optimized on', 'only checks that a gain survives'] },
     { f: 4, x: 1348, y: 346, w: 330, h: 232, title: 'Evaluation',
       list: ['300 held-out trials', 'fewest reads at the recovery target', 'writes the result JSON that the dashboard, this deck and the demo read'] },
-    { f: 3, x: 1020, y: 510, w: 300, h: 130, title: 'Freeze the decoder', n: '1',
+    { f: 3, x: 1020, y: 524, w: 300, h: 130, title: 'Freeze the decoder', n: '1',
       list: ['adapt it to the channel, then hold it fixed'] },
-    { f: 3, x: 680, y: 510, w: 300, h: 130, title: 'Label strands', n: '2',
+    { f: 3, x: 680, y: 524, w: 300, h: 130, title: 'Label strands', n: '2',
       list: ['32 simulations each, see where the decoder fails'] },
-    { f: 3, x: 340, y: 510, w: 300, h: 130, learned: true, title: 'Train the risk model', n: '3',
+    { f: 3, x: 340, y: 524, w: 300, h: 130, learned: true, title: 'Train the risk model', n: '3',
       list: ['predicts a strand\u2019s failure rate on this channel'] },
-    { f: 3, x: 0, y: 510, w: 300, h: 130, title: 'Search settings', n: '4',
+    { f: 3, x: 0, y: 524, w: 300, h: 130, title: 'Search settings', n: '4',
       list: ['rules, redundancy, risk threshold, candidates'] },
   ];
 
@@ -390,17 +390,17 @@
       wire(1, `M958 156 H973 ${arrow(958, 156, 977, 156)}`) +
       wire(1, `M1325 156 H1340 ${arrow(1325, 156, 1344, 156)}`) +
       // the loop
-      wire(3, `M1170 344 V500 ${arrow(1170, 476, 1170, 504)}`) +
-      label(3, 1156, 430, 'where the decoder fails', 'end') +
-      wire(3, `M1014 575 H994 ${arrow(1014, 575, 986, 575)}`) +
-      wire(3, `M674 575 H654 ${arrow(674, 575, 646, 575)}`) +
-      wire(3, `M334 575 H314 ${arrow(334, 575, 306, 575)}`) +
-      wire(3, `M150 506 V320 H466 V286 ${arrow(466, 316, 466, 280)}`, 'learnedwire') +
+      wire(3, `M1170 358 V514 ${arrow(1170, 490, 1170, 518)}`) +
+      label(3, 1156, 440, 'decoder failures', 'end') +
+      wire(3, `M1014 589 H994 ${arrow(1014, 589, 986, 589)}`) +
+      wire(3, `M674 589 H654 ${arrow(674, 589, 646, 589)}`) +
+      wire(3, `M334 589 H314 ${arrow(334, 589, 306, 589)}`) +
+      wire(3, `M150 520 V320 H466 V286 ${arrow(466, 316, 466, 280)}`, 'learnedwire') +
       label(3, 168, 302, 'the risk model feeds the scorer') +
-      label(3, 680, 676, 'at most 3 rounds', 'middle') +
+      label(3, 680, 690, 'at most 3 rounds', 'middle') +
       // evaluation and the firewall
-      wire(4, `M804 276 V342 ${arrow(804, 318, 804, 346)}`, 'dash') +
-      label(4, 818, 322, 'firewall') +
+      wire(4, `M804 276 V324 ${arrow(804, 300, 804, 328)}`, 'dash') +
+      label(4, 818, 306, 'firewall') +
       wire(4, `M1513 276 V342 ${arrow(1513, 318, 1513, 346)}`) +
       label(4, 1527, 322, 'every codec, every claim');
 
