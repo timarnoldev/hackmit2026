@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="t">
+  <title id="t">StrandAudit mark: a strand of four bases with a dimension line measuring a run of two identical bases</title>
+  <rect width="64" height="64" rx="14" fill="#131B20"/>
+  <!-- bases A, C, G, G standing on the strand -->
+  <rect x="8" y="26" width="9" height="20" rx="2" fill="#A3A6FF"/>
+  <rect x="21" y="26" width="9" height="20" rx="2" fill="#FF86B0"/>
+  <rect x="34" y="26" width="9" height="20" rx="2" fill="#4FD6B5"/>
+  <rect x="47" y="26" width="9" height="20" rx="2" fill="#4FD6B5"/>
+  <!-- the strand -->
+  <rect x="8" y="50" width="48" height="3" rx="1.5" fill="#E6ECEA"/>
+  <!-- a dimension line measuring the GG run -->
+  <path d="M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5" fill="none" stroke="#E6ECEA" stroke-width="3" stroke-linecap="round"/>
+</svg>

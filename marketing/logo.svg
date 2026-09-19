@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 284 64" width="284" height="64" role="img" aria-labelledby="t">
+  <title id="t">StrandAudit</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600&amp;display=swap');
+    .wm { font-family: 'Instrument Sans', 'Helvetica Neue', Arial, sans-serif; font-weight: 600; font-size: 36px; }
+  </style>
+  <!-- mark: bases A, C, G, G on a strand, a dimension line measuring the GG run -->
+  <rect width="64" height="64" rx="14" fill="#131B20"/>
+  <rect x="8" y="26" width="9" height="20" rx="2" fill="#A3A6FF"/>
+  <rect x="21" y="26" width="9" height="20" rx="2" fill="#FF86B0"/>
+  <rect x="34" y="26" width="9" height="20" rx="2" fill="#4FD6B5"/>
+  <rect x="47" y="26" width="9" height="20" rx="2" fill="#4FD6B5"/>
+  <rect x="8" y="50" width="48" height="3" rx="1.5" fill="#E6ECEA"/>
+  <path d="M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5" fill="none" stroke="#E6ECEA" stroke-width="3" stroke-linecap="round"/>
+  <!-- wordmark -->
+  <text class="wm" x="80" y="45" fill="#131B20" textLength="200" lengthAdjust="spacingAndGlyphs">StrandAudit</text>
+</svg>
