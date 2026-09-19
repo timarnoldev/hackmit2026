@@ -128,12 +128,12 @@ Adaptive constrained coding, learned decoders and end-to-end learned codes all e
 | Real data loaders (Microsoft, DNAformer) with fixed held-out split | ✅ Done |
 | Mock results for dashboard development | ✅ Done |
 | Channel simulator | ✅ v1 done, Nanopore calibrated; realism fixes, Illumina calibration, Simulator B in progress |
-| Fountain encoder | 🚧 In progress |
+| Fountain encoder (LT, CRC-16 per strand, risk threshold) | ✅ Done |
 | Baseline decoder and evaluation | ✅ Done |
 | Transformer decoder | 🚧 In progress |
-| Dashboard | 🚧 In progress |
-| Risk model | ⏳ Next |
-| Adaptive loop | ⏳ Next |
+| Dashboard (Pareto, crossover, ablation, learned patterns) | ✅ Done on mock data |
+| Risk model | 🚧 In progress |
+| Alternating loop and evidence experiments | 🚧 In progress |
 
 Anything under `results/mock/` is fake data for building the dashboard and is flagged as such.
 
@@ -183,7 +183,15 @@ Evaluate the baseline decoder on the real held-out split:
 uv run python scripts/eval_real.py
 ```
 
-Commands for training, running the loop, and launching the dashboard will be added here as those components land.
+Launch the dashboard (shows mock data until real runs exist, with a MOCK banner):
+
+```bash
+uv sync --extra dashboard
+uv run python -m scripts.make_mock_results
+uv run streamlit run dashboard/app.py
+```
+
+Commands for training and running the loop will be added here as those components land.
 
 ## Repository layout
 
