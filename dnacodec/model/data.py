@@ -162,7 +162,8 @@ class ClusterPool:
 
 def random_profile(rng: np.random.Generator, coverage_mean: float = 20.0) -> SituationProfile:
     """A random channel covering a wide range: total error rate log-uniform in 0.2%..15%,
-    split randomly between substitutions, insertions and deletions. No dropouts (empty
+    split randomly between substitutions, insertions and deletions, plus random per-read
+    quality spread and a few malformed reads (clustering errors). No dropouts (empty
     clusters teach nothing), high coverage (make_batch subsamples it anyway)."""
     total = math.exp(rng.uniform(math.log(0.002), math.log(0.15)))
     sub, ins, dele = rng.dirichlet([1.5, 1.5, 1.5]) * total
@@ -183,6 +184,8 @@ def random_profile(rng: np.random.Generator, coverage_mean: float = 20.0) -> Sit
         decay_per_year=0.0,
         synthesis_usd_per_base=0.0,
         sequencing_usd_per_read=0.0,
+        read_quality_spread=float(rng.uniform(0.0, 0.8)),
+        malformed_read_rate=float(rng.uniform(0.0, 0.05)) if rng.random() < 0.5 else 0.0,
     )
 
 
