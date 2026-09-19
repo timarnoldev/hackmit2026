@@ -47,7 +47,7 @@ Main flow, 3:00 (targets per slide are in `index.html` as `data-plan`, and drive
 |---|---|---|---|
 | 1 | Title | 0:00 to 0:08 | animated strand |
 | 2 | The problem | 0:08 to 0:28 | rulebook stamped onto Nanopore and Illumina |
-| 3 | How DNA storage works | 0:28 to 0:52 | bits to letters, synthesis, noisy reads, consensus, checksum, Fountain code |
+| 3 | How DNA storage works | 0:28 to 0:52 | bits to letters, synthesis, noisy reads, the decoder chain, checksum, Fountain code |
 | 4 | Where the rules come in | 0:52 to 1:05 | 8 candidates, rules reject, scorer keeps one |
 | 5 | Tier 1, the rule audit | 1:05 to 1:32 | switches flip, verdict table fills per channel |
 | 6 | Tier 2, learning from failures | 1:32 to 1:52 | hot spots light up, measured evidence, encoder steers around |
@@ -56,7 +56,7 @@ Main flow, 3:00 (targets per slide are in `index.html` as `data-plan`, and drive
 | 9 | Evidence: simulator and firewall | 2:32 to 2:46 | real vs simulated curve, table, firewall steps |
 | 10 | Results and close | 2:46 to 3:00 | headline results, tagline, team, repo |
 
-Appendix (after the end, not timed): A1 the channel simulator, A2 the two AI models, A3 the GX10 setup, A4 to A6 judge questions.
+Appendix (after the end, not timed): **A0 the architecture**, one screen with the whole system and four builds (storage path, the learned polisher, the risk model and the loop, evaluation and the firewall). This is the slide to jump to when a judge asks what you actually built, and its notes carry a 40 to 60 second walkthrough. Then A1 the channel simulator, A2 the two learned models, A3 the GX10 setup, A4 to A6 judge questions.
 
 Speaker notes live in each slide's `<aside class="notes">`. `click` markers in the presenter view show where each build goes; the next one is highlighted.
 
@@ -76,7 +76,7 @@ It fills the rule audit, Pareto points, ablation ladder, crossover matrix and fi
 - `headline.imageDemo`: one sentence about the image round trip at 6 reads per strand
 - `crossover.summary`: optional one-line outcome (computed automatically when each codec wins at home and not away)
 - `firewall.*.status`: `"holds"`, `"does not hold"` or `"measured"`, with a short `note`. The converter proposes these from the numbers; confirm each one.
-- `qa.*`: short sentences for the appendix answers
+- `qa.riskModelRealAuc`, `qa.riskTopPatterns`, `qa.handRulesOptimalOn`: short sentences for the appendix answers
 
 The field list is at the top of `results.js`. Keep the object valid JSON (double quotes, no trailing commas). If the file breaks, the deck still opens with a red banner and everything pending.
 
@@ -86,7 +86,7 @@ Only use numbers that came out of `dnacodec.evaluate` on held-out seeds and that
 
 ## Numbers the deck states
 
-Measured and documented, never invented: shared Nanopore errors 45 to 66% explained by the 5-letter context and hot spots at AUC 0.80 to 0.90 on held-apart data in two datasets; the held-out calibration table (real 4.9 / 39.8 / 66.5 / 84.5 / 90.1% vs Simulator A 3.6 / 40.3 / 63.7 / 83.0 / 90.3% exact strands at 2 / 4 / 6 / 10 / 16 reads); baseline 90.6% exact strands at 16 reads on real held-out data; 20 KB test file, 300 held-out trials; about 11,000 lines of Python, about 2,500 of them tests; ASUS Ascent GX10 (NVIDIA GB10). The appendix also quotes specs from `docs/ERRORS.md`, `docs/MODELS.md` and `README.md` (fitted error rates, model size, 32 simulations per label). The DNA strands on slides 3, 4 and 6 are illustrations; the rule checks on slide 4 are computed from the shown letters.
+Measured and documented, never invented: shared Nanopore errors 45 to 66% explained by the 5-letter context and hot spots at AUC 0.80 to 0.90 on held-apart data in two datasets; the held-out calibration table (real 4.9 / 39.8 / 66.5 / 84.5 / 90.1% vs Simulator A 3.6 / 40.3 / 63.7 / 83.0 / 90.3% exact strands at 2 / 4 / 6 / 10 / 16 reads); the decoder chain on real held-out clusters, baseline to polished, 41.0% to 56.8% exact strands at 4 reads, 67.0% to 82.5% at 6 and 90.0% to 95.1% at 16, with 4.7% of strands unrecoverable even from all 27 reads; 20 KB test file, 300 held-out trials; about 11,000 lines of Python, about 2,500 of them tests; ASUS Ascent GX10 (NVIDIA GB10). The appendix also quotes specs from `docs/ERRORS.md`, `docs/MODELS.md` and `README.md` (fitted error rates, model size, 32 simulations per label). The DNA strands on slides 3, 4 and 6 are illustrations; the rule checks on slide 4 are computed from the shown letters.
 
 ## Files
 
@@ -95,7 +95,7 @@ Measured and documented, never invented: shared Nanopore errors 45 to 66% explai
 | `index.html` | All slides and speaker notes |
 | `deck.css` | Brand tokens (dark and light), layout, animations, presenter view |
 | `deck.js` | Engine: scaling, navigation, builds, hash, overview, help, black screen, presenter view, window sync, timer and pacing |
-| `slides.js` | Generated and data-driven content: DNA letters, candidates, rule audit, charts, placeholders, spoken result sentences |
+| `slides.js` | Generated and data-driven content: DNA letters, candidates, rule audit, charts, the A0 architecture diagram, placeholders, spoken result sentences |
 | `results.js` | The one place for results (pending until the runs finish) |
 | `results.sample.js` | Fake values for previewing, labeled SAMPLE |
 | `tools/results_from_run.py` | Fills `results.js` from `results/<run_id>/` |

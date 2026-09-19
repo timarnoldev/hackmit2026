@@ -103,7 +103,6 @@ window.RESULTS = {
     "imageDemo": null
   },
   "qa": {
-    "transformerVsBaseline": null,
     "riskModelRealAuc": null,
     "riskTopPatterns": null,
     "handRulesOptimalOn": null

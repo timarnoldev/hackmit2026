@@ -70,7 +70,6 @@ window.RESULTS = {
     "imageDemo": "SAMPLE: the default codec fails to recover the image, the tuned codec gets it back bit for bit"
   },
   "qa": {
-    "transformerVsBaseline": "SAMPLE: transformer vs baseline sentence goes here.",
     "riskModelRealAuc": "SAMPLE: AUC 0.xx on held-out real clusters.",
     "riskTopPatterns": "SAMPLE: top patterns go here.",
     "handRulesOptimalOn": "SAMPLE: channel list goes here."
