@@ -544,3 +544,18 @@ def test_final_copy_points_at_train_chosen_alternation(monkeypatch):
     manifest = loop.load_codecs("t", NANOPORE.name)
     assert manifest["final_iteration"] == 1 and manifest["iterations"][-1]["copy_of"] == 1
     assert {p.decoder for p in out.coverage_curve} == {"baseline", "tailored"}
+
+
+def test_polish_decoder_is_not_fine_tuned_and_reloads():
+    """The polisher has a checkpoint_path but no finetune: adaptation must be a no-op."""
+
+    class Polish:
+        name = "polish"
+        main_process_only = True
+        checkpoint_path = "checkpoints/polish/polish.pt"
+
+    dec = Polish()
+    assert loop.default_adapt(dec, NANOPORE, ["ACGT" * 20], [1], None, 10) is dec
+    assert loop.decoder_spec(dec) == {"kind": "polish", "checkpoint": "checkpoints/polish/polish.pt"}
+    with pytest.raises(ValueError, match="needs a checkpoint"):
+        loop.make_decoder("polish")

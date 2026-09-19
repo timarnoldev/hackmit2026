@@ -245,16 +245,21 @@ def _baseline_decoder() -> Decoder:
 
 
 def make_decoder(kind: str = "baseline", checkpoint: str | Path | None = None) -> Decoder:
-    """'baseline' = MajorityVoteDecoder, 'transformer' = TransformerDecoder(checkpoint)."""
+    """'baseline' = MajorityVoteDecoder, 'transformer' = TransformerDecoder(checkpoint),
+    'polish' = PolishDecoder(checkpoint) (majority vote draft plus a learned correction)."""
     if kind == "baseline":
         return _baseline_decoder()
+    if kind not in ("transformer", "polish"):
+        raise ValueError(f"unknown decoder kind {kind!r}")
+    if checkpoint is None:
+        raise ValueError(f"{kind} decoder needs a checkpoint")
     if kind == "transformer":
-        if checkpoint is None:
-            raise ValueError("transformer decoder needs a checkpoint")
         from .model.decoder import TransformerDecoder
 
         return TransformerDecoder(checkpoint)
-    raise ValueError(f"unknown decoder kind {kind!r}")
+    from .model.polish import PolishDecoder
+
+    return PolishDecoder(checkpoint)
 
 
 def decoder_spec(decoder: Decoder) -> dict:
@@ -273,7 +278,11 @@ def default_adapt(
     """Fine-tune a checkpointed decoder on this channel; decoders without a checkpoint
     (the majority vote baseline) are returned unchanged, i.e. adaptation is a no-op."""
     checkpoint = getattr(decoder, "checkpoint_path", None)
-    if checkpoint is None:
+    if decoder.name != "transformer" or checkpoint is None:
+        # No per-channel fine-tuning for the majority vote baseline or the polisher (no
+        # finetune available for it): the decoder stays exactly as it is, which keeps
+        # ablation B (default codec + this decoder) well defined.
+        log.info("decoder %r has no channel adaptation, keeping it unchanged", decoder.name)
         return decoder
     from .simulator import simulate
 
@@ -686,11 +695,7 @@ def load_codecs(run_id: str, situation: str, root: Path | None = None) -> dict:
 
 
 def _load_decoder(spec: dict) -> Decoder:
-    if spec["kind"] == "transformer":
-        return make_decoder("transformer", spec["checkpoint"])
-    if spec["kind"] == "baseline":
-        return make_decoder("baseline")
-    raise ValueError(f"cannot re-create decoder {spec}")
+    return make_decoder(spec["kind"], spec.get("checkpoint"))
 
 
 # ---------------------------------------------------------------- runtime estimate
@@ -1098,8 +1103,11 @@ def run_loop(
     final = run.iterations[-1]
     baseline = decoder_b if decoder_b.name == "baseline" else comps.baseline_decoder()
     codecs = [("baseline", default_settings, None, baseline)]
-    if decoder_b.name == "transformer":
+    if decoder_b.name != "baseline":
+        # CoveragePoint.decoder names are fixed: "transformer" is the system-B curve whatever
+        # AI decoder it uses, so the polisher is plotted under that name and named in the notes.
         codecs.append(("transformer", default_settings, None, decoder_b))
+        final.notes += f"; coverage curve 'transformer' is the {decoder_b.name} decoder"
     else:
         final.notes += "; coverage curve 'transformer' skipped: system B uses the baseline decoder"
     codecs.append(("tailored", final.settings, risk, current))

@@ -2,7 +2,10 @@
 
     uv run python -m scripts.run_loop --profile nanopore_budget --run-id r1 [--quick] [--workers 20]
     uv run python -m scripts.run_loop --profile nanopore_budget --run-id r1 \\
-        --decoder transformer --checkpoint checkpoints/mixed_ft/best.pt
+        --decoder polish --checkpoint checkpoints/polish/polish.pt
+
+The polisher (majority vote draft plus a learned correction) has no per-channel fine-tuning, so
+step 1 keeps it unchanged and ablation B is the default codec with the polisher.
 
 Recommended for run2 (nanopore_budget): the calibrated Nanopore channel decodes only about half
 the strands at 6 reads, so redundancies below ~0.8 can't meet the target there and only cost
@@ -290,8 +293,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--profile", required=True)
     ap.add_argument("--run-id", required=True)
-    ap.add_argument("--decoder", choices=("baseline", "transformer"), default="baseline")
-    ap.add_argument("--checkpoint", help="transformer checkpoint (with --decoder transformer)")
+    ap.add_argument("--decoder", choices=("baseline", "transformer", "polish"), default="baseline")
+    ap.add_argument("--checkpoint", help="checkpoint for --decoder transformer or polish")
     ap.add_argument("--quick", action="store_true", help="tiny trial budgets for tests and demos")
     ap.add_argument("--workers", type=int, default=None, help="CPU workers for trials (default: all cores)")
     ap.add_argument("--alternations", type=int, default=3, help="at most 3")
