@@ -17,6 +17,9 @@ The result is a codec tuned to that channel that reaches the same recovery targe
 
 ## Contents
 
+**Deep dives:** [docs/MODELS.md](docs/MODELS.md) (what the two AI models output and how they're trained) and [docs/ERRORS.md](docs/ERRORS.md) (how the error engine simulates sequencing and how the correction chain recovers files).
+
+
 - [Why](#why)
 - [The idea](#the-idea)
 - [How it works](#how-it-works)
@@ -141,7 +144,7 @@ The claim has two tiers:
 | Shared types, profiles, seeds, result format | ✅ Done |
 | Real data loaders (Microsoft, DNAformer) with fixed held-out split | ✅ Done |
 | Mock results for dashboard development | ✅ Done |
-| Channel simulator | ✅ Nanopore calibrated incl. shared errors; sequence-context errors, Illumina calibration and Simulator B being merged |
+| Channel simulator | ✅ Calibrated on real Nanopore and Illumina reads, incl. 5-mer context errors; Simulator B for the firewall |
 | Fountain encoder (LT, CRC-16 per strand, risk threshold) | ✅ Done |
 | Baseline decoder and evaluation | ✅ Done |
 | Transformer decoder | ✅ Code done, smoke-tested; full training on the GX10 pending |

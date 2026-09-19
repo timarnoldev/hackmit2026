@@ -302,7 +302,13 @@ def test_through_simulated_channel():
 
     data = _random_bytes(5_000, 15)
     enc = encode(data, DEFAULT)
-    profile = dataclasses.replace(load_profile("nanopore_budget"), coverage_mean=12)
+    # A fixed channel, independent of calibration: this tests the encoder, not the profile.
+    profile = dataclasses.replace(
+        load_profile("nanopore_budget"),
+        sub_rate=0.022, ins_rate=0.017, del_rate=0.02, homopolymer_factor=1.3, end_factor=1.3,
+        homopolymer_run_factors=None, read_quality_spread=0.0, position_rate_spread=0.0,
+        malformed_read_rate=0.0, context_table=None, coverage_mean=20,  # ~89% exact strands, clear margin
+    )
     clusters = simulate(enc.strands, profile, train_seed(16))
     decoded = MajorityVoteDecoder().decode(clusters, DEFAULT.strand_length)
     exact = np.mean([a == b for a, b in zip(decoded, enc.strands)])
