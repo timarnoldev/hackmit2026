@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import os
 import time
 
 import numpy as np
@@ -34,29 +35,34 @@ def one_trial_clusters(n_strands: int, length: int, profile, seed: int) -> list[
 
 
 def bench_decode(args, profile) -> None:
+    """All worker counts are timed in every round, so background load hits them alike."""
     clusters = one_trial_clusters(args.clusters, args.length, profile, seed=12345)
     reads = sum(len(c) for c in clusters)
     print(f"{len(clusters)} clusters, {reads} reads, mean {reads / len(clusters):.1f} per cluster")
-    print(f"{'workers':>8} {'s/trial':>9} {'clusters/s':>11} {'speedup':>8}")
-    base = None
-    reference = None
-    for workers in args.workers:
-        dec = PolishDecoder(args.checkpoint, device=args.device, workers=workers or None)
-        try:
-            out = dec.decode(clusters, args.length)  # warm up the pool and the GPU
+    decoders = {w: PolishDecoder(args.checkpoint, device=args.device, workers=w or None)
+                for w in args.workers}
+    times: dict[int, list[float]] = {w: [] for w in args.workers}
+    try:
+        reference = None
+        for workers, dec in decoders.items():  # warm up the pools and the GPU, check the output
+            out = dec.decode(clusters, args.length)
             if reference is None:
                 reference = out
             elif out != reference:
-                raise SystemExit(f"workers={workers} decoded differently from workers={args.workers[0]}")
-            times = []
-            for _ in range(args.repeats):
+                raise SystemExit(f"workers={workers} decoded differently from the first config")
+        for _ in range(args.repeats):
+            for workers, dec in decoders.items():
                 t0 = time.perf_counter()
                 dec.decode(clusters, args.length)
-                times.append(time.perf_counter() - t0)
-            best = min(times)
-        finally:
+                times[workers].append(time.perf_counter() - t0)
+    finally:
+        for dec in decoders.values():
             dec.close()
-        base = base or best
+    print(f"load average now: {', '.join(f'{x:.1f}' for x in os.getloadavg())}")
+    print(f"{'workers':>8} {'s/trial':>9} {'clusters/s':>11} {'speedup':>8}")
+    base = min(times[args.workers[0]])
+    for workers in args.workers:
+        best = min(times[workers])
         print(f"{workers:>8} {best:>9.3f} {len(clusters) / best:>11.0f} {base / best:>7.2f}x")
 
 
