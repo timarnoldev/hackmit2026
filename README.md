@@ -144,8 +144,8 @@ The claim has two tiers:
 | Channel simulator | ✅ Nanopore calibrated incl. shared errors; sequence-context errors, Illumina calibration and Simulator B being merged |
 | Fountain encoder (LT, CRC-16 per strand, risk threshold) | ✅ Done |
 | Baseline decoder and evaluation | ✅ Done |
-| Transformer decoder | 🚧 In progress |
-| Dashboard (Pareto, crossover, ablation, learned patterns) | ✅ Done on mock data |
+| Transformer decoder | ✅ Code done, smoke-tested; full training on the GX10 pending |
+| Dashboard (rule audit, Pareto, crossover, ablation A to E, learned patterns) | ✅ Done on mock data |
 | Risk model (controlled strands, failure-rate labels, CNN) | ✅ Done |
 | Alternating loop and evidence experiments | 🚧 In progress |
 
@@ -206,6 +206,40 @@ uv run streamlit run dashboard/app.py
 ```
 
 Commands for training and running the loop will be added here as those components land.
+
+## Running on the GX10
+
+All GPU work runs on one ASUS Ascent GX10 (NVIDIA GB10, ARM64, 128 GB unified memory, 20 cores). Details in the Compute section of [AGENTS.md](AGENTS.md).
+
+```bash
+git clone https://github.com/timarnoldev/hackmit2026.git && cd hackmit2026
+uv sync --extra train
+scripts/download_data.sh --full
+
+# 1. Does PyTorch see the GPU? This is the most likely problem on ARM.
+uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+#    If False: uv pip install --reinstall torch --index-url https://download.pytorch.org/whl/cu130
+#    and use `uv run --no-sync` afterwards. Last resort: NVIDIA's NGC PyTorch container.
+
+# 2. Sanity checks
+uv run pytest -q
+uv run python -m dnacodec.model.train --smoke
+
+# 3. Pretrain the transformer on simulated data (add a line to GPU_JOBS.md first)
+nohup uv run python -m dnacodec.model.train --source sim --model base --steps 100000 \
+  --batch-size 128 --workers 8 --run-name sim_base > sim_base.out 2>&1 &
+
+# 4. Fine-tune on real and simulated clusters
+nohup uv run python -m dnacodec.model.train --source mixed --p-real 0.7 \
+  --init checkpoints/sim_base/best.pt --lr 1e-4 --warmup 500 --steps 20000 \
+  --batch-size 128 --workers 8 --run-name mixed_ft > mixed_ft.out 2>&1 &
+
+# 5. Compare against the baseline on the real held-out split
+uv run python scripts/eval_real.py
+uv run python -m dnacodec.model.benchmark checkpoints/mixed_ft/best.pt
+```
+
+The loop and experiment commands will be added when they're merged. They run fully with the baseline decoder, so they don't have to wait for the transformer.
 
 ## Repository layout
 
