@@ -34,6 +34,7 @@ class EncoderSettings:
     max_homopolymer: int | None = 3  # hard constraint, None disables it
     gc_min: float | None = 0.4  # hard constraint on GC fraction, None disables it
     gc_max: float | None = 0.6
+    risk_threshold: float | None = None  # reject candidates the scorer rates above this, None disables
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,8 @@ class Metrics:
     bits_per_base: float | None = None  # net payload bits per synthesized base
     write_cost_usd_per_mb: float | None = None
     read_cost_usd_per_mb: float | None = None
+    recovery_rate: float | None = None  # fraction of independent file trials recovered exactly
+    n_trials: int | None = None  # number of file trials behind recovery_rate
     extra: dict[str, float] = field(default_factory=dict)  # anything else worth logging
 
 

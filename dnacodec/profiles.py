@@ -41,6 +41,13 @@ class SituationProfile:
 
     calibrated_from: str | None = None  # dataset the error numbers were fit to, None = guessed
 
+    # Realism extensions. Defaults reproduce the simple model above.
+    # Error multiplier by run length (index 0 = run of 1, last value applies to longer runs).
+    # Overrides homopolymer_factor when set.
+    homopolymer_run_factors: tuple[float, ...] | None = None
+    read_quality_spread: float = 0.0  # sigma of a lognormal per-read error multiplier (mean 1)
+    malformed_read_rate: float = 0.0  # fraction of reads that belong to another strand (clustering errors)
+
     def __post_init__(self) -> None:
         if self.technology not in ("nanopore", "illumina"):
             raise ValueError(f"unknown technology {self.technology!r}")
@@ -48,6 +55,8 @@ class SituationProfile:
             value = getattr(self, name)
             if not 0.0 <= value < 1.0:
                 raise ValueError(f"{name}={value} must be in [0, 1)")
+        if not 0.0 <= self.malformed_read_rate < 1.0 or self.read_quality_spread < 0:
+            raise ValueError("malformed_read_rate must be in [0, 1) and read_quality_spread >= 0")
         if self.coverage_mean <= 0 or self.coverage_dispersion <= 0:
             raise ValueError("coverage_mean and coverage_dispersion must be positive")
 
@@ -65,6 +74,9 @@ class SituationProfile:
         unknown = set(data) - known
         if unknown:
             raise ValueError(f"unknown profile fields: {sorted(unknown)}")
+        data = dict(data)
+        if data.get("homopolymer_run_factors") is not None:
+            data["homopolymer_run_factors"] = tuple(data["homopolymer_run_factors"])
         return cls(**data)
 
 
