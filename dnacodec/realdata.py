@@ -14,6 +14,7 @@ Run scripts/download_data.sh first.
 
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Literal
@@ -37,10 +38,25 @@ class RealCluster:
 
 
 def _select(clusters: list[RealCluster], split: Split) -> list[RealCluster]:
+    """Microsoft: every 5th cluster by position (a single file, so positions are stable)."""
     if split == "all":
         return clusters
     heldout = split == "heldout"
     return [c for i, c in enumerate(clusters) if (i % HELDOUT_EVERY == 0) == heldout]
+
+
+def is_heldout_reference(reference: Strand) -> bool:
+    """DNAformer: held out by the reference itself. All DNAformer files (flowcells, Illumina)
+    share one reference set, so a split by position would put the same strand in training in
+    one file and in the held-out set in another."""
+    return zlib.crc32(reference.encode()) % HELDOUT_EVERY == 0
+
+
+def _select_by_reference(clusters: list[RealCluster], split: Split) -> list[RealCluster]:
+    if split == "all":
+        return clusters
+    heldout = split == "heldout"
+    return [c for c in clusters if is_heldout_reference(c.reference) == heldout]
 
 
 def load_microsoft(split: Split = "train", root: Path = MICROSOFT_DIR) -> list[RealCluster]:
@@ -84,4 +100,4 @@ def load_dnaformer(
     root: Path = DNAFORMER_DIR,
 ) -> list[RealCluster]:
     """name is a file stem from the Zenodo record, e.g. BinnedTestIllumina_Random."""
-    return _select(list(_iter_dnaformer(root / f"{name}.txt")), split)
+    return _select_by_reference(list(_iter_dnaformer(root / f"{name}.txt")), split)

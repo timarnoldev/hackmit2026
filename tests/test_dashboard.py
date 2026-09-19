@@ -6,6 +6,7 @@ Result files are written to a temporary RESULTS_DIR, never into the real results
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,7 @@ from dnacodec.results import (  # noqa: E402
     ExperimentSummary,
     FirewallEntry,
     IterationResult,
+    RuleAuditEntry,
     RunResult,
     save_run,
     save_summary,
@@ -68,10 +70,15 @@ def test_mock_run_renders_with_banner(mock_run):
     assert not at.exception, at.exception
     text = markdown_text(at)
     assert "MOCK DATA" in text
-    assert "Adaptive DNA codec" in [t.value for t in at.title]
+    assert any("actually pays off on your channel" in t.value for t in at.title)
     headers = [h.value for h in at.header]
+    assert "rule pay off" in headers[0]  # the rule audit is the first view
     for section in ("moves past the default", "wins at home", "Where the gain comes from", "encoder learned"):
         assert any(section in h for h in headers), (section, headers)
+    # Rule audit: verdict badges, plain-words effect, and the cross-channel contrast sentence.
+    assert "pays off" in text and "no measurable benefit" in text and "tuned is better" in text
+    assert "Switching this rule off: reads needed 8.5 to 12.0" in text
+    assert "No run of more than 3 identical letters" in text
     assert len(at.metric) == 2  # one reads-needed card per core channel
     assert "accepted" in text and "rejected" in text  # candidate examples from summary.json
 
@@ -128,6 +135,39 @@ def test_summary_only_run_renders(results_dir):
     ), "summary_only")
     at = run_app()
     assert not at.exception, at.exception
+
+
+def test_older_summary_without_rule_audit(mock_run, results_dir):
+    path = results_dir / "mock" / "summary.json"
+    data = json.loads(path.read_text())
+    del data["rule_audit"]
+    path.write_text(json.dumps(data))
+    at = run_app()
+    assert not at.exception, at.exception
+    assert not any("rule pay off" in h.value for h in at.header)
+    assert any("moves past the default" in h.value for h in at.header)
+
+
+def test_rule_audit_helpers():
+    app = load_app_module()
+    on = RuleAuditEntry("nanopore_budget", "max_homopolymer=3", 8.5, 12.0, 1.40, 1.40, "pays off")
+    off = RuleAuditEntry("illumina_standard", "max_homopolymer=3", 9.0, 9.0, 1.40, 1.40, "no measurable benefit")
+    tuned = RuleAuditEntry("illumina_standard", "redundancy 0.3 vs tuned", 9.0, 8.0, 1.40, 1.52, "tuned is better")
+    unmet = RuleAuditEntry("nanopore_budget", "gc 0.4-0.6", None, 8.6, None, 1.4, "harmful")
+    assert app.pretty_rule("max_homopolymer=3") == "No run of more than 3 identical letters"
+    assert app.pretty_rule("gc 0.4-0.6") == "G+C share between 40% and 60%"
+    assert app.pretty_rule("redundancy 0.3 vs tuned") == "Fixed 30% spare strands"
+    assert app.pretty_rule("something new") == "something new"
+    assert app.rule_effect(on) == "Switching this rule off: reads needed 8.5 to 12.0"
+    assert app.rule_effect(off) == "Switching this rule off: reads needed stay at 9.0"
+    assert app.rule_effect(tuned) == ("With the tuned value instead: reads needed 9.0 to 8.0, "
+                                      "bits per base 1.40 to 1.52")
+    assert "target not met" in app.rule_effect(unmet)
+    sentence = app.audit_contrast([on, off, tuned], ["nanopore_budget", "illumina_standard"])
+    assert sentence.startswith("“No run of more than 3 identical letters” pays off on Nanopore")
+    assert "has no measurable benefit on Illumina" in sentence
+    assert app.audit_contrast([tuned], ["illumina_standard"]) is None
+    assert "not audited" in app.rule_audit_table([on, off, unmet], ["nanopore_budget", "illumina_standard"])
 
 
 def test_no_runs_shows_hint(results_dir):
