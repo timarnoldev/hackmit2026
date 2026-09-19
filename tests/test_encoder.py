@@ -239,9 +239,21 @@ def test_strand_that_fools_the_strand_crc_is_survived():
     enc = encode(data, DEFAULT)
     layout = _Layout(DEFAULT)
     strands = list(enc.strands)
-    for i in (0, 1):
+    # Two bad strands with independent errors (identical errors could cancel out).
+    for i, delta in ((0, 0b1011), (1, 0b110001)):
         seed, value = layout.parse(strands[i])
-        strands[i] = layout.to_strand(seed, value ^ 0b1011)
+        strands[i] = layout.to_strand(seed, value ^ delta)
+    assert recover(strands, enc.meta) == data
+
+
+def test_strand_that_fools_the_strand_crc_100kb(big):
+    from dnacodec.encoder import _Layout
+
+    data, enc, _ = big
+    layout = _Layout(DEFAULT)
+    strands = list(enc.strands)
+    seed, value = layout.parse(strands[123])
+    strands[123] = layout.to_strand(seed, value ^ (1 << 100))
     assert recover(strands, enc.meta) == data
 
 
@@ -251,3 +263,48 @@ def test_density(big):
     # 94 payload bases = 188 bits, minus 16 CRC bits = 172 data bits per 110 bases, / 1.3
     assert 1.15 < density < 1.21
     assert isinstance(enc.meta, FileMeta)
+
+
+def _a_fraction(strands):
+    return np.array([s.count("A") / len(s) for s in strands])
+
+
+def test_risk_threshold_rejects_risky_candidates():
+    data = _random_bytes(2_000, 13)
+    settings = dataclasses.replace(DEFAULT, risk_threshold=0.18)
+    enc = encode(data, settings, scorer=_a_fraction)
+    assert _a_fraction(enc.strands).max() <= 0.18
+    _check_constraints(enc.strands, settings)
+    assert recover(enc.strands, enc.meta) == data
+    # Without the threshold, ranking alone leaves some strands above it.
+    loose = encode(data, DEFAULT, scorer=_a_fraction)
+    assert _a_fraction(loose.strands).max() > 0.18
+
+
+def test_risk_threshold_none_is_disabled_and_rule_scorer_passes():
+    data = _random_bytes(3_000, 14)
+    base = encode(data, DEFAULT).strands
+    assert encode(data, dataclasses.replace(DEFAULT, risk_threshold=None)).strands == base
+    assert encode(data, dataclasses.replace(DEFAULT, risk_threshold=0.0)).strands == base
+
+
+def test_impossible_risk_threshold_raises():
+    with pytest.raises(ValueError, match="risk_threshold"):
+        encode(b"hi", dataclasses.replace(DEFAULT, risk_threshold=-1.0))
+    with pytest.raises(ValueError, match="risk_threshold"):
+        encode(b"hi", dataclasses.replace(DEFAULT, risk_threshold=0.01), scorer=_a_fraction)
+
+
+def test_through_simulated_channel():
+    from dnacodec.baseline import MajorityVoteDecoder
+    from dnacodec.profiles import load_profile
+    from dnacodec.simulator import simulate
+
+    data = _random_bytes(5_000, 15)
+    enc = encode(data, DEFAULT)
+    profile = dataclasses.replace(load_profile("nanopore_budget"), coverage_mean=12)
+    clusters = simulate(enc.strands, profile, train_seed(16))
+    decoded = MajorityVoteDecoder().decode(clusters, DEFAULT.strand_length)
+    exact = np.mean([a == b for a, b in zip(decoded, enc.strands)])
+    assert exact < 1.0  # the channel really corrupted or lost strands
+    assert recover(decoded, enc.meta) == data
