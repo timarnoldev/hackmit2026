@@ -51,24 +51,26 @@ def _votes(draft: str, reads: Cluster, arrays: list[np.ndarray]):
     g == len(draft) is after the last base). ins_base[g, b]: first inserted base in that gap.
     """
     n_pos = len(draft)
-    base_votes = np.zeros((n_pos, 5), dtype=np.int64)
+    columns = np.full((len(reads), n_pos), _DEL, dtype=np.int64)  # what each read says per position
     ins_votes = np.zeros(n_pos + 1, dtype=np.int64)
     ins_base = np.zeros((n_pos + 1, 4), dtype=np.int64)
-    for read, arr in zip(reads, arrays):
+    for r, (read, arr) in enumerate(zip(reads, arrays)):
+        col = columns[r]
         for tag, i1, i2, j1, j2 in Levenshtein.opcodes(draft, read):
             if tag == "equal" or tag == "replace":
                 m = min(i2 - i1, j2 - j1)
-                np.add.at(base_votes, (np.arange(i1, i1 + m), arr[j1 : j1 + m]), 1)
-                if i2 - i1 > m:  # defensive: unequal replace blocks
-                    base_votes[i1 + m : i2, _DEL] += 1
-                elif j2 - j1 > m:
+                col[i1 : i1 + m] = arr[j1 : j1 + m]
+                # defensive: unequal replace blocks (rapidfuzz emits equal lengths);
+                # extra draft positions stay _DEL, extra read bases count as an insertion
+                if j2 - j1 > m:
                     ins_votes[i2] += 1
                     ins_base[i2, arr[j1 + m]] += 1
-            elif tag == "delete":
-                base_votes[i1:i2, _DEL] += 1
             elif tag == "insert":
                 ins_votes[i1] += 1
                 ins_base[i1, arr[j1]] += 1
+            # "delete": the draft positions stay _DEL
+    flat = (np.arange(n_pos, dtype=np.int64) * 5)[None, :] + columns
+    base_votes = np.bincount(flat.ravel(), minlength=n_pos * 5).reshape(n_pos, 5)
     return base_votes, ins_votes, ins_base
 
 
@@ -76,20 +78,23 @@ def _rebuild(draft: str, base_votes, ins_votes, ins_base, n_reads: int) -> str:
     """Plurality per draft position (a base or a deletion) plus majority-voted insertions.
     Ties keep the draft: a draft base beats an equally voted other base or deletion,
     and an insertion needs a strict majority of reads."""
+    n_pos = len(draft)
+    rows = np.arange(n_pos)
+    current = _to_array(draft)
+    best = np.argmax(base_votes[:, :4], axis=1)
+    best = np.where(base_votes[rows, best] == base_votes[rows, current], current, best)
+    keep = base_votes[:, _DEL] <= base_votes[rows, best]
+    inserted = ins_votes * 2 > n_reads
+    ins_choice = np.argmax(ins_base, axis=1)
+    if keep.all() and not inserted.any():
+        return "".join(ALPHABET[b] for b in best.tolist())
     out: list[str] = []
-    for g in range(len(draft) + 1):
-        if ins_votes[g] * 2 > n_reads:
-            out.append(ALPHABET[int(np.argmax(ins_base[g]))])
-        if g == len(draft):
-            break
-        col = base_votes[g]
-        current = _BASE_INDEX.get(draft[g], 0)
-        best_base = int(np.argmax(col[:4]))
-        if col[best_base] == col[current]:
-            best_base = current
-        if col[_DEL] > col[best_base]:
-            continue
-        out.append(ALPHABET[best_base])
+    keep_l, best_l, ins_l, choice_l = keep.tolist(), best.tolist(), inserted.tolist(), ins_choice.tolist()
+    for g in range(n_pos + 1):
+        if ins_l[g]:
+            out.append(ALPHABET[choice_l[g]])
+        if g < n_pos and keep_l[g]:
+            out.append(ALPHABET[best_l[g]])
     return "".join(out)
 
 
