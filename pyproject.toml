@@ -1,0 +1,26 @@
+[project]
+name = "dnacodec"
+version = "0.1.0"
+description = "Adaptive DNA storage codec: encoder and AI decoder co-adapting per storage situation"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "rapidfuzz>=3.6",
+]
+
+[project.optional-dependencies]
+train = ["torch>=2.3"]
+dashboard = ["streamlit>=1.36", "plotly>=5.20", "pandas>=2.2"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dnacodec"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

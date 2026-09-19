@@ -1,0 +1,19 @@
+{
+  "name": "illumina_archive_100y",
+  "description": "Century-scale archive read back with Illumina; decay causes heavy strand loss (extrapolated, no real data)",
+  "technology": "illumina",
+  "sub_rate": 0.006,
+  "ins_rate": 0.0005,
+  "del_rate": 0.0015,
+  "homopolymer_factor": 1.05,
+  "end_factor": 2.0,
+  "dropout_rate": 0.02,
+  "gc_dropout_factor": 0.05,
+  "coverage_mean": 20.0,
+  "coverage_dispersion": 3.0,
+  "storage_years": 100.0,
+  "decay_per_year": 0.002,
+  "synthesis_usd_per_base": 0.0001,
+  "sequencing_usd_per_read": 0.000001,
+  "calibrated_from": null
+}
