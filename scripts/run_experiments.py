@@ -200,7 +200,9 @@ def ladder_indices(run: RunResult) -> tuple[int, int, int]:
     c = stages.index("tier1") if "tier1" in stages else 0
     alts = [i for i, st in enumerate(stages) if st.startswith("alternation")]
     d = alts[0] if alts else c
-    e = alts[-1] if alts else c
+    # E = the final codec: the "final" copy when the loop kept an earlier alternation (decided on
+    # train results), otherwise the last alternation.
+    e = stages.index("final") if "final" in stages else (alts[-1] if alts else c)
     return c, d, e
 
 
