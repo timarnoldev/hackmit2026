@@ -134,3 +134,22 @@ def test_run_lengths():
     assert rl[0].tolist() == [2, 2, 3, 3, 3, 1]
     assert rl[1].tolist() == [6] * 6
     assert rl[2, 0] == 1
+
+
+def test_calibration_measurement_recovers_simulated_parameters():
+    from scripts.calibrate import error_stats, nb_shape_mle
+
+    strands = random_strands(1500)
+    plain = flat_profile(sub_rate=0.02, ins_rate=0.015, del_rate=0.02, coverage_mean=4.0)
+    stats = error_stats(strands, simulate(strands, plain, seed=21))
+    assert stats.sub == pytest.approx(0.02, rel=0.15)
+    assert stats.ins == pytest.approx(0.015, rel=0.15)
+    assert stats.end_ratio == pytest.approx(1.0, abs=0.15)
+    ramped = replace(plain, end_factor=2.0, homopolymer_factor=1.4)
+    shaped = error_stats(strands, simulate(strands, ramped, seed=22))
+    assert shaped.end_ratio > 1.5
+    assert shaped.hp_ratio > stats.hp_ratio + 0.15
+
+    rng = np.random.default_rng(3)
+    sizes = rng.negative_binomial(2.5, 2.5 / (2.5 + 20.0), size=20_000)
+    assert nb_shape_mle(sizes) == pytest.approx(2.5, rel=0.08)
