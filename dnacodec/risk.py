@@ -491,7 +491,7 @@ class RiskModel(_TopKmersMixin):
         lr: float = 2e-3,
         weight_decay: float = 1e-4,
         val_fraction: float = 0.1,
-        patience: int = 6,
+        patience: int = 10,
         seed: int = 0,
         device: str | None = None,
         verbose: bool = False,

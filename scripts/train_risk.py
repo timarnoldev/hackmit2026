@@ -125,10 +125,26 @@ def real_firewall(model, name: str, workers: int | None) -> dict:
     # Coverage is sequence-independent noise for this ranking; also rank within a band.
     band = nonempty & (sizes >= 5) & (sizes <= 10)
     out["model_coverage_5_to_10"] = ranking(failed[band], pred[band])
+    # Coverage-stratified AUC: only compare clusters with similar read counts
+    # (per-stratum AUCs weighted by their number of positive-negative pairs).
+    num = den = 0.0
+    for lo, hi in [(1, 2), (3, 4), (5, 6), (7, 9), (10, 14), (15, 10**9)]:
+        sel = nonempty & (sizes >= lo) & (sizes <= hi)
+        pos, neg = float((failed[sel] > 0.5).sum()), float((failed[sel] <= 0.5).sum())
+        if pos and neg:
+            num += risk.roc_auc(failed[sel] > 0.5, pred[sel]) * pos * neg
+            den += pos * neg
+    out["model_auc_coverage_stratified"] = num / den if den else float("nan")
+    out["reference_stats"] = {
+        "max_run_hist": {int(r): int(c) for r, c in zip(*np.unique([risk.max_run_length(s) for s in refs], return_counts=True))},
+        "gc_min": float(min(risk.gc_fraction(s) for s in refs)),
+        "gc_max": float(max(risk.gc_fraction(s) for s in refs)),
+    }
     log(
         f"[real {name} heldout] clusters={out['n_clusters']} baseline strand accuracy={metrics.strand_accuracy:.3f} "
         f"model AUC={out['model']['auc_gt_0.5']:.3f} Spearman={out['model']['spearman']:.3f} "
-        f"(5-10 reads: AUC={out['model_coverage_5_to_10']['auc_gt_0.5']:.3f}, n={out['model_coverage_5_to_10']['n']})  "
+        f"(5-10 reads: AUC={out['model_coverage_5_to_10']['auc_gt_0.5']:.3f}, n={out['model_coverage_5_to_10']['n']}; "
+        f"coverage-stratified AUC={out['model_auc_coverage_stratified']:.3f})  "
         f"longest-run AUC={out['longest_run']['auc_gt_0.5']:.3f}  GC-dev AUC={out['gc_deviation']['auc_gt_0.5']:.3f}  "
         f"[{out['seconds']:.0f}s]"
     )
@@ -149,6 +165,7 @@ def main() -> None:
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--model", choices=["cnn", "kmer"], default="cnn")
     p.add_argument("--device", default=None)
+    p.add_argument("--load", type=Path, default=None, help="skip labeling and fitting, evaluate this model")
     p.add_argument("--real", default=None, help="DNAformer file stem for firewall test 3; 'none' to skip")
     args = p.parse_args()
 
@@ -161,20 +178,24 @@ def main() -> None:
     report: dict = {"profile": args.profile, "decoder": decoder.name, "k": args.k, "n_strands": args.n_strands,
                     "lengths": lengths, "model_kind": args.model, "timings": {}}
 
-    t = time.time()
-    strands = risk.generate_strands(args.n_strands, lengths, seed=seed)
-    y = risk.label_failure_rates(strands, decoder, profile, k=args.k, seed=seed, workers=args.workers)
-    report["timings"]["label_train_s"] = time.time() - t
-    log(f"labeled {len(strands)} strands x K={args.k} in {time.time() - t:.1f}s, mean failure {np.nanmean(y):.3f}")
-
-    t = time.time()
-    if args.model == "cnn":
-        model = risk.RiskModel(epochs=args.epochs, seed=seed, device=args.device, verbose=True)
+    if args.load:
+        model = risk.load_risk_model(args.load, args.device)
+        log(f"loaded {args.load}")
     else:
-        model = risk.KmerRiskModel(seed=seed)
-    model.fit(strands, y)
-    report["timings"]["fit_s"] = time.time() - t
-    log(f"fit {args.model} in {time.time() - t:.1f}s")
+        t = time.time()
+        strands = risk.generate_strands(args.n_strands, lengths, seed=seed)
+        y = risk.label_failure_rates(strands, decoder, profile, k=args.k, seed=seed, workers=args.workers)
+        report["timings"]["label_train_s"] = time.time() - t
+        log(f"labeled {len(strands)} strands x K={args.k} in {time.time() - t:.1f}s, mean failure {np.nanmean(y):.3f}")
+
+        t = time.time()
+        if args.model == "cnn":
+            model = risk.RiskModel(epochs=args.epochs, seed=seed, device=args.device, verbose=True)
+        else:
+            model = risk.KmerRiskModel(seed=seed)
+        model.fit(strands, y)
+        report["timings"]["fit_s"] = time.time() - t
+        log(f"fit {args.model} in {time.time() - t:.1f}s")
 
     # Held-out evaluation: strands and channel noise both from held-out seeds.
     hs = heldout_seeds(4)
@@ -209,8 +230,9 @@ def main() -> None:
     if real != "none":
         report["real_firewall"] = real_firewall(model, real, args.workers)
 
-    model.meta = {"profile": args.profile, "decoder": decoder.name, "k": args.k, "n_strands": args.n_strands}
-    model.save(out)
+    if not args.load:
+        model.meta = {"profile": args.profile, "decoder": decoder.name, "k": args.k, "n_strands": args.n_strands}
+        model.save(out)
     out.with_suffix(".json").write_text(json.dumps(report, indent=2, default=float) + "\n")
     log(f"saved {out} and {out.with_suffix('.json')}")
     log("timings: " + ", ".join(f"{k}={v:.1f}" for k, v in report["timings"].items()))
