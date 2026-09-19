@@ -95,22 +95,22 @@ def test_summary_has_every_piece_of_evidence(finished_run):
     assert pairs == {(c, ch) for c in ("default", *CORE) for ch in CORE}
 
     tests = {(e.situation, e.test) for e in summary.firewall}
-    assert tests == {(s, t) for s in CORE for t in ("sim_a_heldout", "sim_b", "real", "tier2_direct")}
+    assert tests == {(s, t) for s in CORE for t in ("sim_a_heldout", "sim_b", "real")}
     sim_b = [e for e in summary.firewall if e.test == "sim_b"]
     assert all(e.metric == "not_run" and e.note for e in sim_b)  # mock runner / missing simulator_b
 
-    tier2 = [e for e in summary.firewall if e.test == "tier2_direct"]
+    assert not any(e.test == "tier2_direct" for e in summary.firewall)
     for s in CORE:
-        names = {e.metric for e in tier2 if e.situation == s}
-        for m in ("strand_fail", "recovery"):
-            for part in ("rule", "risk", "diff"):
-                assert {f"{m}_{part}", f"{m}_{part}_ci_low", f"{m}_{part}_ci_high"} <= names
-        for e in tier2:
-            if e.metric.endswith("_diff") and e.situation == s:
-                lo = next(x.value for x in tier2 if x.situation == s and x.note == e.note and x.metric == e.metric + "_ci_low")
-                hi = next(x.value for x in tier2 if x.situation == s and x.note == e.note and x.metric == e.metric + "_ci_high")
-                assert lo - 1e-12 <= e.value <= hi + 1e-12
-    assert any("32 candidates" in e.note for e in tier2)
+        mine = [e for e in summary.tier2 if e.situation == s]
+        assert {e.candidates_per_strand for e in mine} == {8, 32}
+        assert {e.simulator for e in mine} == {"A"}  # mock trial runner: no Simulator B comparison
+        assert runs[s].profile.coverage_mean in {e.coverage for e in mine}
+        for e in mine:
+            assert e.n_trials == tiny_config().eval_trials
+            assert e.strand_fail_diff == pytest.approx(e.strand_fail_risk - e.strand_fail_rule)
+            assert e.strand_fail_diff_ci[0] - 1e-12 <= e.strand_fail_diff <= e.strand_fail_diff_ci[1] + 1e-12
+            assert e.recovery_diff_ci[0] - 1e-12 <= e.recovery_diff <= e.recovery_diff_ci[1] + 1e-12
+    assert loaded_ok(finished_run, summary)
 
     assert summary.examples
     for ex in summary.examples:
@@ -128,10 +128,10 @@ def test_experiments_only_use_heldout_seeds(finished_run):
     calls = comps.recovery_trials.calls
     assert calls, "crossover must evaluate the away codecs"
     assert all(all(is_heldout(s) for s in seeds) for _, seeds, _ in calls)
-    # Full evaluations use all held-out seeds; the tier-2 measurement runs them one trial at a time.
-    assert all(len(seeds) in (tiny_config().eval_trials, 1) for _, seeds, _ in calls)
-    single = [seeds[0] for _, seeds, _ in calls if len(seeds) == 1]
-    assert set(single) == set(heldout_seeds(tiny_config().eval_trials))
+    # Evaluations use whole blocks of held-out seeds (recovery and tier 2 the first block).
+    blocks = [set(b) for b in loop.heldout_blocks(tiny_config())]
+    assert all(set(seeds) in blocks for _, seeds, _ in calls)
+    assert all(len(set(a) & set(b)) == 0 for i, a in enumerate(blocks) for b in blocks[i + 1:])
 
 
 def test_roc_auc_matches_pairwise_definition():
@@ -226,3 +226,30 @@ def test_paired_bootstrap():
     assert lo < a.mean() < hi
     noisy = paired_bootstrap(np.zeros(50), np.r_[np.ones(5), np.zeros(45)])
     assert noisy["diff"][0] == pytest.approx(0.1) and noisy["diff"][1] < 0.1 < noisy["diff"][2]
+
+
+def loaded_ok(run_id, summary) -> bool:
+    results.save_summary(summary, run_id)
+    loaded = results.load_summary(run_id)
+    return [(e.situation, e.coverage, e.candidates_per_strand, tuple(e.strand_fail_diff_ci)) for e in loaded.tier2] == [
+        (e.situation, e.coverage, e.candidates_per_strand, tuple(e.strand_fail_diff_ci)) for e in summary.tier2]
+
+
+def test_tier2_runs_simulator_b_at_the_budget(finished_run):
+    comps = mock_components()
+    comps.mocked = ("risk",)  # pretend the trial runner is real, so Simulator B is attempted
+    inner = comps.recovery_trials
+    seen = []
+
+    def runner(*args, simulator=None, **kw):
+        seen.append(simulator)
+        return inner(*args, **kw)
+
+    comps.recovery_trials = runner
+    comps.min_reads_at_target = mock_min_reads(runner)
+    summary = build_summary(finished_run, CORE, tiny_config(), comps, real_clusters=0, data=DATA)
+    runs = {r.situation: r for r in results.load_runs(finished_run)}
+    for s in CORE:
+        b = [e for e in summary.tier2 if e.situation == s and e.simulator == "B"]
+        assert {e.candidates_per_strand for e in b} == {8, 32}
+        assert all(e.coverage == runs[s].profile.coverage_mean for e in b)

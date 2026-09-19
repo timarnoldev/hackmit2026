@@ -73,6 +73,7 @@ SEED_LABEL = 3_000_000  # + 1_000_000 * alternation
 SEED_THRESHOLD = 7_000_000  # + 10_000 * alternation
 SEED_SCREEN = 10_000_000  # + 10_000 * alternation
 SEED_RECHECK = 11_000_000  # + 10_000 * alternation
+SEED_MARGIN = 12_000_000  # + 10_000 * alternation
 
 
 # ---------------------------------------------------------------- configuration
@@ -120,6 +121,13 @@ class LoopConfig:
     # After the coverage grid finds the first passing coverage c, also test c - 0.5 (same seeds)
     # and report it if it meets the target. Finer Pareto y values near the threshold.
     refine_half_step: bool = True
+    # Selection margin against the winner's curse: a candidate that passed the re-check must also
+    # meet the target on fresh train seeds at coverage_mean * margin_coverage_factor (about 10%
+    # fewer reads than the budget). None disables it.
+    margin_coverage_factor: float | None = 0.9
+    # Held-out min reads is computed on this many disjoint blocks of eval_trials held-out seeds;
+    # the median is reported (and used for verdicts), the spread goes to notes and the manifest.
+    min_reads_blocks: int = 3
     workers: int | None = None
     grid: SearchGrid = field(default_factory=SearchGrid)
     quick: bool = False
@@ -449,11 +457,17 @@ class Candidate:
     screen_trials: int = 0
     passed_screen: bool = False
     recheck: Metrics | None = None
+    margin: Metrics | None = None  # re-check at the stricter coverage (selection margin)
     error: str | None = None
 
     @property
     def passed_recheck(self) -> bool:
         return self.recheck is not None and bool(self.recheck.file_recovered)
+
+    def train_strength(self) -> tuple[float, float]:
+        """Headroom on train seeds, for ranking codecs of equal bits per base."""
+        best = self.margin or self.recheck or self.screen
+        return ((best.recovery_rate or 0.0), best.strand_accuracy) if best is not None else (0.0, 0.0)
 
 
 @dataclass
@@ -464,6 +478,12 @@ class SearchResult:
     candidates: list[Candidate]
     trials_run: int
     seconds: float
+    # First candidate that passed the plain re-check. If it differs from chosen, the margin changed the choice.
+    first_without_margin: EncoderSettings | None = None
+
+    @property
+    def margin_changed_choice(self) -> bool:
+        return self.first_without_margin is not None and self.first_without_margin != self.chosen
 
     def summary(self) -> str:
         c = self.chosen_candidate
@@ -473,6 +493,26 @@ class SearchResult:
             f"re-check {rc.recovery_rate:.3f} over {rc.n_trials} train trials" if rc is not None else
             f"{describe(self.chosen)} | {c.bits_per_base:.3f} bits/base | no re-check"
         )
+
+
+def margin_note(search: SearchResult, config: LoopConfig) -> str:
+    if not config.margin_coverage_factor:
+        return "selection margin off; "
+    m = search.chosen_candidate.margin
+    changed = (f", changed the choice from {describe(search.first_without_margin)}"
+               if search.margin_changed_choice else "")
+    return (f"margin check at x{config.margin_coverage_factor:g} coverage "
+            f"{'n/a' if m is None else f'{m.recovery_rate:.3f}'}{changed}; ")
+
+
+def select_final(alternations: Sequence[tuple[int, SearchResult, Any, Any]]) -> int:
+    """Index into alternations of the final codec, decided on train results only."""
+    def key(i: int):
+        _, search, _, _ = alternations[i]
+        c = search.chosen_candidate
+        return (search.target_met, round(c.bits_per_base, 9), c.train_strength(), -i)
+
+    return max(range(len(alternations)), key=key)
 
 
 def _meets(metrics: Metrics, target: float) -> bool:
@@ -490,6 +530,7 @@ def search_settings(
     screen_seeds: Sequence[int],
     recheck_seeds: Sequence[int],
     fallback: Sequence[EncoderSettings] = (),
+    margin_seeds: Sequence[int] = (),
 ) -> SearchResult:
     """Pick the cheapest setting that meets the recovery target on train seeds.
 
@@ -502,13 +543,17 @@ def search_settings(
     """
     screen_seeds = assert_train_seeds(screen_seeds)
     recheck_seeds = assert_train_seeds(recheck_seeds)
+    margin_seeds = assert_train_seeds(margin_seeds) if margin_seeds else list(recheck_seeds)
+    margin_profile = (replace(profile, coverage_mean=profile.coverage_mean * config.margin_coverage_factor)
+                      if config.margin_coverage_factor else None)
+    first_without_margin: list[EncoderSettings] = []
     target = config.target
     t0 = time.time()
     trials = 0
 
     encoded_cache: dict[EncoderSettings, Any] = {}
 
-    def run(settings: EncoderSettings, seeds: list[int]) -> Metrics:
+    def run(settings: EncoderSettings, seeds: list[int], at: SituationProfile | None = None) -> Metrics:
         """Trials on train seeds; each candidate is encoded once and reused (screen, re-check)."""
         nonlocal trials
         assert_train_seeds(seeds)
@@ -516,7 +561,7 @@ def search_settings(
             encoded_cache.clear()  # candidates are visited one after another; keep memory flat
             encoded_cache[settings] = encode(data, settings, scorer)  # ValueError if too strict
         trials += len(seeds)
-        return runner(data, settings, scorer, decoder, profile, seeds, config.workers,
+        return runner(data, settings, scorer, decoder, at or profile, seeds, config.workers,
                       **_options(encoded=encoded_cache[settings]))
 
     allowed_misses = math.floor((1 - target) * len(screen_seeds) + 1e-9)
@@ -560,7 +605,16 @@ def search_settings(
                 encoded_cache.clear()
                 c.recheck = run(c.settings, list(recheck_seeds))
                 log.info("[%s]   re-check %s: %.3f", profile.name, describe(c.settings), c.recheck.recovery_rate)
-                if _meets(c.recheck, target):
+                if not _meets(c.recheck, target):
+                    continue
+                if margin_profile is None:
+                    return c
+                if not first_without_margin:
+                    first_without_margin.append(c.settings)
+                c.margin = run(c.settings, list(margin_seeds), margin_profile)
+                log.info("[%s]   margin check at %.2f reads: %.3f", profile.name, margin_profile.coverage_mean,
+                         c.margin.recovery_rate)
+                if _meets(c.margin, target):
                     return c
         return None
 
@@ -572,7 +626,12 @@ def search_settings(
         all_cands += extra
         chosen = visit(extra)
     if chosen is not None:
-        return SearchResult(chosen.settings, True, chosen, all_cands, trials, time.time() - t0)
+        result = SearchResult(chosen.settings, True, chosen, all_cands, trials, time.time() - t0,
+                              first_without_margin[0] if first_without_margin else None)
+        if result.margin_changed_choice:
+            log.info("[%s] selection margin changed the choice: %s -> %s", profile.name,
+                     describe(result.first_without_margin), describe(result.chosen))
+        return result
 
     # Nothing meets the target on train seeds: report the most robust candidate, flagged.
     tried = [c for c in all_cands if c.screen is not None]
@@ -580,7 +639,8 @@ def search_settings(
         raise RuntimeError("no candidate could be encoded")
     best = max(tried, key=lambda c: (c.screen.recovery_rate or 0.0, c.screen.strand_accuracy, c.bits_per_base))
     log.warning("[%s] no setting meets the target on train seeds; best effort: %s", profile.name, describe(best.settings))
-    return SearchResult(best.settings, False, best, all_cands, trials, time.time() - t0)
+    return SearchResult(best.settings, False, best, all_cands, trials, time.time() - t0,
+                        first_without_margin[0] if first_without_margin else None)
 
 
 # ---------------------------------------------------------------- codec store
@@ -705,11 +765,67 @@ def _evaluate_heldout(
     """The one held-out evaluation of a codec: recovery at budget B plus min reads at target.
 
     simulator: another channel (Simulator B for the firewall); None = the default simulator."""
-    seeds = heldout_seeds(config.eval_trials)
+    metrics, median, _ = evaluate_heldout_blocks(data, settings, scorer, decoder, profile, config, comps, simulator)
+    return metrics, median
+
+
+def evaluate_heldout_blocks(
+    data: bytes,
+    settings: EncoderSettings,
+    scorer: Scorer | None,
+    decoder: Decoder,
+    profile: SituationProfile,
+    config: LoopConfig,
+    comps: Components,
+    simulator: Callable | None = None,
+) -> tuple[Metrics, float | None, list[float | None]]:
+    """Recovery at the budget on the first block of held-out seeds, and min reads on each of
+    config.min_reads_blocks disjoint blocks: (metrics, median min reads, per-block min reads)."""
     opts = _options(simulator=simulator, encoded=encode(data, settings, scorer))
-    metrics = comps.recovery_trials(data, settings, scorer, decoder, profile, seeds, config.workers, **opts)
-    min_reads = min_reads_refined(data, settings, scorer, decoder, profile, seeds, config, comps, **opts)
-    return metrics, min_reads
+    metrics = comps.recovery_trials(data, settings, scorer, decoder, profile, heldout_seeds(config.eval_trials),
+                                    config.workers, **opts)
+    median, blocks = min_reads_blocks(data, settings, scorer, decoder, profile, config, comps, **opts)
+    return metrics, median, blocks
+
+
+def heldout_blocks(config: LoopConfig) -> list[list[int]]:
+    """Disjoint blocks of held-out seeds; the first block is heldout_seeds(eval_trials)."""
+    from .seeds import HELDOUT_COUNT
+
+    k = max(1, config.min_reads_blocks)
+    size = config.eval_trials if config.eval_trials * k <= HELDOUT_COUNT else HELDOUT_COUNT // k
+    seeds = heldout_seeds(size * k)
+    return [seeds[i * size:(i + 1) * size] for i in range(k)]
+
+
+def median_reads(values: Sequence[float | None]) -> float | None:
+    """Median with "not reached" (None) ranked above every coverage; upper median for even counts."""
+    ranked = sorted(values, key=lambda v: math.inf if v is None else v)
+    return ranked[len(ranked) // 2] if ranked else None
+
+
+def min_reads_blocks(
+    data: bytes,
+    settings: EncoderSettings,
+    scorer: Scorer | None,
+    decoder: Decoder,
+    profile: SituationProfile,
+    config: LoopConfig,
+    comps: Components,
+    **opts: Any,
+) -> tuple[float | None, list[float | None]]:
+    blocks = [min_reads_refined(data, settings, scorer, decoder, profile, seeds, config, comps, **opts)
+              for seeds in heldout_blocks(config)]
+    return median_reads(blocks), blocks
+
+
+def fmt_blocks(blocks: Sequence[float | None]) -> str:
+    vals = ["none" if v is None else f"{v:g}" for v in blocks]
+    ranked = sorted(blocks, key=lambda v: math.inf if v is None else v)
+    lo, hi = ranked[0], ranked[-1]
+    return (f"min/median/max {'none' if lo is None else f'{lo:g}'}/"
+            f"{'none' if median_reads(blocks) is None else f'{median_reads(blocks):g}'}/"
+            f"{'none' if hi is None else f'{hi:g}'} over blocks [{', '.join(vals)}]")
 
 
 def min_reads_refined(
@@ -809,10 +925,13 @@ def run_loop(
     log.info("[%s] step 1: decoder %s -> %s (frozen)", profile.name, decoder_spec(decoder), decoder_spec(decoder_b))
 
     # System B: default codec, same decoder. Held-out, once.
-    default_metrics, default_min_reads = _evaluate_heldout(data, default_settings, None, decoder_b, profile, config, comps)
-    log.info("[%s] default codec (system B): held-out recovery %.3f, strand acc %.3f, %.3f bits/base, min reads %s",
+    default_metrics, default_min_reads, default_blocks = evaluate_heldout_blocks(
+        data, default_settings, None, decoder_b, profile, config, comps)
+    store.manifest["default_min_reads_blocks"] = default_blocks
+    store.write()
+    log.info("[%s] default codec (system B): held-out recovery %.3f, strand acc %.3f, %.3f bits/base, min reads %s (%s)",
              profile.name, default_metrics.recovery_rate or 0.0, default_metrics.strand_accuracy,
-             default_metrics.bits_per_base or 0.0, default_min_reads)
+             default_metrics.bits_per_base or 0.0, default_min_reads, fmt_blocks(default_blocks))
     run = RunResult(
         situation=profile.name, profile=profile, recovery_target=config.target, n_trials=config.eval_trials,
         default_settings=default_settings, default_metrics=default_metrics, iterations=[],
@@ -824,13 +943,12 @@ def run_loop(
                search: SearchResult, extra: dict, notes_extra: str, stage_name: str) -> IterationResult:
         """Held-out evaluation of one chosen codec (with the decoder its search used), saved at once."""
         idx = len(run.iterations)
-        metrics, min_reads = _evaluate_heldout(data, chosen, scorer, decoder_used, profile, config, comps)
+        metrics, min_reads, blocks = evaluate_heldout_blocks(data, chosen, scorer, decoder_used, profile, config, comps)
         # PROJECT.md reading metric is "at matched bits per base": the default rules and scorer
         # at the chosen redundancy and strand length, same decoder, same held-out seeds.
         matched = matched_default(default_settings, chosen)
-        matched_reads = min_reads_refined(data, matched, None, decoder_used, profile,
-                                          heldout_seeds(config.eval_trials), config, comps,
-                                          encoded=encode(data, matched))
+        matched_reads, matched_blocks = min_reads_blocks(data, matched, None, decoder_used, profile, config, comps,
+                                                         encoded=encode(data, matched))
         kmers = [(str(k), float(r)) for k, r in scorer.top_kmers()] if hasattr(scorer, "top_kmers") else []
         rc = search.chosen_candidate.recheck
         notes = (
@@ -839,7 +957,9 @@ def run_loop(
             f"{sum(c.screen is not None for c in search.candidates)} candidates screened, "
             f"{search.trials_run} train trials; train re-check {rc.recovery_rate if rc else 'n/a'}"
             f"{'' if search.target_met else '; TARGET NOT MET ON TRAIN SEEDS (best effort)'}; "
-            f"{notes_extra}matched-density default: {describe(matched)}"
+            f"{margin_note(search, config)}"
+            f"{notes_extra}matched-density default: {describe(matched)}; "
+            f"min reads tuned {fmt_blocks(blocks)}; default at matched density {fmt_blocks(matched_blocks)}"
         )
         result = IterationResult(idx, chosen, metrics, min_reads, kmers, notes,
                                  stage=stage_name, default_min_reads_matched=matched_reads)
@@ -851,25 +971,35 @@ def run_loop(
             "train_recheck_rate": rc.recovery_rate if rc else None,
             "matched_default_settings": asdict(matched),
             "matched_default_min_reads": matched_reads,
+            "min_reads_blocks": blocks,
+            "matched_default_min_reads_blocks": matched_blocks,
+            "margin_coverage_factor": config.margin_coverage_factor,
+            "margin_rate": search.chosen_candidate.margin.recovery_rate if search.chosen_candidate.margin else None,
+            "margin_changed_choice": search.margin_changed_choice,
+            "first_without_margin": asdict(search.first_without_margin) if search.first_without_margin else None,
+            "train_strength": list(search.chosen_candidate.train_strength()),
+            "bits_per_base": search.chosen_candidate.bits_per_base,
             "search": [
                 {"settings": describe(c.settings), "bits_per_base": c.bits_per_base,
                  "screen_rate": c.screen.recovery_rate if c.screen else None,
                  "screen_trials": c.screen_trials,
                  "screen_strand_acc": c.screen.strand_accuracy if c.screen else None,
-                 "recheck_rate": c.recheck.recovery_rate if c.recheck else None, "error": c.error}
+                 "recheck_rate": c.recheck.recovery_rate if c.recheck else None,
+                 "margin_rate": c.margin.recovery_rate if c.margin else None, "error": c.error}
                 for c in search.candidates
             ],
             **extra,
         })
         save_run(run, run_id)
         log.info("[%s] %s: held-out recovery %.3f, strand acc %.3f, %.3f bits/base | "
-                 "MIN READS tuned %s vs default rules at the same bits/base %s",
+                 "MIN READS tuned %s vs default rules at the same bits/base %s (tuned %s; default %s)",
                  profile.name, stage_name, metrics.recovery_rate or 0.0, metrics.strand_accuracy,
-                 metrics.bits_per_base or 0.0, min_reads, matched_reads)
+                 metrics.bits_per_base or 0.0, min_reads, matched_reads, fmt_blocks(blocks), fmt_blocks(matched_blocks))
         return result
 
     screen_seeds = train_seeds(SEED_SCREEN, config.screen_trials)
     recheck_seeds = train_seeds(SEED_RECHECK, config.recheck_trials)
+    margin_seeds = train_seeds(SEED_MARGIN, config.recheck_trials)
 
     # Tier 1 (system C): audit rules and tune redundancy with the rule scorer only, B's decoder.
     # Same grid, seeds and decoder as the first alternation's search, minus the risk model.
@@ -879,6 +1009,7 @@ def run_loop(
         data, profile, None, decoder_b, grid_candidates(rules_grid, default_settings, {}), config,
         comps.recovery_trials, screen_seeds, recheck_seeds,
         fallback=grid_candidates(rules_grid, default_settings, {}, config.grid.fallback_redundancy),
+        margin_seeds=margin_seeds,
     )
     log.info("[%s] rules only: chose %s (target met on train: %s; %d train trials, %.0fs)",
              profile.name, search.summary(), search.target_met, search.trials_run, search.seconds)
@@ -888,6 +1019,7 @@ def run_loop(
     current = decoder_b
     prev_settings: EncoderSettings | None = None
     risk: Scorer | None = None
+    alternations: list[tuple[int, SearchResult, Scorer, Decoder]] = []  # (iteration index, search, risk, decoder)
     for it in range(n_alt):
         t_alt = time.time()
         # Step 2: label strands with the frozen decoder.
@@ -914,8 +1046,10 @@ def run_loop(
             screen_seeds if it == 0 else train_seeds(SEED_SCREEN + it * 10_000, config.screen_trials),
             recheck_seeds if it == 0 else train_seeds(SEED_RECHECK + it * 10_000, config.recheck_trials),
             fallback=grid_candidates(config.grid, default_settings, thresholds, config.grid.fallback_redundancy),
+            margin_seeds=margin_seeds if it == 0 else train_seeds(SEED_MARGIN + it * 10_000, config.recheck_trials),
         )
         chosen = search.chosen
+        alternations.append((len(run.iterations), search, risk, current))
         log.info("[%s] alt %d step 4: chose %s (target met on train: %s; %d train trials, %.0fs)",
                  profile.name, it, search.summary(), search.target_met, search.trials_run, search.seconds)
         record("alternation", chosen, risk, current, search, {
@@ -941,6 +1075,24 @@ def run_loop(
             break
         prev_settings = chosen
         current = adapted
+
+    # Final codec: chosen among the alternations on TRAIN results only (the held-out numbers never
+    # enter): target met on train (with margin), then highest bits per base, then most headroom on
+    # train, then the earlier alternation. If it isn't the last one, a copy is appended with
+    # stage "final" so RunResult.best and ablation E point at it.
+    pick = select_final(alternations)
+    idx, search_f, risk, current = alternations[pick]
+    store.manifest["final_iteration"] = idx
+    if pick != len(alternations) - 1:
+        src = run.iterations[idx]
+        log.info("[%s] final codec: keeping %s (%s) over the last alternation, decided on train results",
+                 profile.name, src.stage, describe(src.settings))
+        run.iterations.append(replace(src, iteration=len(run.iterations), stage="final",
+                                      notes=f"final codec = {src.stage}, kept on train results; " + src.notes))
+        store.manifest["iterations"].append({**store.manifest["iterations"][idx], "iteration": len(run.iterations) - 1,
+                                             "stage": "final", "stage_name": "final", "copy_of": idx})
+        store.write()
+        save_run(run, run_id)
 
     # Coverage curves on held-out seeds: A (baseline decoder), B (only if it's the transformer), tailored.
     final = run.iterations[-1]

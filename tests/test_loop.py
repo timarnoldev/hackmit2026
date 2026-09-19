@@ -152,8 +152,11 @@ def test_saves_after_every_alternation(monkeypatch):
     saved = []
     monkeypatch.setattr(loop, "save_run", lambda r, run_id: saved.append(len(r.iterations)))
     out = run(config=tiny_config(stop_when_converged=False))
-    assert len(out.iterations) == 4  # tier 1 + three alternations
-    assert saved == [0, 1, 2, 3, 4, 4]  # default, tier 1, one per alternation, final with coverage curve
+    stages = [it.stage for it in out.iterations]
+    assert stages[:4] == ["tier1", "alternation 0", "alternation 1", "alternation 2"]
+    assert stages[4:] in ([], ["final"])  # a copy when an earlier alternation is kept
+    # default, tier 1, one per alternation, (the final copy), final save with coverage curve
+    assert saved[:5] == [0, 1, 2, 3, 4] and saved[-1] == len(out.iterations)
 
 
 def test_results_on_disk_after_run():
@@ -170,7 +173,7 @@ def test_results_on_disk_after_run():
 
 def test_at_most_three_alternations():
     out = run(max_iterations=5, config=tiny_config(stop_when_converged=False))
-    assert len(out.iterations) == 1 + 3  # tier 1 is not an alternation
+    assert sum(it.stage.startswith("alternation") for it in out.iterations) == 3
 
 
 def test_coverage_curve_names_with_baseline_decoder():
@@ -293,11 +296,14 @@ def test_search_encodes_each_candidate_once_and_passes_it_on():
 
     def runner(data, settings, scorer, decoder, profile, seeds, workers=None, *, encoded=None, simulator=None):
         seen.append((settings, id(encoded), encoded.meta.settings == settings))
+        coverages.append(profile.coverage_mean)
         return fake_metrics(1.0, len(seeds))
 
+    coverages = []
     cands = [EncoderSettings(redundancy=0.3)]
     search_settings(DATA, NANOPORE, None, None, cands, tiny_config(), runner, train_seeds(10, 6), train_seeds(20, 12))
-    assert len(seen) == 3  # two screen batches and the re-check
+    assert len(seen) == 4  # two screen batches, the re-check and the margin check
+    assert coverages[-1] == pytest.approx(NANOPORE.coverage_mean * 0.9)
     assert all(ok for _, _, ok in seen)
     assert len({i for _, i, _ in seen[:2]}) == 1  # screen batches share one encoding
 
@@ -397,13 +403,12 @@ def test_gpu_decoders_label_in_process(monkeypatch):
 def test_iterations_carry_stage_and_matched_density():
     comps = mock_components()
     out = run(comps=comps, max_iterations=2, config=tiny_config(stop_when_converged=False))
-    assert [it.stage for it in out.iterations] == ["tier1", "alternation 0", "alternation 1"]
+    assert [it.stage for it in out.iterations][:3] == ["tier1", "alternation 0", "alternation 1"]
     for it in out.iterations:
         matched = loop.matched_default(EncoderSettings(), it.settings)
-        expected = loop.min_reads_refined(DATA, matched, None, None, NANOPORE, heldout_seeds(tiny_config().eval_trials),
-                                          tiny_config(), comps)
-        assert it.default_min_reads_matched == expected
-        assert "min reads" not in it.notes.split("matched-density default")[-1]
+        expected, blocks = loop.min_reads_blocks(DATA, matched, None, None, NANOPORE, tiny_config(), comps)
+        assert it.default_min_reads_matched == expected == loop.median_reads(blocks)
+        assert "min/median/max" in it.notes
     loaded = results.load_runs("t")[0]
     assert [it.stage for it in loaded.iterations] == [it.stage for it in out.iterations]
     assert [it.default_min_reads_matched for it in loaded.iterations] == [it.default_min_reads_matched for it in out.iterations]
@@ -447,3 +452,95 @@ def test_tier1_ignores_candidate_grid_but_tier2_searches_it(monkeypatch):
     cfg = tiny_config(grid=replace(tiny_config().grid, redundancy=(1.0,), candidates_per_strand=(8, 32)))
     run(max_iterations=1, config=cfg)
     assert seen[0] == {8} and seen[1] == {8, 32}
+
+
+def test_redundancy_override_overlapping_fallback_records_target_not_met():
+    """--redundancy 0.8,1.0,1.3,1.6,2.0 overlaps the fallback redundancies; nothing passes."""
+    comps = mock_components()
+    comps.recovery_trials = formula_runner(lambda s, seeds: False)
+    comps = replace(comps, min_reads_at_target=lambda *a, **k: None)
+    grid = replace(tiny_config().grid, redundancy=(0.8, 1.0, 1.3, 1.6, 2.0), fallback_redundancy=(1.3, 1.6, 2.0))
+    out = run(comps=comps, max_iterations=1, config=tiny_config(grid=grid))
+    assert all("TARGET NOT MET" in it.notes for it in out.iterations)
+    assert all(it.min_reads_at_target is None for it in out.iterations)
+    assert results.load_runs("t")[0].iterations[-1].stage == "alternation 0"
+
+
+def test_cli_redundancy_override(monkeypatch):
+    import scripts.run_loop as cli
+
+    seen = {}
+    monkeypatch.setattr(cli, "setup_logging", lambda run_id: None)
+    monkeypatch.setattr(cli, "run_loop", lambda profile, run_id, settings, alts, config, components, decoder:
+                        seen.setdefault("config", config) and (_ for _ in ()).throw(SystemExit(0)))
+    with pytest.raises(SystemExit):
+        cli.main(["--profile", "nanopore_budget", "--run-id", "t", "--redundancy", "0.8,1.0,1.3,1.6,2.0"])
+    assert seen["config"].grid.redundancy == (0.8, 1.0, 1.3, 1.6, 2.0)
+
+
+def test_margin_check_rejects_candidate_without_headroom():
+    """Passes at the budget but not at 0.9 x budget coverage: not eligible, the next one is chosen."""
+    grid = SearchGrid(redundancy=(0.3, 0.5), strand_length=(110,), max_homopolymer=(3,), gc_rule=(True,),
+                      risk_quantile=(None,), candidates_per_strand=(8,))
+    cands = grid_candidates(grid, EncoderSettings(), {})
+    budget = NANOPORE.coverage_mean
+
+    def passing(s, seeds, coverage):
+        return s.redundancy >= 0.5 or coverage >= budget
+
+    calls = []
+
+    def runner(data, settings, scorer, decoder, profile, seeds, workers=None, **kw):
+        calls.append(profile.coverage_mean)
+        return fake_metrics(1.0 if passing(settings, seeds, profile.coverage_mean) else 0.0, len(seeds))
+
+    res = search_settings(DATA, NANOPORE, None, None, cands, tiny_config(), runner,
+                          train_seeds(10, 6), train_seeds(20, 12), margin_seeds=train_seeds(30, 12))
+    assert res.chosen.redundancy == 0.5 and res.target_met
+    assert res.margin_changed_choice and res.first_without_margin.redundancy == 0.3
+    off = search_settings(DATA, NANOPORE, None, None, cands, tiny_config(margin_coverage_factor=None), runner,
+                          train_seeds(10, 6), train_seeds(20, 12))
+    assert off.chosen.redundancy == 0.3 and not off.margin_changed_choice
+
+
+def test_margin_seeds_must_be_train_seeds():
+    with pytest.raises(AssertionError):
+        search_settings(DATA, NANOPORE, None, None, [EncoderSettings()], tiny_config(), MockTrialRunner(),
+                        train_seeds(10, 3), train_seeds(20, 3), margin_seeds=heldout_seeds(3))
+
+
+def test_select_final_uses_train_results_only():
+    def res(bpb, met, strength):
+        c = loop.Candidate(EncoderSettings(), bpb)
+        c.margin = fake_metrics(strength[0], 10, acc=strength[1])
+        return (0, loop.SearchResult(EncoderSettings(), met, c, [c], 0, 0.0), None, None)
+
+    # Run1's case: alt 1 is denser than alt 2, so alt 1 is kept whatever happens on held-out.
+    assert loop.select_final([res(0.719, True, (1, 0.5)), res(0.781, True, (1, 0.5)), res(0.719, True, (1, 0.6))]) == 1
+    assert loop.select_final([res(0.9, False, (0, 0.9)), res(0.7, True, (1, 0.5))]) == 1  # target first
+    assert loop.select_final([res(0.7, True, (1, 0.5)), res(0.7, True, (1, 0.6))]) == 1  # more headroom
+    assert loop.select_final([res(0.7, True, (1, 0.5)), res(0.7, True, (1, 0.5))]) == 0  # tie: earlier
+
+
+def test_heldout_blocks_and_median():
+    cfg = tiny_config(eval_trials=300, min_reads_blocks=3)
+    blocks = loop.heldout_blocks(cfg)
+    assert [len(b) for b in blocks] == [300, 300, 300]
+    assert blocks[0] == heldout_seeds(300)
+    assert len(set().union(*map(set, blocks))) == 900 and all(is_heldout(s) for b in blocks for s in b)
+    assert [len(b) for b in loop.heldout_blocks(tiny_config(eval_trials=500, min_reads_blocks=3))] == [333] * 3
+    assert loop.median_reads([6.0, None, 7.0]) == 7.0
+    assert loop.median_reads([None, None, 6.0]) is None
+    assert loop.median_reads([6.5]) == 6.5
+    assert "6/6.5/none" in loop.fmt_blocks([6.5, None, 6.0])
+
+
+def test_final_copy_points_at_train_chosen_alternation(monkeypatch):
+    monkeypatch.setattr(loop, "select_final", lambda alts: 0)
+    out = run(max_iterations=2, config=tiny_config(stop_when_converged=False))
+    assert [it.stage for it in out.iterations] == ["tier1", "alternation 0", "alternation 1", "final"]
+    final, alt0 = out.iterations[-1], out.iterations[1]
+    assert final.settings == alt0.settings and final.metrics == alt0.metrics and final.iteration == 3
+    manifest = loop.load_codecs("t", NANOPORE.name)
+    assert manifest["final_iteration"] == 1 and manifest["iterations"][-1]["copy_of"] == 1
+    assert {p.decoder for p in out.coverage_curve} == {"baseline", "tailored"}

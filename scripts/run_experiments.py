@@ -15,9 +15,10 @@ and writes results/<run_id>/summary.json (ExperimentSummary):
   use X's final decoder, so only the encoder differs.
 - Firewall: tailored vs default on Simulator A held-out seeds, the same comparison with
   Simulator B, and the risk model's ROC AUC on held-out real DNAformer clusters.
-- Direct tier-2 measurement ("tier2_direct" firewall rows): rule vs learned scorer at C's
-  settings, same decoder and held-out seeds, per-trial strand failure and recovery with paired
-  bootstrap CIs, at the budget and at the default's min reads, 8 and 32 candidates per strand.
+- Direct tier-2 measurement (ExperimentSummary.tier2): rule vs learned scorer at C's settings,
+  same decoder and held-out seeds, per-trial strand failure and recovery with paired bootstrap
+  CIs; Simulator A at the budget and at the default's min reads, Simulator B at the budget;
+  8 and 32 candidates per strand.
 - Candidate examples: the same strands scored by each situation's risk model.
 
 All evaluation uses held-out seeds (heldout_seeds) through recovery_trials and
@@ -30,8 +31,6 @@ import argparse
 import importlib
 import importlib.util
 import logging
-import os
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable, Sequence
@@ -58,6 +57,7 @@ from dnacodec.results import (
     FirewallEntry,
     RuleAuditEntry,
     RunResult,
+    Tier2Entry,
     load_runs,
     save_summary,
 )
@@ -198,7 +198,9 @@ def ladder_indices(run: RunResult) -> tuple[int, int, int]:
     c = stages.index("tier1") if "tier1" in stages else 0
     alts = [i for i, st in enumerate(stages) if st.startswith("alternation")]
     d = alts[0] if alts else c
-    e = alts[-1] if alts else c
+    # E = the final codec: the "final" copy when the loop kept an earlier alternation (decided on
+    # train results), otherwise the last alternation.
+    e = stages.index("final") if "final" in stages else (alts[-1] if alts else c)
     return c, d, e
 
 
@@ -311,31 +313,18 @@ TIER2_CANDIDATES = (8, 32)
 BOOTSTRAP_RESAMPLES = 2000
 BOOTSTRAP_SEED = 0  # resampling of already measured trials, not a channel seed
 
-_TIER2_STATE: tuple | None = None
-
-
-def _tier2_init(data: bytes, encoded, decoder: Decoder) -> None:
-    global _TIER2_STATE
-    _TIER2_STATE = (data, encoded, decoder)
-
-
-def _tier2_trial(profile, seed: int) -> Metrics:
-    from dnacodec.evaluate import recovery_trials
-
-    data, encoded, decoder = _TIER2_STATE
-    return recovery_trials(data, encoded.meta.settings, None, decoder, profile, [seed], workers=1, encoded=encoded)
-
-
-def per_trial_metrics(data, encoded, decoder, profile, seeds, config: LoopConfig, comps: Components) -> list[Metrics]:
-    """One Metrics per trial (from recovery_trials, so evaluate() computes everything), in seed
-    order. Parallel over trials for CPU decoders; in process for GPU decoders and mocks."""
-    workers = config.workers or os.cpu_count() or 1
-    if "trials" in comps.mocked or getattr(decoder, "main_process_only", False) or workers <= 1 or len(seeds) <= 1:
-        return [comps.recovery_trials(data, encoded.meta.settings, None, decoder, profile, [s], 1, encoded=encoded)
-                for s in seeds]
-    with ProcessPoolExecutor(min(workers, len(seeds)), initializer=_tier2_init,
-                             initargs=(data, encoded, decoder)) as pool:
-        return list(pool.map(_tier2_trial, [profile] * len(seeds), list(seeds), chunksize=4))
+def per_trial_results(data, encoded, decoder, profile, seeds, config: LoopConfig, comps: Components,
+                      simulator=None) -> tuple[np.ndarray, np.ndarray]:
+    """Per-trial strand accuracy and recovered flag, in seed order, from ONE recovery_trials call
+    with per_trial=True (evaluate() computes everything; GPU decoders keep the chunked path)."""
+    opts = {"simulator": simulator} if simulator is not None else {}
+    m = comps.recovery_trials(data, encoded.meta.settings, None, decoder, profile, seeds, config.workers,
+                              encoded=encoded, per_trial=True, **opts)
+    acc = np.asarray(m.extra["trial_strand_accuracy"], dtype=np.float64)
+    rec = np.asarray(m.extra["trial_recovered"], dtype=np.float64)
+    if len(acc) != len(seeds) or len(rec) != len(seeds):
+        raise ValueError(f"per-trial results for {len(acc)} trials, expected {len(seeds)}")
+    return acc, rec
 
 
 def paired_bootstrap(a: np.ndarray, b: np.ndarray, n: int = BOOTSTRAP_RESAMPLES, seed: int = BOOTSTRAP_SEED) -> dict:
@@ -351,56 +340,58 @@ def paired_bootstrap(a: np.ndarray, b: np.ndarray, n: int = BOOTSTRAP_RESAMPLES,
 
 
 def tier2_direct(situation: str, run: RunResult, manifest: dict, data: bytes, config: LoopConfig,
-                 comps: Components) -> list[FirewallEntry]:
+                 comps: Components, sim_b: Callable | None = None) -> list[Tier2Entry]:
     """Rule scorer vs learned risk scorer at C's settings (no threshold), B's frozen decoder,
-    the same held-out seeds, paired per trial. At the budget and at the default's min reads,
-    with candidates_per_strand 8 and 32. diff = risk - rule, negative = learned selection better."""
+    the same held-out seeds, paired per trial. Simulator A at the budget and at the default's
+    min reads; Simulator B (if given) at the budget. 8 and 32 candidates per strand each.
+    diff = risk - rule: negative strand failure / positive recovery = learned selection better."""
     c, d, _ = ladder_indices(run)
     base = replace(run.iterations[c].settings, risk_threshold=None)
     risk = manifest["iterations"][d]["risk"]
     if risk is None:
-        return [FirewallEntry(situation, "tier2_direct", "not_run", 0.0, "no learned risk model in this run")]
+        log.warning("[%s] no learned risk model in this run, skipping the direct tier-2 test", situation)
+        return []
     decoder = manifest["decoder_b_obj"]
     seeds = heldout_seeds(config.eval_trials)
-    coverages = [("budget", run.profile.coverage_mean)]
+    points = [("A", None, "budget", run.profile.coverage_mean)]
     if run.default_min_reads_at_target is not None and run.default_min_reads_at_target != run.profile.coverage_mean:
-        coverages.append(("default min reads", run.default_min_reads_at_target))
-    cache: dict[tuple, list[Metrics]] = {}
+        points.append(("A", None, "default min reads", run.default_min_reads_at_target))
+    if sim_b is not None and "trials" not in comps.mocked:
+        points.append(("B", sim_b, "budget", run.profile.coverage_mean))
+    cache: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
 
-    def trials(settings, scorer, coverage) -> list[Metrics]:
+    def trials(settings, scorer, coverage, sim_name, simulator) -> tuple[np.ndarray, np.ndarray]:
         enc = encode(data, settings, scorer)
-        key = (hash(tuple(enc.strands)), coverage)  # the rule scorer ignores candidates_per_strand
+        key = (hash(tuple(enc.strands)), coverage, sim_name)  # the rule scorer ignores candidates_per_strand
         if key not in cache:
-            cache[key] = per_trial_metrics(data, enc, decoder, replace(run.profile, coverage_mean=float(coverage)),
-                                           seeds, config, comps)
+            cache[key] = per_trial_results(data, enc, decoder, replace(run.profile, coverage_mean=float(coverage)),
+                                           seeds, config, comps, simulator)
         return cache[key]
 
-    out: list[FirewallEntry] = []
-    for cov_name, coverage in coverages:
+    out: list[Tier2Entry] = []
+    for sim_name, simulator, cov_name, coverage in points:
         for k in TIER2_CANDIDATES:
             settings = replace(base, candidates_per_strand=k)
-            rule = trials(settings, None, coverage)
-            learned = trials(settings, risk, coverage)
-            context = (f"coverage {coverage:g} ({cov_name}), {k} candidates per strand, {len(seeds)} held-out trials, "
-                       f"C settings {describe(settings)}, B's decoder; diff = risk - rule, 95% bootstrap CI over trials")
-            for metric, per in (("strand_fail", lambda m: 1.0 - m.strand_accuracy),
-                                ("recovery", lambda m: m.recovery_rate or 0.0)):
-                stats = paired_bootstrap([per(m) for m in rule], [per(m) for m in learned])
-                for label, key in (("rule", "a"), ("risk", "b"), ("diff", "diff")):
-                    point, lo, hi = stats[key]
-                    out += [
-                        FirewallEntry(situation, "tier2_direct", f"{metric}_{label}", point, context),
-                        FirewallEntry(situation, "tier2_direct", f"{metric}_{label}_ci_low", lo, context),
-                        FirewallEntry(situation, "tier2_direct", f"{metric}_{label}_ci_high", hi, context),
-                    ]
-                if metric == "strand_fail":
-                    log.info("[%s] TIER2 DIRECT cov %g, %d cand: strand fail rule %.4f, risk %.4f, "
-                             "diff %+.4f [%+.4f, %+.4f]", situation, coverage, k, stats["a"][0], stats["b"][0],
-                             *stats["diff"])
-                else:
-                    log.info("[%s] TIER2 DIRECT cov %g, %d cand: recovery rule %.3f, risk %.3f, "
-                             "diff %+.3f [%+.3f, %+.3f]", situation, coverage, k, stats["a"][0], stats["b"][0],
-                             *stats["diff"])
+            rule_acc, rule_rec = trials(settings, None, coverage, sim_name, simulator)
+            risk_acc, risk_rec = trials(settings, risk, coverage, sim_name, simulator)
+            fail = paired_bootstrap(1.0 - rule_acc, 1.0 - risk_acc)
+            rec = paired_bootstrap(rule_rec, risk_rec)
+            entry = Tier2Entry(
+                situation=situation, coverage=float(coverage), candidates_per_strand=k, n_trials=len(seeds),
+                strand_fail_rule=fail["a"][0], strand_fail_risk=fail["b"][0], strand_fail_diff=fail["diff"][0],
+                strand_fail_diff_ci=(fail["diff"][1], fail["diff"][2]),
+                recovery_rule=rec["a"][0], recovery_risk=rec["b"][0], recovery_diff=rec["diff"][0],
+                recovery_diff_ci=(rec["diff"][1], rec["diff"][2]),
+                simulator=sim_name,
+                note=(f"{cov_name} coverage; C settings {describe(settings)}; risk model from alternation 0; "
+                      f"B's frozen decoder; held-out seeds; strand fail rule CI [{fail['a'][1]:.4f}, {fail['a'][2]:.4f}], "
+                      f"risk CI [{fail['b'][1]:.4f}, {fail['b'][2]:.4f}]"),
+            )
+            out.append(entry)
+            log.info("[%s] TIER2 DIRECT sim %s cov %g, %d cand: strand fail rule %.4f, risk %.4f, diff %+.4f "
+                     "[%+.4f, %+.4f]; recovery rule %.3f, risk %.3f, diff %+.3f [%+.3f, %+.3f]",
+                     situation, sim_name, coverage, k, fail["a"][0], fail["b"][0], *fail["diff"],
+                     rec["a"][0], rec["b"][0], *rec["diff"])
     return out
 
 
@@ -505,7 +496,7 @@ def build_summary(
 
     # 4. Direct tier-2 measurement: learned vs rule scorer at C's settings, paired per trial.
     for s in situations:
-        summary.firewall += tier2_direct(s, runs[s], codecs[s], data, config, comps)
+        summary.tier2 += tier2_direct(s, runs[s], codecs[s], data, config, comps, sim_b)
 
     # 5. Candidate examples.
     summary.examples = candidate_examples(tailored)
