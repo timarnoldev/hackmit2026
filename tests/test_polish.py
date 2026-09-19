@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pytest
 
@@ -16,7 +18,9 @@ from dnacodec.model.polish import (  # noqa: E402
     PolishConfig,
     PolishDecoder,
     PolishNet,
+    _FeaturePool,
     apply_edits,
+    build_features,
     count_parameters,
     draft_of,
     example_of,
@@ -169,3 +173,142 @@ def test_example_of_returns_features_and_labels():
     f, ops, ins = example_of(cluster, 110, ref)
     assert f.shape == (N_FEATURES, 110) and ops.shape == (110,) and ins.shape == (110,)
     assert example_of([], 110, ref) is None
+
+
+# ---------------------------------------------------------------- parallel feature building
+
+
+def _mixed_clusters(n: int, length: int, rng: np.random.Generator) -> list[list[str]]:
+    """Clusters with the edge cases decode() has to survive: empty, one read, only empty
+    strings, and clusters larger than MAX_READS."""
+    clusters: list[list[str]] = []
+    for i in range(n):
+        ref = random_ref(length, rng)
+        if i % 37 == 0:
+            clusters.append([])  # dropout
+        elif i % 37 == 1:
+            clusters.append(["", ""])  # reads that are all empty, also a dropout for the decoder
+        elif i % 7 == 0:
+            clusters.append([noisy_copy(ref, rng)])  # a single read
+        else:
+            size = int(rng.integers(2, 25))
+            clusters.append([noisy_copy(ref, rng) for _ in range(size)])
+    return clusters
+
+
+def _simulated_clusters(n: int, seed: int) -> tuple[list[list[str]], int]:
+    """Clusters from the real channel simulator at low coverage (many dropouts)."""
+    import dataclasses
+
+    from dnacodec.profiles import load_profile
+    from dnacodec.simulator import simulate
+
+    rng = np.random.default_rng(seed)
+    profile = dataclasses.replace(load_profile("nanopore_budget"), coverage_mean=4.0)
+    strands = [random_ref(110, rng) for _ in range(n)]
+    return simulate(strands, profile, seed), 110
+
+
+def _polish_decoder(tmp_path, workers):
+    save_checkpoint(tmp_path / "w.pt", PolishNet(TINY))
+    return PolishDecoder(tmp_path / "w.pt", device="cpu", batch_size=64, workers=workers)
+
+
+def test_workers_do_not_change_the_output(tmp_path):
+    """Hard requirement: workers=1 and workers=4 must decode to exactly the same strands."""
+    torch.manual_seed(0)
+    rng = np.random.default_rng(101)
+    cases = [
+        (_mixed_clusters(300, 110, rng), 110),
+        (_mixed_clusters(150, 140, rng), 140),
+        (_simulated_clusters(300, 7)),
+        ([], 110),
+        ([[]], 110),
+        ([["ACGT" * 27 + "AA"]], 110),  # a single cluster with a single read
+    ]
+    serial = _polish_decoder(tmp_path, None)
+    with _polish_decoder(tmp_path, 4) as parallel:
+        for clusters, length in cases:
+            want = serial.decode(clusters, length)
+            assert parallel.decode(clusters, length) == want
+            assert len(want) == len(clusters)
+
+
+@pytest.mark.parametrize("workers", [1, 4])
+def test_workers_match_on_real_microsoft_clusters(tmp_path, workers):
+    """Same check on real reads from the Microsoft train split (skipped without the data)."""
+    from dnacodec.realdata import MICROSOFT_DIR, load_microsoft
+
+    if not (MICROSOFT_DIR / "Clusters.txt").exists():
+        pytest.skip("Microsoft dataset not downloaded")
+    torch.manual_seed(0)
+    real = load_microsoft("train")[:400]
+    clusters = [c.reads for c in real]
+    clusters[3] = []  # a dropout and a single read, in case the slice holds neither
+    clusters[5] = clusters[5][:1]
+    serial = _polish_decoder(tmp_path, None)
+    with _polish_decoder(tmp_path, workers) as other:
+        assert other.decode(clusters, 110) == serial.decode(clusters, 110)
+
+
+def test_workers_none_and_one_stay_in_this_process(tmp_path):
+    for workers in (None, 1):
+        dec = _polish_decoder(tmp_path, workers)
+        assert dec._feature_pool() is None
+        dec.close()  # no pool, still fine
+    with pytest.raises(ValueError):
+        _polish_decoder(tmp_path, 0)
+
+
+def test_no_nested_pool_inside_a_worker_process(tmp_path, monkeypatch):
+    """A decoder that ends up in a worker process must not start a pool of its own."""
+    import dnacodec.model.polish as polish
+
+    dec = _polish_decoder(tmp_path, 4)
+    monkeypatch.setattr(polish, "_in_worker_process", lambda: True)
+    assert dec._feature_pool() is None
+    rng = np.random.default_rng(5)
+    clusters = _mixed_clusters(20, 110, rng)
+    assert len(dec.decode(clusters, 110)) == 20  # still works, serially
+    dec.close()
+
+
+def test_pool_is_reused_and_can_be_closed_and_restarted(tmp_path):
+    rng = np.random.default_rng(9)
+    clusters = _mixed_clusters(40, 110, rng)
+    dec = _polish_decoder(tmp_path, 2)
+    try:
+        first = dec.decode(clusters, 110)
+        pool = dec._pool
+        assert pool is not None and dec._feature_pool() is pool  # kept alive across calls
+        dec.close()
+        dec.close()  # idempotent
+        assert dec._pool is None
+        assert dec.decode(clusters, 110) == first  # a new pool, same answer
+    finally:
+        dec.close()
+
+
+def test_a_dead_worker_raises_instead_of_hanging():
+    pool = _FeaturePool(workers=2)
+    try:
+        pool._executor().submit(os._exit, 1).exception(timeout=60)  # kill one worker
+        with pytest.raises(RuntimeError, match="worker pool died"):
+            pool.map_chunks([[["ACGTACGTAC"]]], 10)
+        assert pool._pool is None  # closed, so the next call starts a fresh pool
+    finally:
+        pool.close()
+
+
+def test_build_features_matches_the_per_cluster_helpers():
+    """The worker function is just draft_of plus features_of, cluster by cluster."""
+    rng = np.random.default_rng(31)
+    ref = random_ref(110, rng)
+    clusters = [[noisy_copy(ref, rng) for _ in range(3)] for _ in range(4)]
+    drafts, feats, sizes = build_features(clusters, 110)
+    assert len(drafts) == 4 and sizes == [3, 3, 3, 3]
+    assert np.asarray(feats).shape == (4, N_FEATURES, 110)
+    for cluster, draft, f in zip(clusters, drafts, feats):
+        want_draft, want_votes = draft_of(cluster, 110)
+        assert draft == want_draft and len(draft) == 110
+        assert np.array_equal(f, features_of(want_draft, want_votes))
