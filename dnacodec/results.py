@@ -1,7 +1,7 @@
 """Result files: the only contract between the loop, the experiments, and the dashboard.
 
 results/<run_id>/<situation>.json   one RunResult per situation (the loop, the Pareto plot)
-results/<run_id>/summary.json       one ExperimentSummary (ablation, crossover, firewall, examples)
+results/<run_id>/summary.json       one ExperimentSummary (rule audit, ablation, crossover, firewall, examples)
 
 The dashboard only reads these files and never imports training code.
 """
@@ -89,13 +89,32 @@ class RunResult:
 
 @dataclass
 class AblationEntry:
-    """Ablation ladder: A fixed codec + baseline, B fixed codec + transformer,
-    C learned scorer + settings search with B's frozen decoder, D full alternating loop."""
+    """Ablation ladder, same channel and held-out seeds:
+    A fixed rules and redundancy + baseline decoder
+    B fixed rules and redundancy + adapted transformer (the default we compare against)
+    C audited rules + tuned redundancy, rule scorer only, B's frozen decoder (tier 1)
+    D C + learned risk scorer, same frozen decoder (tier 2)
+    E full alternating loop with re-adapted decoder"""
 
     situation: str
-    system: str  # "A", "B", "C" or "D"
+    system: str  # "A", "B", "C", "D" or "E"
     metrics: Metrics  # held-out, at the situation's read budget
     min_reads_at_target: float | None = None
+
+
+@dataclass
+class RuleAuditEntry:
+    """Does one coding rule pay off on one channel? Measured from the default codec with the same
+    decoder, toggling only this rule (or, for redundancy, comparing default vs tuned value)."""
+
+    situation: str
+    rule: str  # e.g. "max_homopolymer=3", "gc 0.4-0.6", "redundancy 0.3 vs tuned"
+    min_reads_on: float | None  # reads per strand needed at the recovery target with the rule
+    min_reads_off: float | None  # same without the rule (or with the tuned value)
+    bits_per_base_on: float | None
+    bits_per_base_off: float | None
+    verdict: str  # "pays off", "no measurable benefit", "harmful"
+    note: str = ""
 
 
 @dataclass
@@ -131,6 +150,7 @@ class CandidateExample:
 @dataclass
 class ExperimentSummary:
     ablation: list[AblationEntry] = field(default_factory=list)
+    rule_audit: list[RuleAuditEntry] = field(default_factory=list)
     crossover: list[CrossoverEntry] = field(default_factory=list)
     firewall: list[FirewallEntry] = field(default_factory=list)
     examples: list[CandidateExample] = field(default_factory=list)
@@ -144,6 +164,7 @@ class ExperimentSummary:
     def from_dict(cls, d: dict) -> ExperimentSummary:
         return cls(
             ablation=[AblationEntry(**{**e, "metrics": Metrics(**e["metrics"])}) for e in d["ablation"]],
+            rule_audit=[RuleAuditEntry(**e) for e in d.get("rule_audit", [])],
             crossover=[CrossoverEntry(**{**e, "metrics": Metrics(**e["metrics"])}) for e in d["crossover"]],
             firewall=[FirewallEntry(**e) for e in d["firewall"]],
             examples=[CandidateExample(**e) for e in d["examples"]],

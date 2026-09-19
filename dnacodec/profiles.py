@@ -52,6 +52,10 @@ class SituationProfile:
     # by all reads of that strand: errors that more reads can't average away. Random on purpose,
     # so the risk model can't learn motifs from it.
     position_rate_spread: float = 0.0
+    # Sequence-context error multipliers: filename under profiles/ with JSON
+    # {"k": 5, "sub": [4**k], "ins": [4**k], "del": [4**k], "fitted_on": ...}, mean-1 multipliers
+    # for the centered k-mer (bases near strand ends use 1). None = no context dependence.
+    context_table: str | None = None
 
     def __post_init__(self) -> None:
         if self.technology not in ("nanopore", "illumina"):
