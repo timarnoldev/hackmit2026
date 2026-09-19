@@ -25,17 +25,27 @@ Realism extensions (profile defaults switch them off and reproduce the model abo
     - malformed_read_rate: this fraction of reads is generated from a different, random
       strand of the same batch (a clustering error), then goes through the same channel.
       Needs at least two strands in the batch.
+    - context_table: file (under profiles/, or an absolute path) with one multiplier per
+      centered k-mer and error type, {"k": 5, "sub": [...], "ins": [...], "del": [...]}.
+      Index = the k-mer read as a base-4 number (A=0, C=1, G=2, T=3, first base most
+      significant). Bases closer than k//2 to a strand end get multiplier 1. On real
+      Nanopore reads the centered 5-mer explains ~40% of the between-position variance
+      of sub and del rates (held-apart train clusters), so this is sequence-dependent
+      and learnable, unlike position_rate_spread which covers the rest.
 
 Everything is vectorized over all reads of a batch with numpy.
 """
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
 
-from .profiles import SituationProfile
+from .profiles import PROFILES_DIR, SituationProfile
 from .types import Cluster, Strand
 
 MAX_EVENT_PROB = 0.5  # cap on p_sub + p_ins + p_del at a single base
@@ -109,12 +119,63 @@ def cap_probabilities(
     return p_del * scale, p_ins * scale, p_sub * scale
 
 
+def kmer_ids(codes: np.ndarray, k: int) -> np.ndarray:
+    """(S, L) id of the k-mer centered on each base, -1 where it doesn't fit in the strand."""
+    s, width = codes.shape
+    h = k // 2
+    ids = np.full((s, width), -1, dtype=np.int64)
+    if width < k:
+        return ids
+    val = np.zeros((s, width - 2 * h), dtype=np.int64)
+    bad = np.zeros((s, width - 2 * h), dtype=bool)
+    for j in range(k):
+        window = codes[:, j : j + width - 2 * h]
+        bad |= window == _PAD
+        val = val * 4 + np.minimum(window, 3)
+    ids[:, h : width - h] = np.where(bad, -1, val)
+    return ids
+
+
+@lru_cache(maxsize=16)
+def _read_context_table(path: str, mtime_ns: int) -> tuple[int, np.ndarray]:
+    data = json.loads(Path(path).read_text())
+    k = int(data["k"])
+    table = np.array([data["sub"], data["ins"], data["del"]], dtype=np.float64)
+    if table.shape != (3, 4**k) or (table < 0).any():
+        raise ValueError(f"context table {path}: need 3 x {4**k} non-negative multipliers")
+    return k, table
+
+
+def load_context_table(name: str) -> tuple[int, np.ndarray]:
+    """(k, table of shape (3, 4**k) for sub, ins, del). Relative names live in profiles/."""
+    path = Path(name)
+    if not path.is_absolute():
+        path = PROFILES_DIR / path
+    return _read_context_table(str(path), path.stat().st_mtime_ns)
+
+
+def context_multipliers(codes: np.ndarray, profile: SituationProfile) -> np.ndarray | None:
+    """(3, S, L) multipliers for sub, ins, del from the profile's context table, or None."""
+    name = getattr(profile, "context_table", None)  # field proposed, not in every profile
+    if not name:
+        return None
+    k, table = load_context_table(name)
+    ids = kmer_ids(codes, k)
+    inside = ids >= 0
+    safe = np.where(inside, ids, 0)
+    return np.where(inside[None], table[:, safe], 1.0)
+
+
 def base_probabilities(
     codes: np.ndarray, lengths: np.ndarray, profile: SituationProfile
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Per strand and base for a read of average quality: (p_del, p_ins, p_sub), (S, L) each."""
     del_mult, mult = error_multipliers(codes, lengths, profile)
-    return profile.del_rate * del_mult, profile.ins_rate * mult, profile.sub_rate * mult
+    p_del, p_ins, p_sub = profile.del_rate * del_mult, profile.ins_rate * mult, profile.sub_rate * mult
+    ctx = context_multipliers(codes, profile)
+    if ctx is not None:
+        p_sub, p_ins, p_del = p_sub * ctx[0], p_ins * ctx[1], p_del * ctx[2]
+    return p_del, p_ins, p_sub
 
 
 def dropout_probabilities(codes: np.ndarray, lengths: np.ndarray, profile: SituationProfile) -> np.ndarray:

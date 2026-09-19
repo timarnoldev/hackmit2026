@@ -26,8 +26,12 @@ Only split="train" is ever loaded here. Every seed goes through train_seed().
 from __future__ import annotations
 
 import argparse
+import itertools
+import json
 import math
-from dataclasses import dataclass, replace
+import tempfile
+from dataclasses import dataclass, fields, replace
+from pathlib import Path
 
 import numpy as np
 from rapidfuzz.distance import Levenshtein
@@ -35,28 +39,58 @@ from rapidfuzz.distance import Levenshtein
 from dnacodec import realdata
 from dnacodec.baseline import MajorityVoteDecoder
 from dnacodec.evaluate import evaluate
-from dnacodec.profiles import SituationProfile, load_profile, save_profile
+from dnacodec.profiles import PROFILES_DIR, SituationProfile, load_profile, save_profile
 from dnacodec.seeds import train_seed
 from dnacodec.simulator import _encode as encode_strands
-from dnacodec.simulator import run_lengths, sample_coverage, simulate
+from dnacodec.simulator import kmer_ids, load_context_table, run_lengths, sample_coverage, simulate
 
 # Reads further than this fraction of the reference length from it are counted as malformed
 # (misclustered or chimeric), not as channel noise. Applied identically to real and simulated.
 OUTLIER_FRACTION = 0.3
 MAX_RUN = 7  # run lengths >= MAX_RUN share the last homopolymer bucket
 MIN_RUN_EVENTS = 30  # fewer real deletions than this in a run bucket: too noisy to fit
-SIM_READS_PER_REF = 8
+SIM_READS_PER_REF = 12
+CONTEXT_K = 5  # centered k-mer for the context table
+CONTEXT_PRIOR = 2000.0  # pseudo base-reads at the global rate when estimating k-mer rates
+HOT_THRESHOLD = 0.2  # a (strand, position) is a hot spot if this share of reads errs there
+HOT_MIN_READS = 10
 FIT_ITERATIONS = 5
 BUDGETS = [2, 4, 6, 10, 16]  # reads per cluster for the accuracy curve (as in eval_real.py)
 READ_GRID = [0.0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0]
 POS_GRID = [0.0, 0.6, 0.8, 1.0, 1.1, 1.2, 1.3, 1.4, 1.6]
-STATS_CLUSTERS = 4000  # clusters used to fit error statistics
-CURVE_CLUSTERS = 2000  # clusters used to fit the accuracy curve; the next ones validate
+STATS_CLUSTERS = 6000  # clusters used to fit error statistics (and the context table)
+CURVE_CLUSTERS = 2000  # the first of these fit the accuracy curve
+VAL_CLUSTERS = 2000  # clusters after STATS_CLUSTERS, used for nothing but validation
 # The archive profile keeps extra substitutions for storage damage (deamination) on top
 # of the measured Illumina rate. Extrapolated, there is no real aged-DNA data here.
 ARCHIVE_SUB_BOOST = 1.5
 
 TAGS = {"replace": 0, "insert": 1, "delete": 2}
+TYPE_NAMES = ("sub", "ins", "del")
+
+# context_table is proposed to the architect; until SituationProfile has it, calibration uses
+# a local subclass so simulate() (which reads it with getattr) sees the fitted table.
+HAS_CONTEXT_FIELD = "context_table" in {f.name for f in fields(SituationProfile)}
+if HAS_CONTEXT_FIELD:
+    CalProfile = SituationProfile
+else:
+
+    @dataclass(frozen=True)
+    class CalProfile(SituationProfile):  # type: ignore[no-redef]
+        context_table: str | None = None
+
+
+_TABLE_DIR = Path(tempfile.mkdtemp(prefix="dnacodec_ctx_"))
+_TABLE_COUNTER = itertools.count()
+
+
+def write_context_table(table: np.ndarray, path: Path | None = None, fitted_on: str = "") -> str:
+    path = path or _TABLE_DIR / f"ctx_{next(_TABLE_COUNTER)}.json"
+    data = {"k": CONTEXT_K, "fitted_on": fitted_on}
+    for name, row in zip(TYPE_NAMES, table):
+        data[name] = [round(float(v), 4) for v in row]
+    path.write_text(json.dumps(data) + "\n")
+    return str(path)
 
 
 @dataclass
@@ -74,6 +108,14 @@ class ErrorStats:
     run_events: np.ndarray  # (3, MAX_RUN) the event counts behind by_run
     read_error_sd: float  # spread of per-read error fraction (heterogeneity between reads)
     read_error_quantiles: np.ndarray  # per-read error fraction at 5, 25, 50, 75, 95 %
+    ctx_events: np.ndarray  # (3, 4**CONTEXT_K) sub/ins/del events by centered k-mer
+    ctx_bases: np.ndarray  # (4**CONTEXT_K,) base-reads by centered k-mer
+
+    def ctx_relative(self) -> np.ndarray:
+        """(3, 4**k) k-mer error rate relative to the global rate, shrunk toward 1."""
+        glob = self.ctx_events.sum(axis=1, keepdims=True) / max(self.ctx_bases.sum(), 1)
+        rate = (self.ctx_events + CONTEXT_PRIOR * glob) / (self.ctx_bases[None, :] + CONTEXT_PRIOR)
+        return rate / np.maximum(glob, 1e-12)
 
     @property
     def total(self) -> float:
@@ -95,6 +137,10 @@ def error_stats(refs: list[str], clusters: list[list[str]]) -> ErrorStats:
     length = lengths.pop()
     codes, _ = encode_strands(refs)
     runs = np.minimum(run_lengths(codes), MAX_RUN)  # (n_refs, length)
+    kids = kmer_ids(codes, CONTEXT_K)
+    n_ctx = 4**CONTEXT_K
+    ctx_events = np.zeros((3, n_ctx), dtype=np.int64)
+    ctx_bases = np.zeros(n_ctx, dtype=np.int64)
 
     counts = np.zeros((3, length), dtype=np.int64)
     run_events = np.zeros((3, MAX_RUN + 1), dtype=np.int64)
@@ -105,6 +151,7 @@ def error_stats(refs: list[str], clusters: list[list[str]]) -> ErrorStats:
     for i, (ref, reads) in enumerate(zip(refs, clusters)):
         used = 0
         ref_runs = runs[i]
+        ref_kids = kids[i]
         for read in reads:
             if Levenshtein.distance(ref, read, score_cutoff=cutoff) > cutoff:
                 n_outliers += 1
@@ -119,9 +166,13 @@ def error_stats(refs: list[str], clusters: list[list[str]]) -> ErrorStats:
             pos = np.minimum(pos, length - 1)  # insertion after the last base
             np.add.at(counts, (tag, pos), 1)
             np.add.at(run_events, (tag, ref_runs[pos]), 1)
+            k = ref_kids[pos]
+            inside = k >= 0
+            np.add.at(ctx_events, (tag[inside], k[inside]), 1)
         n_reads += used
         if used:
             run_bases += used * np.bincount(ref_runs, minlength=MAX_RUN + 1)
+            ctx_bases += used * np.bincount(ref_kids[ref_kids >= 0], minlength=n_ctx)
 
     bases = max(n_reads * length, 1)
     sub, ins, dele = (counts.sum(axis=1) / bases).tolist()
@@ -154,7 +205,33 @@ def error_stats(refs: list[str], clusters: list[list[str]]) -> ErrorStats:
         run_events=run_events[:, 1:],
         read_error_sd=float(np.std(per_read_arr)),
         read_error_quantiles=np.percentile(per_read_arr, [5, 25, 50, 75, 95]),
+        ctx_events=ctx_events,
+        ctx_bases=ctx_bases,
     )
+
+
+def hotspot_shares(refs: list[str], clusters: list[list[str]]) -> np.ndarray:
+    """(3,) share of (strand, position) pairs where >= HOT_THRESHOLD of reads have a
+    sub / ins / del, over clusters with >= HOT_MIN_READS non-outlier reads."""
+    length = len(refs[0])
+    cutoff = int(OUTLIER_FRACTION * length)
+    hot = np.zeros(3)
+    total = 0
+    for ref, reads in zip(refs, clusters):
+        hits = np.zeros((3, length))
+        used = 0
+        for read in reads:
+            if Levenshtein.distance(ref, read, score_cutoff=cutoff) > cutoff:
+                continue
+            used += 1
+            seen = np.zeros((3, length), dtype=bool)
+            for t, src, _ in Levenshtein.editops(ref, read).as_list():
+                seen[TAGS[t], min(src, length - 1)] = True
+            hits += seen
+        if used >= HOT_MIN_READS:
+            hot += (hits / used >= HOT_THRESHOLD).sum(axis=1)
+            total += length
+    return hot / max(total, 1)
 
 
 def nb_shape_mle(sizes: np.ndarray) -> float:
@@ -219,45 +296,72 @@ def _forward_fill(values: np.ndarray, reliable: np.ndarray) -> np.ndarray:
 
 
 def fit_error_model(
-    refs: list[str], real: ErrorStats, start: SituationProfile, seed: int, verbose: bool = True
+    refs: list[str],
+    real: ErrorStats,
+    start: SituationProfile,
+    seed: int,
+    verbose: bool = True,
+    fit_context: bool = False,
+    iterations: int = FIT_ITERATIONS,
+    warm: bool = False,
 ) -> tuple[SituationProfile, ErrorStats]:
-    """Adjust rates, homopolymer run factors and end_factor until simulated stats match real.
+    """Adjust rates, homopolymer run factors, end_factor and (optionally) the context table
+    until simulated error statistics match the real ones.
 
     Deletions get a separate factor per run length (homopolymer_run_factors, first entry 1),
     substitutions and insertions a single rate each. Run lengths with fewer than
     MIN_RUN_EVENTS real deletions (e.g. long runs on Illumina) reuse the previous factor
-    instead of being fit to noise.
+    instead of being fit to noise. The context table holds mean-1 multipliers per centered
+    k-mer and error type (mean weighted by how often each k-mer occurs in the real data).
+    warm=True keeps the start's parameters instead of initializing from the real stats.
     """
     reliable = real.run_events[2] >= MIN_RUN_EVENTS
     reliable[0] = True
     del_run = _forward_fill(np.maximum(real.by_run[2], 1e-6), reliable)
-    profile = replace(
-        start,
-        sub_rate=real.sub,
-        ins_rate=real.ins,
-        del_rate=float(del_run[0]),
-        homopolymer_run_factors=tuple((del_run / del_run[0]).tolist()),
-        end_factor=max(real.end_ratio, 0.1),
-        malformed_read_rate=real.outlier_fraction,
-    )
-    for it in range(FIT_ITERATIONS):
+    weights = real.ctx_bases / max(real.ctx_bases.sum(), 1)
+    real_ctx = real.ctx_relative()
+
+    def normalized(table: np.ndarray) -> np.ndarray:
+        return table / np.maximum((table * weights).sum(axis=1, keepdims=True), 1e-12)
+
+    profile = start
+    if not warm:
+        profile = replace(
+            start,
+            sub_rate=real.sub,
+            ins_rate=real.ins,
+            del_rate=float(del_run[0]),
+            homopolymer_run_factors=tuple((del_run / del_run[0]).tolist()),
+            end_factor=max(real.end_ratio, 0.1),
+            malformed_read_rate=real.outlier_fraction,
+            context_table=write_context_table(normalized(real_ctx)) if fit_context else None,
+        )
+    for it in range(iterations):
         sim = simulated_stats(refs, profile, seed + it)
         if verbose:
+            ctx_err = ""
+            if fit_context:
+                ctx_err = f" ctx log-ratio sd {np.round(np.std(np.log(sim.ctx_relative() / real_ctx), axis=1), 3).tolist()}"
             print(
                 f"  fit {it}: sim sub {sim.sub:.4f} ins {sim.ins:.4f} del {sim.dele:.4f} "
-                f"end {sim.end_ratio:.3f} del-by-run {np.round(sim.by_run[2], 3).tolist()}"
+                f"end {sim.end_ratio:.3f} del-by-run {np.round(sim.by_run[2], 3).tolist()}{ctx_err}"
             )
         del_now = profile.del_rate * np.asarray(profile.homopolymer_run_factors)
         ratio = np.where(reliable, del_run / np.maximum(sim.by_run[2], 1e-6), 1.0)
         del_new = _forward_fill(del_now * ratio, reliable)
-        profile = replace(
-            profile,
+        updates = dict(
             sub_rate=min(profile.sub_rate * real.sub / max(sim.sub, 1e-9), 0.3),
             ins_rate=min(profile.ins_rate * real.ins / max(sim.ins, 1e-9), 0.3),
             del_rate=min(float(del_new[0]), 0.3),
             homopolymer_run_factors=tuple((del_new / del_new[0]).tolist()),
             end_factor=max(profile.end_factor + real.end_ratio - sim.end_ratio, 0.1),
         )
+        if fit_context:
+            _, table = load_context_table(profile.context_table)
+            # Damped: run factors correct deletions in runs at the same time.
+            step = (real_ctx / np.maximum(sim.ctx_relative(), 1e-6)) ** 0.7
+            updates["context_table"] = write_context_table(normalized(table * step))
+        profile = replace(profile, **updates)
     final = simulated_stats(refs, profile, seed + 1000)
     return profile, final
 
@@ -300,6 +404,7 @@ def fit_spreads(
     real_curve: np.ndarray,
     start: SituationProfile,
     seed: int,
+    fit_context: bool = False,
 ) -> SituationProfile:
     """Choose read_quality_spread and position_rate_spread by coordinate search.
 
@@ -307,19 +412,29 @@ def fit_spreads(
     simulated accuracy curve to the real one.
     """
     cache: dict[tuple[float, float], tuple[float, SituationProfile]] = {}
+    read_sigma, pos_sigma = 0.5, 1.0
+    base, _ = fit_error_model(
+        stats_refs,
+        real_stats,
+        replace(start, read_quality_spread=read_sigma, position_rate_spread=pos_sigma),
+        seed,
+        fit_context=fit_context,
+    )
 
     def score(read_sigma: float, pos_sigma: float) -> float:
         key = (read_sigma, pos_sigma)
         if key not in cache:
-            candidate = replace(start, read_quality_spread=read_sigma, position_rate_spread=pos_sigma)
-            candidate, _ = fit_error_model(stats_refs, real_stats, candidate, seed, verbose=False)
+            candidate = replace(base, read_quality_spread=read_sigma, position_rate_spread=pos_sigma)
+            candidate, _ = fit_error_model(
+                stats_refs, real_stats, candidate, seed, verbose=False,
+                fit_context=fit_context, iterations=2, warm=True,
+            )
             curve = curve_for_profile(curve_refs, curve_clusters, candidate, seed + 7)
             loss = float(np.sum((curve - real_curve) ** 2))
             print(f"  read {read_sigma:.2f} pos {pos_sigma:.2f}: sim curve {np.round(curve, 3).tolist()} loss {loss:.4f}")
             cache[key] = (loss, candidate)
         return cache[key][0]
 
-    read_sigma, pos_sigma = 0.5, 1.0
     for _ in range(2):
         pos_sigma = min(POS_GRID, key=lambda p: score(read_sigma, p))
         read_sigma = min(READ_GRID, key=lambda r: score(r, pos_sigma))
@@ -423,6 +538,7 @@ def calibrate(
     fit_dispersion: bool,
     dry_run: bool,
     fit_spread: bool = True,
+    fit_context: bool = False,
 ) -> SituationProfile:
     # Most common reference length only (DNAformer files may contain a few odd ones).
     lengths = np.array([len(c.reference) for c in clusters])
@@ -434,10 +550,11 @@ def calibrate(
     refs = [c.reference for c in clusters]
     reads = [c.reads for c in clusters]
 
-    stats_refs, stats_reads = refs[:STATS_CLUSTERS], reads[:STATS_CLUSTERS]
-    fit_refs, fit_reads = refs[:CURVE_CLUSTERS], reads[:CURVE_CLUSTERS]
-    val_refs = refs[CURVE_CLUSTERS : 2 * CURVE_CLUSTERS]
-    val_reads = reads[CURVE_CLUSTERS : 2 * CURVE_CLUSTERS]
+    # Validation clusters are taken first so they never overlap the fit, whatever the size.
+    val_refs, val_reads = refs[:VAL_CLUSTERS], reads[:VAL_CLUSTERS]
+    stats_refs = refs[VAL_CLUSTERS : VAL_CLUSTERS + STATS_CLUSTERS]
+    stats_reads = reads[VAL_CLUSTERS : VAL_CLUSTERS + STATS_CLUSTERS]
+    fit_refs, fit_reads = stats_refs[:CURVE_CLUSTERS], stats_reads[:CURVE_CLUSTERS]
 
     real = error_stats(stats_refs, stats_reads)
     mean, var, moments_shape, shape = coverage_fit(reads)
@@ -445,17 +562,24 @@ def calibrate(
     print(f"  coverage mean {mean:.2f} var {var:.2f} -> NB shape MLE {shape:.3f} (moments {moments_shape:.3f})")
     print("  " + describe("real", real))
 
-    base = load_profile(profile_names[0])
+    base = CalProfile(**load_profile(profile_names[0]).to_dict())
     if fit_dispersion:
         base = replace(base, coverage_dispersion=shape)
     if fit_spread:
         real_curve = accuracy_curve(fit_refs, fit_reads, seed)
         print(f"  real accuracy curve (fit clusters) {np.round(real_curve, 3).tolist()}")
-        fitted = fit_spreads(stats_refs, real, fit_refs, fit_reads, real_curve, base, seed)
+        fitted = fit_spreads(stats_refs, real, fit_refs, fit_reads, real_curve, base, seed, fit_context)
     else:
         fitted = base
-    fitted, _ = fit_error_model(stats_refs, real, fitted, seed)
+    fitted, _ = fit_error_model(stats_refs, real, fitted, seed, fit_context=fit_context, warm=fit_spread)
     fitted = rounded(fitted)
+    table_name = None
+    if fit_context:
+        _, table = load_context_table(fitted.context_table)
+        table_name = f"{profile_names[0]}_context.json"
+        table_path = PROFILES_DIR / table_name if not dry_run else _TABLE_DIR / table_name
+        fitted = replace(fitted, context_table=write_context_table(table, table_path, f"{source} (train split)"))
+        print(f"  context table -> {table_path}")
 
     # Validation on clusters not used for any fit.
     real_val = error_stats(val_refs, val_reads)
@@ -463,8 +587,21 @@ def calibrate(
     print("  " + describe("real", real_val))
     print("  " + describe("sim", sim_val))
     sizes = np.array([len(r) for r in reads], dtype=float)
-    table = comparison_table(real_val, sim_val, coverage_rows(sizes, fitted.coverage_dispersion, seed))
+    extra = coverage_rows(sizes, fitted.coverage_dispersion, seed)
+    # Hot spots and per-k-mer rates need the real cluster sizes.
+    sim_full = simulate_sized(val_refs, [len(c) for c in val_reads], fitted, seed + 600)
+    hot_real, hot_sim = hotspot_shares(val_refs, val_reads), hotspot_shares(val_refs, sim_full)
+    sim_ctx = error_stats(val_refs, sim_full)
+    rel_real, rel_sim = real_val.ctx_relative(), sim_ctx.ctx_relative()
+    for t, name in enumerate(TYPE_NAMES):
+        extra.append((f"hot-spot share {name}", float(hot_real[t]), float(hot_sim[t])))
+    for t, name in enumerate(TYPE_NAMES):
+        corr = float(np.corrcoef(np.log(rel_real[t]), np.log(rel_sim[t]))[0, 1])
+        extra.append((f"5-mer log-rate corr {name}", 1.0, corr))
+    table = comparison_table(real_val, sim_val, extra)
     print(table)
+    print("  (5-mer log-rate corr: correlation of per-5-mer relative rates, real vs sim, on the")
+    print("   validation clusters; the 'real' column is 1 by definition)")
 
     if fit_spread:
         real_curve = accuracy_curve(val_refs, val_reads, seed + 100)
@@ -480,6 +617,7 @@ def calibrate(
             malformed_read_rate=0.0,
             homopolymer_factor=real_val.hp_ratio,
             position_rate_spread=0.0,
+            context_table=None,
         )
         old, _ = fit_error_model_legacy(val_refs, real_val, old, seed + 400)
         old_curve = curve_for_profile(val_refs, val_reads, old, seed + 200)
@@ -514,6 +652,11 @@ def calibrate(
             coverage_dispersion=fitted.coverage_dispersion if fit_dispersion else current.coverage_dispersion,
             calibrated_from=f"{source} (train split)",
         )
+        if HAS_CONTEXT_FIELD:
+            updated = replace(updated, context_table=table_name)
+        elif table_name:
+            print(f"  NOTE: SituationProfile has no context_table field yet; {table_name} is written")
+            print("  but the saved profile can't reference it, so these numbers were fit WITH it.")
         if dry_run:
             print(f"  [dry run] {name}: {updated}")
         else:
@@ -550,6 +693,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--skip-microsoft", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="measure and compare, write nothing")
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument("--no-context", action="store_true", help="don't fit a 5-mer context table")
     args = parser.parse_args(argv)
 
     if not args.skip_microsoft:
@@ -560,6 +704,7 @@ def main(argv: list[str] | None = None) -> None:
             args.seed,
             fit_dispersion=True,
             dry_run=args.dry_run,
+            fit_context=not args.no_context,
         )
 
     for name in args.dnaformer_file:
@@ -570,7 +715,9 @@ def main(argv: list[str] | None = None) -> None:
             # Extra Nanopore files are measured for comparison only; nanopore_budget stays
             # calibrated on Microsoft, the dataset we benchmark on.
             profiles, fit_dispersion, dry = ["nanopore_budget"], False, True
-        calibrate(clusters, profiles, f"dnaformer_{name}", args.seed, fit_dispersion, dry)
+        # Illumina has ~1 error per 1000 bases: too few events per 5-mer for a context table.
+        fit_context = "illumina" not in name.lower() and not args.no_context
+        calibrate(clusters, profiles, f"dnaformer_{name}", args.seed, fit_dispersion, dry, fit_context=fit_context)
 
 
 if __name__ == "__main__":
