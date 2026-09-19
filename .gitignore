@@ -3,8 +3,18 @@ __pycache__/
 *.pyc
 .pytest_cache/
 /data
-/checkpoints
+# model checkpoints are large, except the small trained polisher that produces our results
+/checkpoints/*
+!/checkpoints/polish/
+/checkpoints/polish/*
+!/checkpoints/polish/polish.pt
+# results of real runs are the record behind every claim, mock and demo output is not
 results/*
 !results/.gitkeep
+!results/run1/
+!results/run2/
+!results/run3/
+!results/run4/
+!results/run2_strict/
 .DS_Store
 /.claude/worktrees

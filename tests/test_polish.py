@@ -7,7 +7,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from dnacodec.baseline import MajorityVoteDecoder  # noqa: E402
+from dnacodec.baseline import MajorityVoteDecoder, _pick_draft  # noqa: E402
 from dnacodec.model.polish import (  # noqa: E402
     DELETE,
     N_FEATURES,
@@ -23,7 +23,9 @@ from dnacodec.model.polish import (  # noqa: E402
     features_of,
     labels_of,
     polish_clusters,
+    polish_clusters_multi,
     save_checkpoint,
+    start_reads,
 )
 from dnacodec.types import ALPHABET  # noqa: E402
 
@@ -160,6 +162,76 @@ def test_decoder_uses_thresholds_from_the_checkpoint(tmp_path):
     assert ckpt["thresholds"] == th
     dec = PolishDecoder(tmp_path / "t.pt", device="cpu")
     assert dec.thresholds == th
+
+
+def test_gain_mode_applies_the_paired_edits():
+    """One confident deletion and one confident insertion, everything else untouched."""
+    rng = np.random.default_rng(29)
+    draft = random_ref(20, rng)
+    op_p = np.zeros((N_OPS, 20), dtype=np.float32)
+    op_p[0] = 0.99  # keep
+    op_p[1:] = 0.0025
+    op_p[DELETE, 7] = 0.9
+    op_p[0, 7] = 0.05
+    ins_p = np.zeros((N_INS, 20), dtype=np.float32)
+    ins_p[0] = 0.99
+    ins_p[1:] = 0.0025
+    ins_p[1 + ALPHABET.index("G"), 3] = 0.9
+    ins_p[0, 3] = 0.05
+    out = apply_edits(draft, op_p, ins_p, 20, 0.0, 0.0, mode="gain")
+    assert out == draft[:3] + "G" + draft[3:7] + draft[8:]
+    # a large margin rejects the pair, the draft survives
+    assert apply_edits(draft, op_p, ins_p, 20, 0.0, 20.0, mode="gain") == draft
+
+
+def test_gain_mode_keeps_the_length_and_rejects_unknown_modes():
+    rng = np.random.default_rng(31)
+    draft = random_ref(110, rng)
+    for _ in range(10):
+        op_p = rng.random((N_OPS, 110)).astype(np.float32)
+        ins_p = rng.random((N_INS, 110)).astype(np.float32)
+        assert len(apply_edits(draft, op_p, ins_p, 110, 0.0, 0.0, mode="gain")) == 110
+    with pytest.raises(ValueError):
+        apply_edits(draft, op_p, ins_p, 110, mode="nope")
+
+
+def test_start_reads_begins_with_the_baseline_draft():
+    rng = np.random.default_rng(37)
+    ref = random_ref(110, rng)
+    reads = [noisy_copy(ref, rng) for _ in range(6)]
+    assert start_reads(reads, 110, 1) == [_pick_draft(reads, 110)]
+    picked = start_reads(reads, 110, 3)
+    assert len(picked) == 3 and len(set(picked)) == 3
+    assert picked[0] == _pick_draft(reads, 110)
+    assert len(start_reads(reads[:2], 110, 4)) == 2  # never more than the reads
+
+
+def test_multi_round_defaults_match_the_original_path(tmp_path):
+    """rounds=1, drafts=1, mode="topk" must stay bit-identical to polish_clusters()."""
+    torch.manual_seed(1)
+    model = PolishNet(TINY).eval()
+    rng = np.random.default_rng(41)
+    refs = [random_ref(110, rng) for _ in range(25)]
+    clusters = [[noisy_copy(r, rng) for _ in range(int(rng.integers(1, 9)))] for r in refs] + [[]]
+    plain = polish_clusters(model, clusters, 110, device="cpu")
+    multi = polish_clusters_multi(model, clusters, 110, device="cpu")
+    assert plain == multi
+    save_checkpoint(tmp_path / "p.pt", PolishNet(TINY))
+    assert PolishDecoder(tmp_path / "p.pt", device="cpu").rounds == 1
+
+
+def test_rounds_and_drafts_stay_well_formed(tmp_path):
+    save_checkpoint(tmp_path / "p.pt", PolishNet(TINY))
+    rng = np.random.default_rng(43)
+    refs = [random_ref(110, rng) for _ in range(15)]
+    clusters = [[noisy_copy(r, rng) for _ in range(int(rng.integers(1, 12)))] for r in refs] + [[]]
+    for select in ("confidence", "agree", "reads"):
+        for mode in ("topk", "gain"):
+            dec = PolishDecoder(tmp_path / "p.pt", device="cpu", rounds=2, drafts=3,
+                                select=select, mode=mode)
+            out = dec.decode(clusters, 110)
+            assert len(out) == 16 and out[-1] is None
+            assert all(len(o) == 110 and set(o) <= set(ALPHABET) for o in out[:-1])
 
 
 def test_example_of_returns_features_and_labels():
