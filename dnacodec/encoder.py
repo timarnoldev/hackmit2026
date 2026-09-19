@@ -45,6 +45,7 @@ MAX_SEED_BITS = 64
 MIN_TRIES_PER_STRAND = 20000
 TRIES_PER_CANDIDATE = 250
 SCORER_BATCH = 8192
+RETRIES_ON_BAD_FILE = 8
 
 _MASK64 = (1 << 64) - 1
 _TO_DIGITS = str.maketrans("ACGT", "0123")
@@ -386,16 +387,66 @@ def recover(strands: Sequence[Strand | None], meta: FileMeta) -> bytes | None:
         solution = _solve(eqs, n)
         if solution is None:
             return None
-        blob = _bytes_from_chunks(solution, layout, meta.n_bytes + FILE_CRC_BYTES)
-        data = blob[FILE_CRC_BYTES:]
-        if zlib.crc32(data).to_bytes(FILE_CRC_BYTES, "big") != blob[:FILE_CRC_BYTES]:
-            return None
+        data = _check_file(solution, layout, meta.n_bytes)
+        if data is None and len(eqs) > n + 1:
+            data = _recover_from_poison(eqs, n, solution, layout, meta.n_bytes)
         return data
     except Exception:  # noqa: BLE001  garbage in must never crash recovery
         return None
 
 
+def _recover_from_poison(
+    eqs: dict[int, int], n: int, solution: list[int], layout: _Layout, n_bytes: int
+) -> bytes | None:
+    """The solution failed the file CRC-32: a wrong strand passed its CRC-16 (probability
+    2**-16 per corrupted strand) and poisoned the solve. The culprit agrees with the wrong
+    solution, while many good strands that touch the wrong chunks disagree with it. So first
+    drop strands that agree but touch mostly-disagreeing chunks, then fall back to leaving
+    out pseudo-random parts of the surplus."""
+    nbrs = {seed: _neighbors(seed, n) for seed in eqs}
+    inc = np.zeros(n)
+    tot = np.zeros(n)
+    agrees: dict[int, bool] = {}
+    for seed, value in eqs.items():
+        acc = 0
+        for c in nbrs[seed]:
+            acc ^= solution[c]
+        agrees[seed] = acc == value
+        tot[nbrs[seed]] += 1
+        if not agrees[seed]:
+            inc[nbrs[seed]] += 1
+    bad_share = inc / np.maximum(tot, 1)
+    suspicion = {seed: float(bad_share[nbrs[seed]].max()) if agrees[seed] else 0.0 for seed in eqs}
+
+    subsets = []
+    for threshold in (0.5, 0.3, 0.15):
+        subsets.append({seed: v for seed, v in eqs.items() if suspicion[seed] < threshold})
+    surplus = len(eqs) - n
+    cut = int(min(0.5, 0.8 * surplus / len(eqs)) * 2**64)
+    for attempt in range(1, RETRIES_ON_BAD_FILE + 1):
+        subsets.append(
+            {seed: v for seed, v in eqs.items() if _splitmix(seed ^ (attempt * 0x9E37)) >= cut}
+        )
+    for subset in subsets:
+        if len(subset) < n or len(subset) == len(eqs):
+            continue
+        sol = _solve(subset, n)
+        if sol is not None:
+            data = _check_file(sol, layout, n_bytes)
+            if data is not None:
+                return data
+    return None
+
+
 # ---------------------------------------------------------------- decoding
+
+
+def _check_file(solution: list[int], layout: _Layout, n_bytes: int) -> bytes | None:
+    blob = _bytes_from_chunks(solution, layout, n_bytes + FILE_CRC_BYTES)
+    data = blob[FILE_CRC_BYTES:]
+    if zlib.crc32(data).to_bytes(FILE_CRC_BYTES, "big") != blob[:FILE_CRC_BYTES]:
+        return None
+    return data
 
 
 def _solve(eqs: dict[int, int], n: int, check_only: bool = False) -> list[int] | None:
@@ -439,9 +490,9 @@ def _solve(eqs: dict[int, int], n: int, check_only: bool = False) -> list[int] |
     unknown = [c for c in range(n) if known[c] is None]
     col = {c: i for i, c in enumerate(unknown)}
     pivots: dict[int, tuple[int, int]] = {}  # lowest set bit -> (mask, value)
-    for r, row in enumerate(rows):
-        if not row:
-            continue
+    residual = sorted((r for r, row in enumerate(rows) if row), key=lambda r: len(rows[r]))
+    for r in residual:  # sparse rows first keeps fill-in low
+        row = rows[r]
         mask = 0
         for c in row:
             mask |= 1 << col[c]

@@ -231,6 +231,20 @@ def test_impossible_constraints_raise_clearly():
         encode(b"hello", EncoderSettings(strand_length=20, seed_bases=16))
 
 
+def test_strand_that_fools_the_strand_crc_is_survived():
+    # Simulates the 1 in 65536 case: a wrong strand whose CRC-16 still matches.
+    from dnacodec.encoder import _Layout
+
+    data = _random_bytes(10_000, 12)
+    enc = encode(data, DEFAULT)
+    layout = _Layout(DEFAULT)
+    strands = list(enc.strands)
+    for i in (0, 1):
+        seed, value = layout.parse(strands[i])
+        strands[i] = layout.to_strand(seed, value ^ 0b1011)
+    assert recover(strands, enc.meta) == data
+
+
 def test_density(big):
     _, enc, _ = big
     density = payload_bits_per_base(enc.meta, len(enc.strands))
