@@ -42,11 +42,20 @@ class SituationProfile:
     calibrated_from: str | None = None  # dataset the error numbers were fit to, None = guessed
 
     # Realism extensions. Defaults reproduce the simple model above.
-    # Error multiplier by run length (index 0 = run of 1, last value applies to longer runs).
-    # Overrides homopolymer_factor when set.
+    # Deletion multiplier by run length (index 0 = run of 1, last value applies to longer runs).
+    # Real Nanopore deletions rise steeply in long runs while substitutions barely do, so this
+    # applies to deletions only. Overrides homopolymer_factor for deletions when set.
     homopolymer_run_factors: tuple[float, ...] | None = None
     read_quality_spread: float = 0.0  # sigma of a lognormal per-read error multiplier (mean 1)
     malformed_read_rate: float = 0.0  # fraction of reads that belong to another strand (clustering errors)
+    # Sigma of a lognormal error multiplier (mean 1) drawn once per (strand, position) and shared
+    # by all reads of that strand: errors that more reads can't average away. Random on purpose,
+    # so the risk model can't learn motifs from it.
+    position_rate_spread: float = 0.0
+    # Sequence-context error multipliers: filename under profiles/ with JSON
+    # {"k": 5, "sub": [4**k], "ins": [4**k], "del": [4**k], "fitted_on": ...}, mean-1 multipliers
+    # for the centered k-mer (bases near strand ends use 1). None = no context dependence.
+    context_table: str | None = None
 
     def __post_init__(self) -> None:
         if self.technology not in ("nanopore", "illumina"):
@@ -55,6 +64,8 @@ class SituationProfile:
             value = getattr(self, name)
             if not 0.0 <= value < 1.0:
                 raise ValueError(f"{name}={value} must be in [0, 1)")
+        if self.position_rate_spread < 0:
+            raise ValueError("position_rate_spread must be >= 0")
         if not 0.0 <= self.malformed_read_rate < 1.0 or self.read_quality_spread < 0:
             raise ValueError("malformed_read_rate must be in [0, 1) and read_quality_spread >= 0")
         if self.coverage_mean <= 0 or self.coverage_dispersion <= 0:

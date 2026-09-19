@@ -1,10 +1,15 @@
 # Adaptive DNA Codec
 
-**One line:** Instead of deciding in advance which DNA sequences are dangerous, we let decoding failures tell the encoder what to avoid, separately for each storage and sequencing channel.
+**One line:** We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 
-**Thesis:** A sequence constraint, and every extra strand of redundancy, should only be paid for when it measurably reduces decoding failure on the target channel.
+**Thesis:** A sequence constraint, and every extra strand of redundancy, should only be paid for when it measurably reduces decoding failure on the target channel. Today these rules are folklore: chosen once, copied between papers, applied to every channel. We replace them with measurements.
 
-**What we show:** For a given channel and read budget, a closed loop between an AI decoder and a learned candidate scorer finds a codec that reaches the same file recovery target with fewer reads per strand or more bits per base than a hand-tuned default using the *same* decoder. A crossover experiment shows the tailoring is real: each tailored codec wins on its own channel and loses its edge on the other.
+**What the tool does:** For a given channel (sequencing technology, read budget, recovery target), it
+
+1. **audits every coding rule and the redundancy level**: switches each rule on and off, measures what it costs and what it buys in reads per strand and bits per base, and keeps only what pays off, and
+2. **learns what to avoid from decoder failures**: a risk model trained on where the decoder actually fails picks the safest candidate strands, going beyond the hand-written rules where the channel has patterns they don't cover.
+
+**What we show:** At a fixed file recovery target, with the *same* encoder and the *same* decoder, the tuned codec needs fewer reads per strand or carries less redundancy than the hand-tuned default. A crossover experiment shows the tuning is channel-specific: each tuned codec wins on its own channel and loses its edge on the other.
 
 ## The problem
 
@@ -21,11 +26,20 @@ Which errors dominate depends heavily on the channel:
 
 Practical pipelines usually fix their sequence constraints ("no runs longer than 3", "GC between 40% and 60%") and their redundancy by hand, and they train decoders once. Adaptive constrained coding, learned decoders (DNAformer, Bar-Lev et al. 2025) and end-to-end learned codes all exist, but they optimize the rules, the redundancy or the decoder **in isolation**. Nobody closes the loop so that the decoder's actual failures on a target channel decide what the encoder avoids and how much redundancy the codec carries.
 
-## Our claim, stated narrowly
+## Our claims, stated narrowly
 
-> We turn decoder failures into the training signal for encoder candidate selection, and we optimize the whole codec for one explicit operating point: channel, read budget, recovery target.
+We compete at the **system level**: how an existing codec should be configured for one explicit operating point (channel, read budget, recovery target). Our opponent is the hand-tuned default practitioners use, not other papers' components. The claim has two tiers:
 
-We do **not** claim that adaptive DNA coding is new, that we built a better DNAformer, or that the encoder is a neural network.
+| Tier | Claim | Status |
+|---|---|---|
+| **1. Rule audit** | Measured per channel, some standard rules and redundancy levels don't pay off, and tuning them reaches the recovery target more cheaply than the default | Holds regardless of what the risk model learns. Directly tests the thesis |
+| **2. Learned selection** | Decoder failures teach the encoder to avoid patterns the hand rules don't cover, improving further on tier 1 | Depends on whether the channel has learnable sequence-dependent errors beyond homopolymer runs. **First evidence says yes**, see below |
+
+We do **not** claim that adaptive DNA coding is new, that our encoder or decoder beats DNA Fountain or DNAformer (the encoder is a standard Fountain code on purpose, the decoder only has to be solid), or that the encoder is a neural network.
+
+**Evidence for tier 2 from real reads.** Errors that all reads of a strand share at the same position (the ones more reads can't average away) are largely predictable from the local sequence. On held-apart halves of the train data, the centered 5-mer explains about 45% of the between-position error variance on Microsoft Nanopore and 66% on DNAformer Nanopore (with run length on Microsoft: 64%), and predicts error hot spots with AUC 0.80 to 0.90. The same context families lead in both datasets (e.g. substitutions around CGGG and CCCG, deletions after CCCT and GGGA), and tables fit on one dataset predict the other's hot spots with AUC 0.71 to 0.79. The hand rules (homopolymer length, GC window) don't cover these contexts. The simulator now models them with a per-5-mer error table fit on real train reads, so the risk model has something real to learn. Whether that turns into codec gains is what the ablation (C to D) measures.
+
+If tier 2 doesn't hold, the honest result is still strong: the tool shows with measurements that on today's Nanopore channels the hand rules are close to optimal, while on Illumina they cost without helping.
 
 ## Where the gain actually comes from
 
@@ -44,7 +58,9 @@ So the headline is about **reads per strand and redundancy**. We will not claim 
 
 For each situation with read budget B:
 
-- **Recovery target:** the file is recovered exactly in all 300 held-out trials (95% upper bound on the failure rate is about 1%).
+- **Test file:** a fixed 20 KB file of random bytes (compressed data looks random), generated from a fixed seed in `dnacodec/testfile.py`, with a test that fails if it ever changes. That's roughly 1,000 to 1,300 strands depending on settings. Recovery probability depends strongly on file size, so the size never changes between codecs. The demo image is separate and only used for the demo.
+- **Recovery target:** the file is recovered exactly in all 300 held-out trials (95% upper bound on the failure rate is about 1%). One trial = one independent pass through the channel with its own held-out seed.
+- **Trial budget:** the settings search uses 50 trials per candidate setting on train seeds. The full 300 held-out trials are run only once per final codec. Candidates that pass all 50 search trials are re-checked with 300 train-seed trials before being chosen, so a lucky setting can't slip through.
 - **Primary metric, reading:** the minimum mean reads per strand at which the codec meets the recovery target, at matched bits per base.
 - **Primary metric, writing:** the maximum bits per base at which the codec meets the recovery target, at coverage B.
 - **Summary:** the Pareto front of (bits per base, reads per strand) at the recovery target. A codec is better only if it moves this front, not if it buys accuracy with extra redundancy.
@@ -107,18 +123,32 @@ Each alternation is one point on the Pareto plot, so the dashboard can show the 
 
 These are core deliverables, not stretch goals. Without them a judge can't tell where an improvement comes from.
 
-### 1. Ablation ladder (same channel, same held-out seeds)
+### 1. Rule audit (the tool's main output)
+
+For each channel and each rule, starting from the default codec with the same decoder:
+
+| Rule | Channel | Reads per strand needed, rule on / off | Bits per base, on / off | Verdict |
+|---|---|---|---|---|
+| Max homopolymer 3 | Nanopore | … | … | pays off / doesn't |
+| GC 40 to 60% | Nanopore | … | … | … |
+| Redundancy 0.3 vs tuned | Nanopore | … | … | … |
+| (same rows) | Illumina | … | … | … |
+
+Every verdict comes from held-out recovery trials. This table is the direct answer to "does this rule pay off on my channel".
+
+### 2. Ablation ladder (same channel, same held-out seeds)
 
 | System | Encoder | Decoder |
 |---|---|---|
 | A | Fixed rules, fixed redundancy | Majority vote baseline |
 | B | Fixed rules, fixed redundancy | Transformer, adapted to the channel |
-| C | Learned risk scorer + settings search | Same transformer as B, frozen |
-| D | Full alternating loop | Re-adapted transformer |
+| C | Audited rules + tuned redundancy, rule scorer only | Same transformer as B, frozen |
+| D | C + learned risk scorer | Same transformer as B, frozen |
+| E | Full alternating loop | Re-adapted transformer |
 
-A to B is the decoder's contribution, which DNAformer already showed. **B to C is our contribution.** C to D is the value of co-adaptation. The "default" we compare against is always B, never A.
+A to B is the decoder's contribution, which DNAformer already showed. **B to C is tier 1 (rule audit). C to D is tier 2 (learned selection).** D to E is the value of co-adaptation. The "default" we compare against is always B, never A.
 
-### 2. Crossover matrix
+### 3. Crossover matrix
 
 | Codec ↓ / Channel → | Nanopore, 6 reads | Illumina, 15 reads |
 |---|---|---|
@@ -128,7 +158,7 @@ A to B is the decoder's contribution, which DNAformer already showed. **B to C i
 
 If each tailored codec wins at home and not away, that proves the codec is tailored and not just better overall.
 
-### 3. Sim-to-real firewall
+### 4. Sim-to-real firewall
 
 The loop could learn a quirk of our own simulator instead of a property of DNA. To catch that:
 
@@ -141,7 +171,7 @@ The loop could learn a quirk of our own simulator instead of a property of DNA. 
 
 A gain that holds under Simulator B and a risk model whose ranking holds on real reads are the strongest evidence possible without a wet lab. A gain that disappears under B is reported as simulator overfitting, not hidden.
 
-### 4. What the encoder learned
+### 5. What the encoder learned
 
 For each channel: the most penalized patterns (homopolymers, GC runs, motifs) with their learned risk, side by side, plus the same candidate strands accepted on one channel and rejected on the other. This is the visual proof that the same encoder behaves differently per situation.
 
@@ -149,10 +179,16 @@ For each channel: the most penalized patterns (homopolymers, GC runs, motifs) wi
 
 Written as templates. The numbers come only from `dnacodec.evaluate` on held-out seeds.
 
-- "On Nanopore at a budget of 6 reads per strand, the tailored codec recovered the file in X of 300 held-out trials, vs Y for the default with the same transformer decoder."
-- "To reach the recovery target, the Nanopore-tailored codec needs N reads per strand instead of M."
-- "On Illumina, the loop learned that homopolymers barely matter, disabled that rule, and reached the recovery target with Z% less redundancy, so W% more bits per base."
-- "Each tailored codec loses its advantage on the other channel" (crossover matrix).
+**Tier 1, rule audit**
+
+- "On Illumina, the homopolymer rule costs X and buys nothing measurable; the tool drops it and reaches the recovery target with Z% less redundancy, so W% more bits per base."
+- "On Nanopore, the homopolymer rule pays off: switching it off raises the reads needed from N to M."
+- "To reach the recovery target, the tuned Nanopore codec needs N reads per strand instead of M, with the same decoder."
+- "Each tuned codec loses its advantage on the other channel" (crossover matrix).
+
+**Tier 2, learned selection (only if the evidence holds)**
+
+- "Beyond the audited rules, learned candidate selection lowers the reads needed from N to M on Nanopore."
 - "The advantage holds on a differently built simulator, and the risk model's ranking holds on real Nanopore reads (AUC = …)."
 
 If a claim doesn't hold, we show the ablation that explains why. That is still a result.
@@ -161,12 +197,15 @@ If a claim doesn't hold, we show the ablation that explains why. That is still a
 
 **Inputs:** channel (Nanopore or Illumina), reading budget, recovery target, file.
 
-**Main view, the Pareto plot.** Bits per base on the x axis, reads per strand needed on the y axis. The default codec is a point; each loop alternation is a point moving toward the front. One panel per channel. A judge understands it in five seconds.
+**Main views**
+
+- **Rule audit.** Per channel, every rule with a clear verdict: pays off or doesn't, with the measured cost and benefit. The direct answer to "does this rule pay off on my channel".
+- **Pareto plot.** Bits per base on the x axis, reads per strand needed on the y axis. The default codec is a point; each tuning step is a point moving toward the front. One panel per channel. A judge understands it in five seconds.
 
 **Supporting views**
 
 - Crossover matrix, colored
-- Ablation ladder A to D as a bar chart, baseline always visible
+- Ablation ladder A to E as a bar chart, baseline always visible
 - "What the encoder learned": risky patterns per channel side by side, plus accepted and rejected candidate examples
 - Per-position error heatmap along the strand
 - Accuracy vs coverage for default and tailored codecs
@@ -174,10 +213,10 @@ If a claim doesn't hold, we show the ablation that explains why. That is still a
 
 **Demo script**
 
-1. Open on the problem: the same codec for Nanopore and Illumina.
-2. Show the loop for Nanopore at a tight budget (precomputed, plus one live alternation).
-3. Show the Illumina run ending up with a different codec and different learned patterns.
-4. Show the crossover matrix: each wins at home.
+1. Open on the problem: everyone uses the same hand-written rules for every channel, and nobody measures whether they pay off.
+2. Show the rule audit: the same rule pays off on Nanopore and is dead weight on Illumina.
+3. Show the loop for Nanopore at a tight budget (precomputed, plus one live alternation) moving toward the Pareto front.
+4. Show the crossover matrix: each tuned codec wins at home.
 5. Encode an image, run it through the Nanopore channel at 6 reads per strand, decode it with both codecs. The default fails or needs more reads; the tailored one recovers it exactly.
 
 ## Scope

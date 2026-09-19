@@ -7,11 +7,15 @@ crossover matrix, firewall tests, and candidate examples.
 
 from __future__ import annotations
 
+import shutil
+
 import numpy as np
 
 from dnacodec.profiles import load_profile
 from dnacodec.results import (
+    RESULTS_DIR,
     AblationEntry,
+    RuleAuditEntry,
     CandidateExample,
     CoveragePoint,
     CrossoverEntry,
@@ -29,6 +33,7 @@ N_TRIALS = 300
 
 
 def fake_metrics(rng: np.random.Generator, accuracy: float, bits: float, reads: float) -> Metrics:
+    accuracy = min(accuracy, 0.995)
     length = 110
     ramp = np.linspace(1.0, 2.0, length)
     recovery = float(np.clip((accuracy - 0.6) / 0.35, 0, 1))
@@ -49,6 +54,7 @@ def fake_metrics(rng: np.random.Generator, accuracy: float, bits: float, reads: 
 
 
 def main() -> None:
+    shutil.rmtree(RESULTS_DIR / "mock", ignore_errors=True)  # stale files from older formats break loading
     rng = np.random.default_rng(0)
     default = EncoderSettings()
     for name in CORE:
@@ -105,9 +111,18 @@ def main() -> None:
         for sys, acc, bits, reads in (
             ("A", 0.68, 1.40, 11.0),
             ("B", 0.80, 1.40, 8.5),
-            ("C", 0.88, 1.47, 6.8),
-            ("D", 0.91, 1.49, 6.0),
+            ("C", 0.85, 1.45, 7.4),
+            ("D", 0.89, 1.48, 6.5),
+            ("E", 0.91, 1.49, 6.0),
         )
+    ]
+    rule_audit = [
+        RuleAuditEntry("nanopore_budget", "max_homopolymer=3", 8.5, 12.0, 1.40, 1.40, "pays off"),
+        RuleAuditEntry("nanopore_budget", "gc 0.4-0.6", 8.5, 8.6, 1.40, 1.40, "no measurable benefit"),
+        RuleAuditEntry("nanopore_budget", "redundancy 0.3 vs tuned", 8.5, 7.4, 1.40, 1.45, "tuned is better"),
+        RuleAuditEntry("illumina_standard", "max_homopolymer=3", 9.0, 9.0, 1.40, 1.40, "no measurable benefit"),
+        RuleAuditEntry("illumina_standard", "gc 0.4-0.6", 9.0, 9.1, 1.40, 1.40, "no measurable benefit"),
+        RuleAuditEntry("illumina_standard", "redundancy 0.3 vs tuned", 9.0, 8.0, 1.40, 1.52, "tuned is better"),
     ]
     crossover = [
         CrossoverEntry(codec=codec, channel=channel, metrics=fake_metrics(rng, acc, 1.45, 6.0), min_reads_at_target=reads)
@@ -135,7 +150,8 @@ def main() -> None:
         )
         for r_n, r_i in ((0.82, 0.15), (0.12, 0.10), (0.64, 0.22), (0.30, 0.74))
     ]
-    print(save_summary(ExperimentSummary(ablation, crossover, firewall, examples, is_mock=True), "mock"))
+    summary = ExperimentSummary(ablation, rule_audit, crossover, firewall, examples, is_mock=True)
+    print(save_summary(summary, "mock"))
 
 
 if __name__ == "__main__":

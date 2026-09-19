@@ -55,7 +55,8 @@ def test_mock_results_roundtrip():
         assert dataclasses.asdict(run) == run.to_dict()
     summary = load_summary("mock")
     assert summary is not None and summary.is_mock
-    assert {e.system for e in summary.ablation} == {"A", "B", "C", "D"}
+    assert {e.system for e in summary.ablation} == {"A", "B", "C", "D", "E"}
+    assert summary.rule_audit and {e.situation for e in summary.rule_audit} == {"nanopore_budget", "illumina_standard"}
     assert summary.to_dict() == type(summary).from_dict(summary.to_dict()).to_dict()
 
 
@@ -86,3 +87,14 @@ def test_dnaformer_dataset():
     assert len(clusters) > 1000
     assert all(set(c.reference) <= set("ACGT") for c in clusters)
     assert sum(len(c.reads) for c in clusters) > len(clusters)
+
+
+def test_test_file_is_fixed():
+    import hashlib
+
+    from dnacodec.testfile import test_file
+
+    data = test_file()
+    assert len(data) == 20 * 1024
+    assert data == test_file()
+    assert hashlib.sha256(data).hexdigest()[:16] == "575e0ef9a36dfce0"  # must never change
