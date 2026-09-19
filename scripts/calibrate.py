@@ -44,6 +44,7 @@ from dnacodec.simulator import run_lengths, sample_coverage, simulate
 # (misclustered or chimeric), not as channel noise. Applied identically to real and simulated.
 OUTLIER_FRACTION = 0.3
 MAX_RUN = 7  # run lengths >= MAX_RUN share the last homopolymer bucket
+MIN_RUN_EVENTS = 30  # fewer real deletions than this in a run bucket: too noisy to fit
 SIM_READS_PER_REF = 8
 FIT_ITERATIONS = 5
 BUDGETS = [2, 4, 6, 10, 16]  # reads per cluster for the accuracy curve (as in eval_real.py)
@@ -70,6 +71,7 @@ class ErrorStats:
     hp_ratio: float  # fitted per-extra-run-base multiplier of the total error rate
     position: np.ndarray  # total error events per read per position, len == length
     by_run: np.ndarray  # (3, MAX_RUN) sub/ins/del rate per base by run length 1..MAX_RUN
+    run_events: np.ndarray  # (3, MAX_RUN) the event counts behind by_run
     read_error_sd: float  # spread of per-read error fraction (heterogeneity between reads)
     read_error_quantiles: np.ndarray  # per-read error fraction at 5, 25, 50, 75, 95 %
 
@@ -149,6 +151,7 @@ def error_stats(refs: list[str], clusters: list[list[str]]) -> ErrorStats:
         hp_ratio=float(np.exp(hp_log)),
         position=position,
         by_run=by_run,
+        run_events=run_events[:, 1:],
         read_error_sd=float(np.std(per_read_arr)),
         read_error_quantiles=np.percentile(per_read_arr, [5, 25, 50, 75, 95]),
     )
@@ -206,15 +209,28 @@ def simulated_stats(refs: list[str], profile: SituationProfile, seed: int) -> Er
     return error_stats(refs, simulate_sized(refs, [SIM_READS_PER_REF] * len(refs), profile, seed))
 
 
+def _forward_fill(values: np.ndarray, reliable: np.ndarray) -> np.ndarray:
+    """Buckets with too few real events copy the value of the previous bucket."""
+    out = values.copy()
+    for i in range(1, len(out)):
+        if not reliable[i]:
+            out[i] = out[i - 1]
+    return out
+
+
 def fit_error_model(
     refs: list[str], real: ErrorStats, start: SituationProfile, seed: int, verbose: bool = True
 ) -> tuple[SituationProfile, ErrorStats]:
     """Adjust rates, homopolymer run factors and end_factor until simulated stats match real.
 
     Deletions get a separate factor per run length (homopolymer_run_factors, first entry 1),
-    substitutions and insertions a single rate each.
+    substitutions and insertions a single rate each. Run lengths with fewer than
+    MIN_RUN_EVENTS real deletions (e.g. long runs on Illumina) reuse the previous factor
+    instead of being fit to noise.
     """
-    del_run = np.maximum(real.by_run[2], 1e-6)
+    reliable = real.run_events[2] >= MIN_RUN_EVENTS
+    reliable[0] = True
+    del_run = _forward_fill(np.maximum(real.by_run[2], 1e-6), reliable)
     profile = replace(
         start,
         sub_rate=real.sub,
@@ -232,7 +248,8 @@ def fit_error_model(
                 f"end {sim.end_ratio:.3f} del-by-run {np.round(sim.by_run[2], 3).tolist()}"
             )
         del_now = profile.del_rate * np.asarray(profile.homopolymer_run_factors)
-        del_new = del_now * del_run / np.maximum(sim.by_run[2], 1e-6)
+        ratio = np.where(reliable, del_run / np.maximum(sim.by_run[2], 1e-6), 1.0)
+        del_new = _forward_fill(del_now * ratio, reliable)
         profile = replace(
             profile,
             sub_rate=min(profile.sub_rate * real.sub / max(sim.sub, 1e-9), 0.3),
