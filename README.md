@@ -17,6 +17,8 @@ The result is a codec tuned to that channel that reaches the same recovery targe
 
 ## Contents
 
+**Reproduce the headline numbers in one command:** `scripts/reproduce.sh` (decoder against the classic baseline on real held-out reads, plus the end to end demo). Every number we quote with its provenance: [docs/NUMBERS.md](docs/NUMBERS.md).
+
 **Deep dives:** [docs/MODELS.md](docs/MODELS.md) (what the two AI models output and how they're trained) and [docs/ERRORS.md](docs/ERRORS.md) (how the error engine simulates sequencing and how the correction chain recovers files).
 
 
