@@ -16,17 +16,19 @@ It reads the same profile but builds the channel from different mechanisms:
 | Substitutions | uniform over the other 3 bases | transitions (A<->G, C<->T) twice as likely as each transversion |
 | Insertions | uniform random base | half duplicate the base, half random |
 | Malformed reads | whole read from another strand | chimera: prefix of the own strand, suffix of another strand |
+| Sequence context | 5-mer table fit on Microsoft train | 5-mer table fit on a different dataset (`<table>_b.json`, DNAformer Nanopore train for nanopore_budget); if missing, A's table with its log multipliers halved |
 
 Dropout and coverage use the same model as A (they are the situation, not the channel).
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
 
-from .profiles import SituationProfile
+from .profiles import PROFILES_DIR, SituationProfile
 from .simulator import (
     MAX_EVENT_PROB,
     READ_CHUNK,
@@ -34,6 +36,8 @@ from .simulator import (
     _PAD,
     _encode,
     dropout_probabilities,
+    kmer_ids,
+    load_context_table,
     run_lengths,
     sample_coverage,
 )
@@ -132,6 +136,24 @@ def run_event_probabilities(codes: np.ndarray, profile: SituationProfile) -> tup
     return shorten, extend
 
 
+def context_multipliers_b(codes: np.ndarray, profile: SituationProfile) -> np.ndarray | None:
+    """(3, S, L) sub/ins/del multipliers from B's context table, or None without a table."""
+    name = profile.context_table
+    if not name:
+        return None
+    path = Path(name)
+    alt = path.with_name(f"{path.stem}_b{path.suffix}")
+    if (alt if alt.is_absolute() else PROFILES_DIR / alt).exists():
+        k, table = load_context_table(str(alt))
+    else:
+        k, table = load_context_table(name)
+        table = np.sqrt(table)  # same ranking, half the log amplitude
+        table = table / table.mean(axis=1, keepdims=True)
+    ids = kmer_ids(codes, k)
+    inside = ids >= 0
+    return np.where(inside[None], table[:, np.where(inside, ids, 0)], 1.0)
+
+
 def _mutate_b(
     rng: np.random.Generator,
     ref: np.ndarray,
@@ -195,6 +217,9 @@ def simulate(strands: Sequence[Strand], profile: SituationProfile, seed: int) ->
     p_del = DEL_SCALE * profile.del_rate * shared
     p_ins = INS_SCALE * profile.ins_rate * shared
     p_sub = SUB_SCALE * profile.sub_rate * shared
+    ctx = context_multipliers_b(codes, profile)
+    if ctx is not None:
+        p_sub, p_ins, p_del = p_sub * ctx[0], p_ins * ctx[1], p_del * ctx[2]
     shorten, extend = run_event_probabilities(codes, profile)
 
     source = np.repeat(np.arange(n), counts)
