@@ -24,7 +24,6 @@ import atexit
 import math
 import multiprocessing as mp
 import os
-import sys
 import weakref
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from dataclasses import asdict, dataclass
@@ -292,13 +291,15 @@ DEFAULT_WORKERS = _default_workers()
 
 
 def _default_start_method() -> str:
-    """fork on Linux, spawn elsewhere; override with POLISH_START_METHOD.
+    """forkserver where available, else spawn; override with POLISH_START_METHOD.
 
-    The workers only run numpy and rapidfuzz, never CUDA, which is what makes fork safe here
-    even though this process has a GPU context (torch's own DataLoader forks the same way).
-    fork also skips re-importing torch in every worker. On macOS forking a process that has
-    loaded torch is unreliable, so spawn is used there: it re-imports this module per worker,
-    which costs a few seconds once per pool, not once per decode().
+    Plain fork is the cheap option but this process is multi threaded (torch) and has a CUDA
+    context, and forking that can deadlock the child - exactly the hang we must not risk in a
+    job that runs for hours. forkserver forks the workers from a small, single threaded server
+    process instead, and with the preload below that server has this module (and torch)
+    imported once, so a worker starts about as fast as with fork and never touches CUDA.
+    spawn (macOS, Windows) re-imports this module in every worker: a few seconds once per
+    pool, not once per decode(), because the pool is kept alive.
     """
     available = mp.get_all_start_methods()
     override = os.environ.get("POLISH_START_METHOD")
@@ -306,8 +307,8 @@ def _default_start_method() -> str:
         if override not in available:
             raise ValueError(f"start method {override!r} is not one of {available}")
         return override
-    if sys.platform.startswith("linux") and "fork" in available:
-        return "fork"
+    if "forkserver" in available:
+        return "forkserver"
     return "spawn" if "spawn" in available else available[0]
 
 
@@ -364,10 +365,12 @@ class _FeaturePool:
 
     def _executor(self) -> ProcessPoolExecutor:
         if self._pool is None:
+            ctx = mp.get_context(self.start_method)
+            if self.start_method == "forkserver":
+                # the server imports this module once; the workers fork from it for free
+                ctx.set_forkserver_preload([__name__])
             self._pool = ProcessPoolExecutor(
-                max_workers=self.workers,
-                mp_context=mp.get_context(self.start_method),
-                initializer=_init_feature_worker,
+                max_workers=self.workers, mp_context=ctx, initializer=_init_feature_worker
             )
         return self._pool
 

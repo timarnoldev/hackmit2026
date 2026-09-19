@@ -210,8 +210,12 @@ def _simulated_clusters(n: int, seed: int) -> tuple[list[list[str]], int]:
 
 
 def _polish_decoder(tmp_path, workers):
-    save_checkpoint(tmp_path / "w.pt", PolishNet(TINY))
-    return PolishDecoder(tmp_path / "w.pt", device="cpu", batch_size=64, workers=workers)
+    """Decoders sharing one checkpoint, so only the worker count differs between them."""
+    path = tmp_path / "w.pt"
+    if not path.exists():
+        torch.manual_seed(1234)
+        save_checkpoint(path, PolishNet(TINY))
+    return PolishDecoder(path, device="cpu", batch_size=64, workers=workers)
 
 
 def test_workers_do_not_change_the_output(tmp_path):
