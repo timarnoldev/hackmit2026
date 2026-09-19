@@ -19,7 +19,10 @@ Details (all derived from EncoderSettings, nothing else is stored):
   distinct seed and the seed bases look random (not AAAA...AC).
 - Degree distribution: robust soliton (c=0.1, delta=0.5 as in Erlich and Zielinski 2017).
 - Recovery: belief propagation (peeling), then Gaussian elimination over GF(2) on
-  whatever is left if peeling stalls.
+  whatever is left if peeling stalls. If the file CRC-32 fails because a wrong strand
+  slipped past its CRC-16, the culprit is located by provenance tracking and dropped.
+- Encode checks that the full strand set decodes and swaps non-innovative strands if not
+  (needed for small files and redundancy near 0).
 """
 
 from __future__ import annotations
@@ -46,6 +49,7 @@ MIN_TRIES_PER_STRAND = 20000
 TRIES_PER_CANDIDATE = 250
 SCORER_BATCH = 8192
 RETRIES_ON_BAD_FILE = 8
+POISON_ROUNDS = 8
 
 _MASK64 = (1 << 64) - 1
 _TO_DIGITS = str.maketrans("ACGT", "0123")
@@ -235,6 +239,10 @@ def encode(data: bytes, settings: EncoderSettings, scorer: Scorer | None = None)
 
     Hard constraints always apply. The scorer only ranks candidates that pass them.
     Number of strands = ceil(n_chunks * (1 + settings.redundancy)).
+
+    settings.risk_threshold (None disables): candidates the scorer rates above it are
+    rejected like hard-constraint violations. Raises ValueError if the constraints are too
+    strict to find any candidate within a bounded number of tries.
     """
     if settings.redundancy < 0:
         raise ValueError("redundancy must be >= 0")
@@ -252,7 +260,15 @@ def encode(data: bytes, settings: EncoderSettings, scorer: Scorer | None = None)
     if scorer is None:
         scorer = rule_scorer(settings)
     # All passing candidates score 0 under the rule scorer, so the first one wins anyway.
-    k = 1 if getattr(scorer, "is_rule_scorer", False) else settings.candidates_per_strand
+    is_rule = bool(getattr(scorer, "is_rule_scorer", False))
+    k = 1 if is_rule else settings.candidates_per_strand
+    # Optional field (added to EncoderSettings on main); getattr keeps older settings working.
+    threshold = getattr(settings, "risk_threshold", None)
+    if is_rule and threshold is not None and threshold < 0:
+        raise ValueError(
+            f"risk_threshold={threshold} rejects every candidate: the rule scorer gives passing "
+            "strands 0.0; constraints are too strict"
+        )
     homo_re = _homopolymer_re(settings)
     max_tries = max(MIN_TRIES_PER_STRAND, TRIES_PER_CANDIDATE * k)
     seed_space = 1 << layout.seed_bits
@@ -275,51 +291,71 @@ def encode(data: bytes, settings: EncoderSettings, scorer: Scorer | None = None)
 
     def too_strict() -> ValueError:
         return ValueError(
-            f"no candidate passed the hard constraints in {max_tries} tries "
+            f"no candidate passed the hard constraints"
+            f"{' and risk_threshold' if threshold is not None else ''} in {max_tries} tries "
             f"(max_homopolymer={settings.max_homopolymer}, gc_min={settings.gc_min}, "
-            f"gc_max={settings.gc_max}); constraints are too strict"
+            f"gc_max={settings.gc_max}, risk_threshold={threshold}); constraints are too strict"
         )
 
-    # 1. Candidates: the first k seeds per strand that pass the hard constraints.
-    groups: list[list[tuple[int, Strand]]] = []
-    counter = 0
-    for _ in range(n_strands):
-        group: list[tuple[int, Strand]] = []
-        tries = 0
-        while len(group) < k and tries < max_tries:
-            seed = next_seed()
-            tries += 1
-            strand = build(seed)
-            if _passes(strand, settings, homo_re):
-                group.append((seed, strand))
-        if not group:
-            raise too_strict()
-        groups.append(group)
-
-    # 2. Rank candidates with the scorer (batched, so a CNN scorer runs efficiently).
-    if k == 1:
-        order = [[0] for _ in groups]
-    else:
-        flat = [s for g in groups for _, s in g]
-        scores = np.empty(len(flat), dtype=np.float64)
-        for start in range(0, len(flat), SCORER_BATCH):
-            batch = flat[start : start + SCORER_BATCH]
+    def score_all(strands: list[Strand]) -> np.ndarray:
+        """Scorer in batches (efficient for a CNN). Non-finite risk counts as infinitely risky."""
+        scores = np.empty(len(strands), dtype=np.float64)
+        for start in range(0, len(strands), SCORER_BATCH):
+            batch = strands[start : start + SCORER_BATCH]
             out = np.asarray(scorer(batch), dtype=np.float64).reshape(-1)
             if out.shape[0] != len(batch):
                 raise ValueError(f"scorer returned {out.shape[0]} scores for {len(batch)} strands")
             scores[start : start + len(batch)] = out
         scores[~np.isfinite(scores)] = np.inf
-        order, pos = [], 0
-        for g in groups:
-            order.append(np.argsort(scores[pos : pos + len(g)], kind="stable").tolist())
-            pos += len(g)
+        return scores
+
+    def acceptable(score: float) -> bool:
+        return threshold is None or score <= threshold
+
+    # 1. Candidates: per strand, the first k seeds that pass the hard constraints and, if
+    #    risk_threshold is set, score at or below it. Rounds over all strands keep scorer
+    #    calls batched; the rule scorer gives 0.0 to every passing strand, so it skips scoring.
+    groups: list[list[tuple[int, Strand, float]]] = [[] for _ in range(n_strands)]
+    tries = [0] * n_strands
+    counter = 0
+    pending = list(range(n_strands))
+    while pending:
+        cand: list[tuple[int, int, Strand]] = []
+        for j in pending:
+            need = k - len(groups[j])
+            while need > 0 and tries[j] < max_tries:
+                seed = next_seed()
+                tries[j] += 1
+                strand = build(seed)
+                if _passes(strand, settings, homo_re):
+                    cand.append((j, seed, strand))
+                    need -= 1
+        if is_rule:
+            scores = np.zeros(len(cand))
+        else:
+            scores = score_all([c[2] for c in cand])
+        for (j, seed, strand), sc in zip(cand, scores.tolist()):
+            if acceptable(sc):
+                groups[j].append((seed, strand, sc))
+        if any(not groups[j] and tries[j] >= max_tries for j in pending):
+            raise too_strict()
+        pending = [j for j in pending if len(groups[j]) < k and tries[j] < max_tries]
+
+    # 2. Keep the lowest-risk candidate per strand (ties: the earliest seed).
+    order = [sorted(range(len(g)), key=lambda i, g=g: g[i][2]) for g in groups]
     chosen = [(g[o[0]][0], g[o[0]][1]) for g, o in zip(groups, order)]
 
     # 3. Guarantee the full set decodes (matters for small files and low redundancy, where a
     #    random LT system is often rank deficient). Rarely needed for large files.
     if _solve({seed: 0 for seed, _ in chosen}, n_chunks, check_only=True) is None:
-        chosen = _repair_rank(chosen, groups, order, n_chunks, next_seed, build,
-                              lambda s: _passes(s, settings, homo_re), max_tries, too_strict)
+        def passes(strand: Strand) -> bool:
+            if not _passes(strand, settings, homo_re):
+                return False
+            return is_rule or acceptable(float(score_all([strand])[0]))
+
+        chosen = _repair_rank(
+            chosen, groups, order, n_chunks, next_seed, build, passes, max_tries, too_strict
+        )
     return EncodedFile(strands=[s for _, s in chosen], meta=meta)
 
 
@@ -347,7 +383,9 @@ def _repair_rank(chosen, groups, order, n_chunks, next_seed, build, passes, max_
             break
         if innovative(chosen[j][0]):
             continue
-        replacement = next((groups[j][o] for o in order[j][1:] if innovative(groups[j][o][0])), None)
+        replacement = next(
+            (groups[j][o][:2] for o in order[j][1:] if innovative(groups[j][o][0])), None
+        )
         tries = 0
         while replacement is None:
             if tries >= max_tries:
@@ -389,48 +427,84 @@ def recover(strands: Sequence[Strand | None], meta: FileMeta) -> bytes | None:
             return None
         data = _check_file(solution, layout, meta.n_bytes)
         if data is None and len(eqs) > n + 1:
-            data = _recover_from_poison(eqs, n, solution, layout, meta.n_bytes)
+            data = _recover_from_poison(eqs, n, layout, meta.n_bytes)
         return data
     except Exception:  # noqa: BLE001  garbage in must never crash recovery
         return None
 
 
 def _recover_from_poison(
-    eqs: dict[int, int], n: int, solution: list[int], layout: _Layout, n_bytes: int
+    eqs: dict[int, int], n: int, layout: _Layout, n_bytes: int
 ) -> bytes | None:
-    """The solution failed the file CRC-32: a wrong strand passed its CRC-16 (probability
-    2**-16 per corrupted strand) and poisoned the solve. The culprit agrees with the wrong
-    solution, while many good strands that touch the wrong chunks disagree with it. So first
-    drop strands that agree but touch mostly-disagreeing chunks, then fall back to leaving
-    out pseudo-random parts of the surplus."""
-    nbrs = {seed: _neighbors(seed, n) for seed in eqs}
-    inc = np.zeros(n)
-    tot = np.zeros(n)
-    agrees: dict[int, bool] = {}
-    for seed, value in eqs.items():
-        acc = 0
-        for c in nbrs[seed]:
-            acc ^= solution[c]
-        agrees[seed] = acc == value
-        tot[nbrs[seed]] += 1
-        if not agrees[seed]:
-            inc[nbrs[seed]] += 1
-    bad_share = inc / np.maximum(tot, 1)
-    suspicion = {seed: float(bad_share[nbrs[seed]].max()) if agrees[seed] else 0.0 for seed in eqs}
+    """The solution failed the file CRC-32: some wrong strand passed its CRC-16 (probability
+    2**-16 per corrupted strand) and poisoned the solve. Find and drop it.
 
-    subsets = []
-    for threshold in (0.5, 0.3, 0.15):
-        subsets.append({seed: v for seed, v in eqs.items() if suspicion[seed] < threshold})
-    surplus = len(eqs) - n
-    cut = int(min(0.5, 0.8 * surplus / len(eqs)) * 2**64)
-    for attempt in range(1, RETRIES_ON_BAD_FILE + 1):
-        subsets.append(
-            {seed: v for seed, v in eqs.items() if _splitmix(seed ^ (attempt * 0x9E37)) >= cut}
-        )
-    for subset in subsets:
-        if len(subset) < n or len(subset) == len(eqs):
+    Every value gets a one-hot provenance bit appended, so the solver's XORs track which
+    input strands each solved chunk came from. For strand i let P_i be the strands its
+    equation check depends on. Then strand i disagrees with the solution exactly when P_i
+    contains a bad strand. So every strand inside an agreeing P_i is good, and the bad ones
+    are among the rest. Drop those suspects (or the most suspicious if too many) and re-solve.
+    Falls back to leaving out pseudo-random parts of the surplus.
+    """
+    seeds = list(eqs)
+    m = len(seeds)
+    all_rows = (1 << m) - 1
+    nbrs = [_neighbors(seed, n) for seed in seeds]
+    excluded = 0  # bitmask over row indices
+    for _ in range(POISON_ROUNDS):
+        rows = [i for i in range(m) if not (excluded >> i) & 1]
+        if len(rows) < n:
+            break
+        aug = {seeds[i]: (eqs[seeds[i]] << m) | (1 << i) for i in rows}
+        sol = _solve(aug, n)
+        if sol is None:
+            break
+        data = _check_file([a >> m for a in sol], layout, n_bytes)
+        if data is not None:
+            return data
+        good, disagree = 0, []
+        for i in rows:
+            acc = 0
+            for c in nbrs[i]:
+                acc ^= sol[c]
+            prov = (acc & all_rows) ^ (1 << i)
+            if (acc >> m) == eqs[seeds[i]]:
+                good |= prov
+            else:
+                disagree.append(prov)
+        suspects = all_rows & ~good & ~excluded
+        if not disagree or not suspects:
+            break
+        # One bad strand lies in every disagreeing P_i: the intersection pins it down.
+        common = suspects
+        for p in disagree:
+            common &= p
+        if common and len(rows) - common.bit_count() >= n:
+            excluded |= common
             continue
-        sol = _solve(subset, n)
+        # Several bad strands: drop the suspects that sit in the most disagreeing checks.
+        bits = np.unpackbits(
+            np.frombuffer(
+                b"".join((p & suspects).to_bytes((m + 7) // 8, "little") for p in disagree),
+                dtype=np.uint8,
+            ).reshape(len(disagree), -1),
+            axis=1,
+            bitorder="little",
+        )[:, :m]
+        counts = bits.sum(axis=0)
+        top = np.flatnonzero(counts == counts.max())
+        if counts.max() == 0:
+            break
+        for i in top.tolist():
+            excluded |= 1 << i
+
+    surplus = m - n
+    cut = int(min(0.5, 0.8 * surplus / m) * 2**64)
+    for attempt in range(1, RETRIES_ON_BAD_FILE + 1):
+        subset = {
+            seed: v for seed, v in eqs.items() if _splitmix(seed ^ (attempt * 0x9E37)) >= cut
+        }
+        sol = _solve(subset, n) if n <= len(subset) < m else None
         if sol is not None:
             data = _check_file(sol, layout, n_bytes)
             if data is not None:
