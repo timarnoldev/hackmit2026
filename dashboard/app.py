@@ -260,8 +260,50 @@ def target_text(run: RunResult) -> str:
     return f"file recovered in {run.recovery_target:.0%} of {run.n_trials} test trials"
 
 
+def stage_label(run: RunResult, it: IterationResult) -> str | None:
+    """'tier1' -> 'C: rules audited', 'alternation 0' -> 'D: + learned', later alternations -> 'E: loop'.
+    None when the result file has no stage (older files), so callers fall back to the iteration number."""
+    stage = (getattr(it, "stage", "") or "").strip()
+    if not stage:
+        return None
+    if stage == "tier1":
+        return "C: rules audited"
+    m = re.fullmatch(r"alternation\s*(\d+)", stage)
+    if not m:
+        return stage
+    n = int(m.group(1))
+    if n == 0:
+        return "D: + learned"
+    later = [o for o in run.iterations if re.fullmatch(r"alternation\s*[1-9]\d*", (getattr(o, "stage", "") or "").strip())]
+    return "E: loop" if len(later) <= 1 else f"E: loop {n}"
+
+
+def step_name(run: RunResult, it: IterationResult) -> str:
+    """Stage label for tables and hovers, falling back to the alternation number."""
+    return stage_label(run, it) or f"alternation {it.iteration + 1}"
+
+
+def short_step(run: RunResult, it: IterationResult) -> str:
+    """Axis tick: 'C', 'D', 'E' ('E1', 'E2' when there are several loops), else the iteration number."""
+    label = stage_label(run, it)
+    if not label:
+        return str(it.iteration + 1)
+    m = re.fullmatch(r"([A-Z]): .*?(\d*)", label)
+    return m.group(1) + m.group(2) if m else label
+
+
+def reference_reads(run: RunResult, it: IterationResult) -> tuple[float | None, bool]:
+    """Reads the default needs, for comparison with this iteration. Prefers the default rules at the same
+    bits per base (the honest comparison); falls back to the default point. Returns (value, matched)."""
+    matched = getattr(it, "default_min_reads_matched", None)
+    if matched is not None:
+        return matched, True
+    return run.default_min_reads_at_target, False
+
+
 def headline(run: RunResult, best: IterationResult) -> str:
-    d_reads, t_reads = run.default_min_reads_at_target, best.min_reads_at_target
+    d_reads, matched = reference_reads(run, best)
+    t_reads = best.min_reads_at_target
     d, t = run.default_metrics, best.metrics
     parts = []
     if d_reads is not None and t_reads is not None and t_reads < d_reads:
@@ -269,21 +311,23 @@ def headline(run: RunResult, best: IterationResult) -> str:
     elif d_reads is None and t_reads is not None:
         parts.append(f"reaches the target at {t_reads:.1f} reads, the default never does")
     dens = rel_change(t.bits_per_base, d.bits_per_base)
-    if dens is not None and dens >= 0.01:
+    if not matched and dens is not None and dens >= 0.01:
         parts.append(f"{dens:.0%} more data per letter")
     if not parts and t.recovery_rate is not None and d.recovery_rate is not None and t.recovery_rate > d.recovery_rate:
         parts.append(f"recovers the file more often ({t.recovery_rate:.0%} vs {d.recovery_rate:.0%} of trials)")
     if not parts:
         return "No gain over the default yet."
-    return "Same decoder, " + " and ".join(parts) + "."
+    lead = "Same decoder, same bits per base: " if matched else "Same decoder, "
+    return lead + " and ".join(parts) + "."
 
 
 def profile_summary(run: RunResult) -> str:
     p = run.profile
     err = p.sub_rate + p.ins_rate + p.del_rate
+    err_text = f"{err:.1%}" if err >= 0.01 else f"{err:.2%}"
     return (
         f"{p.technology.capitalize()} · read budget about {p.coverage_mean:g} reads per strand · "
-        f"{err:.1%} of letters misread · {p.total_dropout:.0%} strands lost"
+        f"{err_text} of letters misread · {p.total_dropout:.0%} strands lost"
     )
 
 
@@ -497,12 +541,15 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
     """x = bits per base, y = reads per strand needed at the recovery target. Better is bottom right."""
     pal = palette()
     dx, dy = run.default_metrics.bits_per_base, run.default_min_reads_at_target
-    pts = [(it.iteration, it.metrics.bits_per_base, it.min_reads_at_target) for it in run.iterations]
-    pts = [(i, x, y) for i, x, y in pts if x is not None and y is not None]
+    its = [it for it in run.iterations if it.metrics.bits_per_base is not None and it.min_reads_at_target is not None]
+    pts = [(it, it.metrics.bits_per_base, it.min_reads_at_target) for it in its]
+    # Default rules at the same bits per base as each point: the honest "same density, fewer reads?" check.
+    matched = [(it, x, getattr(it, "default_min_reads_matched", None)) for it, x, _ in pts]
+    matched = [(it, x, m) for it, x, m in matched if m is not None]
     if not pts and (dx is None or dy is None):
         return None
     xs = [x for _, x, _ in pts] + ([dx] if dx is not None and dy is not None else [])
-    ys = [y for _, _, y in pts] + ([dy] if dx is not None and dy is not None else [])
+    ys = [y for _, _, y in pts] + [m for _, _, m in matched] + ([dy] if dx is not None and dy is not None else [])
     xpad = max(0.03, (max(xs) - min(xs)) * 0.35)
     ypad = max(0.5, (max(ys) - min(ys)) * 0.35)
     xr = [min(xs) - xpad, max(xs) + xpad]
@@ -513,10 +560,10 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
         # Everything right of and below the default beats it on both axes.
         fig.add_shape(type="rect", x0=dx, x1=xr[1], y0=yr[0], y1=dy, line_width=0,
                       fillcolor=pal["better_fill"], layer="below")
-        fig.add_annotation(x=xr[1], y=yr[0], xanchor="right", yanchor="bottom", showarrow=False,
+        fig.add_annotation(x=dx, y=yr[0], xanchor="left", yanchor="bottom", showarrow=False,
                            text="better than default on both", font=dict(color=pal["tailored"], size=FONT_SIZE - 1))
     path = ([(None, dx, dy)] if dx is not None and dy is not None else []) + pts
-    for (_, x0, y0), (_, x1, y1) in zip(path, path[1:]):
+    for (_, x0, y0), (_, x1, y1) in zip(path, path[1:]):  # arrows along the tuning path
         fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", text="",
                            showarrow=True, arrowhead=2, arrowsize=1.3, arrowwidth=2, arrowcolor=pal["tailored_soft"],
                            standoff=11, startstandoff=11)
@@ -527,21 +574,41 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
             text=["Default"], textposition="top center", textfont=dict(size=FONT_SIZE, color=pal["default"]),
             hovertemplate="Default (B)<br>%{x:.2f} bits per base<br>%{y:.1f} reads needed<extra></extra>",
         ))
+    if matched:
+        by_it = {id(it): y for it, _, y in pts}
+        for it, x, m in matched:  # dotted link: the gap is the reads saved at equal density
+            fig.add_shape(type="line", x0=x, x1=x, y0=m, y1=by_it[id(it)], layer="below",
+                          line=dict(color=pal["default"], width=1.5, dash="dot"))
+        fig.add_trace(go.Scatter(
+            x=[x for _, x, _ in matched], y=[m for _, _, m in matched], mode="markers",
+            name="Default rules at the same bits per base",
+            marker=dict(symbol="diamond-open", size=15, color=pal["default"], line=dict(width=2.5)),
+            customdata=[step_name(run, it) for it, _, _ in matched],
+            hovertemplate="Default rules at the bits per base of %{customdata}<br>%{x:.2f} bits per base"
+                          "<br>%{y:.1f} reads needed<extra></extra>",
+        ))
     if pts:
         last = len(pts) - 1
+        labels = [stage_label(run, it) for it, _, _ in pts]
+        if not any(labels):  # older files without stages: number the alternations, name the last one
+            labels = [f"{it.iteration + 1}" for it, _, _ in pts[:-1]] + ["Tailored"]
+        else:
+            labels = [lab or f"{it.iteration + 1}" for lab, (it, _, _) in zip(labels, pts)]
         fig.add_trace(go.Scatter(
             x=[x for _, x, _ in pts], y=[y for _, _, y in pts], mode="markers+text",
-            name="Loop alternations",
+            name="Tuning steps",
             marker=dict(size=[14] * last + [22], color=pal["tailored"], line=dict(color="white", width=2)),
-            text=[f"{i + 1}" for i, _, _ in pts[:-1]] + ["Tailored"],
-            textposition=["bottom center"] * last + ["bottom right"],
+            text=labels,
+            textposition=["bottom left"] * last + ["bottom right"],
             textfont=dict(size=FONT_SIZE, color=pal["tailored"]),
-            customdata=[i + 1 for i, _, _ in pts],
-            hovertemplate="Alternation %{customdata}<br>%{x:.2f} bits per base<br>%{y:.1f} reads needed<extra></extra>",
+            customdata=[step_name(run, it) for it, _, _ in pts],
+            hovertemplate="%{customdata}<br>%{x:.2f} bits per base<br>%{y:.1f} reads needed<extra></extra>",
         ))
-    base_layout(fig, height=440)
-    fig.update_layout(showlegend=False, title=dict(text=pretty_situation(run.situation), font=dict(size=FONT_SIZE + 3)),
-                      margin=dict(t=50))
+    base_layout(fig, height=470 if matched else 440)
+    fig.update_layout(showlegend=bool(matched), title=dict(text=pretty_situation(run.situation),
+                                                           font=dict(size=FONT_SIZE + 3)),
+                      margin=dict(t=50, b=10),
+                      legend=dict(orientation="h", yanchor="top", y=-0.22, x=0, font=dict(size=FONT_SIZE - 2)))
     fig.update_xaxes(title="bits per base (more data →)", range=xr)
     fig.update_yaxes(title="reads per strand needed (fewer ↓)", range=yr)
     return fig
@@ -572,6 +639,10 @@ def compare_table(run: RunResult, best: IterationResult) -> str:
     rows = []
     for label, get, fmt, higher_better, as_points in COMPARE_ROWS:
         old, cur = get(run, None), get(run, best)
+        if label == "Reads per strand needed":
+            old, matched = reference_reads(run, best)
+            if matched:
+                label = "Reads per strand needed<br><small>default at the same bits per base</small>"
         show_old = "not met" if old is None else fmt.format(old)
         show_cur = "not met" if cur is None else fmt.format(cur)
         if old is None or cur is None:
@@ -608,23 +679,26 @@ def verdict(run: RunResult) -> None:
         st.markdown(f'<div class="changes">What the loop changed: {html.escape("; ".join(changes))}.</div>',
                     unsafe_allow_html=True)
     with st.container(border=True):
-        d_reads, t_reads = run.default_min_reads_at_target, best.min_reads_at_target
-        spark = [y for y in [d_reads] + [it.min_reads_at_target for it in run.iterations] if y is not None]
+        d_reads, matched = reference_reads(run, best)
+        t_reads = best.min_reads_at_target
+        spark = [y for y in [run.default_min_reads_at_target] + [it.min_reads_at_target for it in run.iterations]
+                 if y is not None]
         delta = None
         if d_reads is not None and t_reads is not None:
             delta = f"{t_reads - d_reads:+.1f} ({rel_change(t_reads, d_reads):+.0%})"
+        vs = "default at same bits per base" if matched else "default"
         st.metric(
             "Reads per strand needed",
             "not met" if t_reads is None else f"{t_reads:.1f}",
             delta,
             delta_color="inverse" if delta and abs(t_reads - d_reads) >= 0.05 else "off",
-            delta_description=None if d_reads is None else f"vs default {d_reads:.1f}",
+            delta_description=None if d_reads is None else f"vs {vs} {d_reads:.1f}",
             chart_data=spark if len(spark) > 1 else None,
-            help=f"Fewest mean reads per strand at which the {target_text(run)}. Sparkline: default, then each "
-                 "loop alternation.",
+            help=f"Fewest mean reads per strand at which the {target_text(run)}. Compared with the default rules "
+                 "at the same bits per base when that was measured. Sparkline: default, then each tuning step.",
         )
         st.markdown(compare_table(run, best), unsafe_allow_html=True)
-        st.caption(f"Target: {target_text(run)}. Tailored = last loop alternation ({best.iteration + 1}). "
+        st.caption(f"Target: {target_text(run)}. Tailored = last step ({step_name(run, best)}). "
                    "* placeholder prices, not quotes.")
 
 
@@ -886,7 +960,7 @@ def coverage_chart(run: RunResult, target: float) -> tuple[go.Figure | None, str
 def position_chart(run: RunResult) -> go.Figure:
     pal = palette()
     rows = [("default", run.default_metrics.per_position_error)]
-    rows += [(f"alternation {it.iteration + 1}", it.metrics.per_position_error) for it in run.iterations]
+    rows += [(step_name(run, it), it.metrics.per_position_error) for it in run.iterations]
     width = max((len(r) for _, r in rows), default=0)
     z = [[v * 100 for v in r] + [None] * (width - len(r)) for _, r in rows]
     fig = go.Figure(go.Heatmap(
@@ -916,8 +990,9 @@ def loop_chart(runs: list[RunResult], metric: str) -> go.Figure:
     fig = make_subplots(rows=1, cols=len(runs), horizontal_spacing=0.06,
                         subplot_titles=[pretty_situation(r.situation) for r in runs])
     for col, run in enumerate(runs, start=1):
-        xs = [it.iteration + 1 for it in run.iterations]
+        xs = list(range(1, len(run.iterations) + 1))
         ys = [get(run, it) for it in run.iterations]
+        names = [step_name(run, it) for it in run.iterations]
         dflt = get(run, None)
         first = col == 1
         if dflt is not None:
@@ -927,11 +1002,24 @@ def loop_chart(runs: list[RunResult], metric: str) -> go.Figure:
             ), row=1, col=col)
         fig.add_trace(go.Scatter(
             x=([0] if dflt is not None else []) + xs, y=([dflt] if dflt is not None else []) + ys,
+            customdata=(["default"] if dflt is not None else []) + names,
             mode="lines+markers", line=dict(color=pal["tailored"], width=3), marker=dict(size=10),
-            name="Tailored, per alternation", legendgroup="t", showlegend=first,
-            hovertemplate="Alternation %{x}: %{y:.2f}<extra></extra>",
+            name="Tuned, per step", legendgroup="t", showlegend=first,
+            hovertemplate="%{customdata}: %{y:.2f}<extra></extra>",
         ), row=1, col=col)
-        fig.update_xaxes(title_text="loop alternation (0 = default)", dtick=1, row=1, col=col)
+        if metric == "min_reads_at_target":
+            mx = [(x, it.default_min_reads_matched) for x, it in zip(xs, run.iterations)
+                  if getattr(it, "default_min_reads_matched", None) is not None]
+            if mx:
+                fig.add_trace(go.Scatter(
+                    x=[x for x, _ in mx], y=[m for _, m in mx], mode="markers",
+                    marker=dict(symbol="diamond-open", size=14, color=pal["default"], line=dict(width=2.5)),
+                    name="Default rules at the same bits per base", legendgroup="m", showlegend=True,
+                    hovertemplate="Default at same bits per base: %{y:.2f}<extra></extra>",
+                ), row=1, col=col)
+        ticks = ["default"] + [short_step(run, it) for it in run.iterations]
+        fig.update_xaxes(title_text="tuning step", tickvals=list(range(len(ticks))), ticktext=ticks,
+                         row=1, col=col)
     titles = {"min_reads_at_target": "reads needed", "bits_per_base": "bits per base",
               "recovery_rate": "file recovered at budget (%)"}
     base_layout(fig, height=380)
@@ -959,7 +1047,7 @@ def iteration_table(run: RunResult) -> pd.DataFrame:
         }
 
     rows = [row("default (B)", run.default_settings, run.default_metrics, run.default_min_reads_at_target)]
-    rows += [row(f"alternation {it.iteration + 1}", it.settings, it.metrics, it.min_reads_at_target, it.notes)
+    rows += [row(step_name(run, it), it.settings, it.metrics, it.min_reads_at_target, it.notes)
              for it in run.iterations]
     return pd.DataFrame(rows)
 
@@ -1011,8 +1099,10 @@ def render_body(run_id: str, focus: str, target: float) -> None:
 
     if runs:
         st.header("2. The tuned codec moves past the default")
-        st.caption("Each panel is one channel. Gray diamond = default codec, blue dots = tuning steps. "
-                   "Down and right is better: fewer reads to recover the file, more data per letter.")
+        st.caption("Each panel is one channel. Gray diamond = default codec, blue dots = tuning steps "
+                   "(C = rules audited, D = + learned selection, E = full loop). Hollow gray diamond = the default "
+                   "rules at the same bits per base as the blue dot above it, so the gap is reads saved at equal "
+                   "density. Down and right is better.")
         in_columns(runs, verdict)
 
     if summary is not None and summary.crossover:

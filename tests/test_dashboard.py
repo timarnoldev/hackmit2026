@@ -125,6 +125,44 @@ def test_real_and_partial_runs_render_without_banner(results_dir):
     assert "MOCK DATA" not in markdown_text(at)
 
 
+def staged_run() -> RunResult:
+    stages = [("tier1", 1.45, 7.4, 8.4), ("alternation 0", 1.48, 6.6, 8.3), ("alternation 1", 1.50, 6.2, 8.2)]
+    its = []
+    for i, (stage, bits, reads, matched) in enumerate(stages):
+        its.append(IterationResult(iteration=i, settings=EncoderSettings(redundancy=0.25), metrics=small_metrics(0.9, bits),
+                                   min_reads_at_target=reads, stage=stage, default_min_reads_matched=matched))
+    return run_result("nanopore_budget", its, default_min_reads_at_target=8.5)
+
+
+def test_stages_and_matched_default_render(results_dir):
+    save_run(staged_run(), "staged")
+    at = run_app()
+    assert not at.exception, at.exception
+    text = markdown_text(at)
+    # The headline compares against the default at the same bits per base (8.2), not the default point (8.5).
+    assert "Same decoder, same bits per base: 24% fewer reads per strand (6.2 instead of 8.2)" in text
+    assert "default at the same bits per base" in text
+
+
+def test_stage_helpers():
+    app = load_app_module()
+    run = staged_run()
+    assert [app.stage_label(run, it) for it in run.iterations] == ["C: rules audited", "D: + learned", "E: loop"]
+    assert [app.short_step(run, it) for it in run.iterations] == ["C", "D", "E"]
+    assert app.reference_reads(run, run.iterations[-1]) == (8.2, True)
+    # Older files: no stage, no matched value.
+    old = run_result("nanopore_budget", [IterationResult(0, EncoderSettings(), small_metrics(0.9, 1.4), 7.0)],
+                     default_min_reads_at_target=8.5)
+    assert app.stage_label(old, old.iterations[0]) is None
+    assert app.step_name(old, old.iterations[0]) == "alternation 1"
+    assert app.short_step(old, old.iterations[0]) == "1"
+    assert app.reference_reads(old, old.iterations[0]) == (8.5, False)
+    # Several later alternations get numbered.
+    more = run_result("nanopore_budget", [IterationResult(i, EncoderSettings(), small_metrics(0.9, 1.4), 7.0,
+                                                          stage=f"alternation {i}") for i in range(3)])
+    assert [app.short_step(more, it) for it in more.iterations] == ["D", "E1", "E2"]
+
+
 def test_summary_only_run_renders(results_dir):
     save_summary(ExperimentSummary(
         ablation=[AblationEntry("nanopore_budget", "A", small_metrics(0.6, 1.4), None),
