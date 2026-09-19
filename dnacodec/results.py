@@ -29,6 +29,8 @@ class IterationResult:
     min_reads_at_target: float | None = None  # Pareto y value: fewest mean reads per strand meeting the recovery target
     risky_kmers: list[tuple[str, float]] = field(default_factory=list)  # top patterns avoided, with learned risk
     notes: str = ""
+    stage: str = ""  # "tier1" (system C: audited rules, rule scorer) or "alternation 0", "alternation 1", ...
+    default_min_reads_matched: float | None = None  # default rules at this iteration's bits per base (matched density)
 
 
 @dataclass
@@ -77,6 +79,8 @@ class RunResult:
                     min_reads_at_target=it["min_reads_at_target"],
                     risky_kmers=[(k, r) for k, r in it["risky_kmers"]],
                     notes=it["notes"],
+                    stage=it.get("stage", ""),
+                    default_min_reads_matched=it.get("default_min_reads_matched"),
                 )
                 for it in d["iterations"]
             ],
