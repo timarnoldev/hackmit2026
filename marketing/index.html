@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StrandAudit</title>
+<meta name="description" content="StrandAudit measures whether a DNA coding rule actually pays off on your sequencing channel, and tunes the codec accordingly. HackMIT 2026.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23131B20'/%3E%3Crect x='8' y='26' width='9' height='20' rx='2' fill='%23A3A6FF'/%3E%3Crect x='21' y='26' width='9' height='20' rx='2' fill='%23FF86B0'/%3E%3Crect x='34' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='47' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='8' y='50' width='48' height='3' rx='1.5' fill='%23E6ECEA'/%3E%3Cpath d='M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5' fill='none' stroke='%23E6ECEA' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F2F5F4;
+    --surface: #FFFFFF;
+    --ink: #131B20;
+    --muted: #4B5A60;
+    --rule: #CBD4D2;
+    --audit: #3A3FC2;
+    --cost: #B02A63;
+    --gain: #0B7465;
+    --tbd-ink: #7A4F00;
+    --tbd-bg: #FDF1D6;
+    --tbd-line: #C98F12;
+    --tile: #131B20;
+    --tile-ink: #E6ECEA;
+    --bar-a: #A3A6FF; --bar-c: #FF86B0; --bar-g: #4FD6B5;
+    --sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0F1417;
+      --surface: #172026;
+      --ink: #E6ECEA;
+      --muted: #9AA9AE;
+      --rule: #2C353B;
+      --audit: #A3A6FF;
+      --cost: #FF86B0;
+      --gain: #4FD6B5;
+      --tbd-ink: #F4C45A;
+      --tbd-bg: #2A2312;
+      --tbd-line: #B98A25;
+      --tile: #E6ECEA;
+      --tile-ink: #131B20;
+      --bar-a: #3A3FC2; --bar-c: #B02A63; --bar-g: #0B7465;
+      color-scheme: dark;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 18px;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  a { color: var(--audit); text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+  a:focus-visible { outline: 3px solid var(--audit); outline-offset: 3px; border-radius: 3px; }
+  code, .seq { font-family: var(--mono); font-size: 0.88em; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+  @media (max-width: 640px) { .wrap { padding: 0 16px; } body { font-size: 17px; } }
+
+  h1, h2, h3 { font-weight: 600; line-height: 1.12; margin: 0; }
+  h1 { font-size: clamp(40px, 7vw, 76px); letter-spacing: -0.025em; max-width: 14ch; }
+  h2 { font-size: clamp(30px, 4vw, 44px); letter-spacing: -0.02em; max-width: 22ch; }
+  h3 { font-size: 22px; letter-spacing: -0.01em; }
+  p { margin: 0 0 1em; max-width: 64ch; }
+  .lead { font-size: clamp(19px, 2.2vw, 23px); line-height: 1.45; color: var(--ink); max-width: 44ch; }
+  .muted { color: var(--muted); }
+
+  /* nav */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 22px; }
+  .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 21px; letter-spacing: -0.01em; }
+  .brand svg { width: 36px; height: 36px; flex: none; }
+  .top nav { display: flex; gap: 22px; font-size: 16px; }
+  .top nav a { color: var(--muted); text-decoration: none; }
+  .top nav a:hover { color: var(--ink); text-decoration: underline; }
+  @media (max-width: 760px) { .top nav { display: none; } }
+
+  /* hero */
+  .hero { padding-block: 48px 24px; }
+  .hero .lead { margin-top: 28px; }
+  .hero .by { margin-top: 8px; font-size: 16px; color: var(--muted); }
+
+  .specimen { margin: 56px 0 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 72px 0 36px; }
+  .strand {
+    font-family: var(--mono);
+    font-size: clamp(30px, 6.4vw, 64px);
+    line-height: 1;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    padding-top: 0.7em;
+    margin-top: -0.7em;
+    -webkit-mask-image: linear-gradient(to right, #000 72%, transparent);
+            mask-image: linear-gradient(to right, #000 72%, transparent);
+  }
+  .strand .run { position: relative; color: var(--audit); font-weight: 600; }
+  .strand .run::before {
+    content: "";
+    position: absolute;
+    left: 0.06em; right: 0.06em;
+    top: -0.42em;
+    height: 0.34em;
+    border-left: 3px solid var(--audit);
+    border-right: 3px solid var(--audit);
+    background: linear-gradient(var(--audit), var(--audit)) center / 100% 3px no-repeat;
+    transform-origin: left center;
+    animation: measure 900ms 250ms cubic-bezier(.2,.7,.2,1) both;
+  }
+  @keyframes measure { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .strand .run::before { animation: none; } }
+
+  .readout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; margin-top: 40px; }
+  .readout > div { padding-top: 14px; border-top: 2px solid var(--ink); }
+  .readout .k { font-size: 15px; color: var(--muted); margin-bottom: 6px; }
+  .readout .v { font-size: 19px; font-weight: 500; }
+  @media (max-width: 760px) { .readout { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+
+  /* placeholders */
+  .tbd {
+    display: inline;
+    font-family: var(--mono);
+    font-size: 0.8em;
+    font-weight: 400;
+    color: var(--tbd-ink);
+    background: var(--tbd-bg);
+    border: 1.5px dashed var(--tbd-line);
+    border-radius: 4px;
+    padding: 0.05em 0.4em;
+    -webkit-box-decoration-break: clone; box-decoration-break: clone;
+    overflow-wrap: break-word;
+  }
+  .notice {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--tbd-bg); border: 1.5px dashed var(--tbd-line); color: var(--ink);
+    border-radius: 8px; padding: 14px 16px; font-size: 16px; max-width: 72ch; margin: 28px 0 0;
+  }
+  .notice svg { flex: none; margin-top: 3px; }
+
+  /* sections */
+  section { padding: 104px 0 0; }
+  .intro h2 + p { margin-top: 20px; }
+  .intro { margin-bottom: 44px; }
+  @media (max-width: 640px) { section { padding-top: 72px; } }
+
+  /* problem */
+  .rules { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .rules th, .rules td { text-align: left; vertical-align: top; padding: 16px 20px 16px 0; border-bottom: 1px solid var(--rule); }
+  .rules th { font-size: 15px; font-weight: 500; color: var(--muted); border-bottom: 2px solid var(--ink); }
+  .rules td:first-child { font-weight: 600; width: 34%; }
+  .rules .seq { color: var(--cost); white-space: nowrap; }
+  @media (max-width: 700px) {
+    .rules thead { display: none; }
+    .rules, .rules tbody, .rules tr, .rules td { display: block; width: 100% !important; }
+    .rules tr { border-bottom: 1px solid var(--rule); padding: 14px 0; }
+    .rules td { border: 0; padding: 2px 0; }
+  }
+  .channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 48px; }
+  .channels div { border-left: 3px solid var(--rule); padding: 2px 0 2px 18px; }
+  .channels h3 { font-size: 19px; margin-bottom: 6px; }
+  .channels p { margin: 0; color: var(--muted); font-size: 17px; }
+  @media (max-width: 640px) { .channels { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+
+  /* tiers */
+  .tiers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; }
+  @media (max-width: 860px) { .tiers { grid-template-columns: minmax(0, 1fr); gap: 48px; } }
+  .tier .num { font-family: var(--mono); font-size: 15px; color: var(--audit); margin-bottom: 10px; }
+  .tier h3 { font-size: 28px; margin-bottom: 14px; }
+  .mini { width: 100%; border-collapse: collapse; font-size: 16px; margin-top: 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; }
+  .mini th, .mini td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .mini tr:last-child td { border-bottom: 0; }
+  .mini th { font-weight: 500; color: var(--muted); font-size: 14px; }
+  .mini caption { caption-side: bottom; text-align: left; font-size: 14px; color: var(--muted); padding-top: 8px; }
+  .kmers { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 18px 0 8px; padding: 0; list-style: none; }
+  .kmers li { font-family: var(--mono); font-size: 15px; padding: 6px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--rule); }
+  .kmers li span { font-family: var(--sans); color: var(--muted); font-size: 14px; margin-left: 6px; }
+
+  .loop { list-style: none; padding: 0; margin: 64px 0 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 2px solid var(--ink); counter-reset: step; }
+  .loop li { padding: 16px 20px 0 0; font-size: 16px; counter-increment: step; }
+  .loop li::before { content: counter(step); display: block; font-family: var(--mono); font-size: 14px; color: var(--audit); margin-bottom: 6px; }
+  .loop li b { display: block; font-weight: 600; margin-bottom: 4px; font-size: 17px; }
+  .loop li span { color: var(--muted); }
+  .loop-note { margin-top: 20px; font-size: 16px; color: var(--muted); }
+  @media (max-width: 860px) { .loop { grid-template-columns: minmax(0, 1fr); } .loop li { padding: 14px 0; border-bottom: 1px solid var(--rule); } }
+
+  /* evidence */
+  .evidence { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 64px 56px; }
+  @media (max-width: 860px) { .evidence { grid-template-columns: minmax(0, 1fr); gap: 48px; } }
+  .evidence h3 { margin-bottom: 10px; }
+  .evidence p { font-size: 17px; }
+  .ladder { list-style: none; margin: 16px 0 0; padding: 0; }
+  .ladder li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rule); font-size: 16px; }
+  .ladder li:first-child { border-top: 1px solid var(--rule); }
+  .ladder .l { font-family: var(--mono); font-weight: 600; }
+  .ladder .step { color: var(--muted); font-size: 14px; padding: 2px 0 2px 46px; border: 0; display: block; }
+  .ladder .step strong { color: var(--audit); font-weight: 600; }
+  .matrix { width: 100%; border-collapse: separate; border-spacing: 4px; margin-top: 12px; font-size: 15px; }
+  .matrix th { font-weight: 500; color: var(--muted); text-align: left; padding: 6px 8px; font-size: 14px; }
+  .matrix td { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 8px; vertical-align: top; }
+  .matrix td .tbd { font-size: 12px; }
+  .firewall { list-style: none; padding: 0; margin: 14px 0 0; }
+  .firewall li { padding: 10px 0 10px 18px; border-left: 3px solid var(--rule); margin-bottom: 8px; font-size: 16px; }
+  .firewall li b { display: block; font-weight: 600; }
+
+  /* results */
+  .results-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; margin-top: 8px; }
+  @media (max-width: 860px) { .results-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; } }
+  .results-grid h3 { margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+  .facts { list-style: none; padding: 0; margin: 0; }
+  .facts li { padding: 16px 0; border-top: 1px solid var(--rule); }
+  .facts li:last-child { border-bottom: 1px solid var(--rule); }
+  .facts .n { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--gain); }
+  .facts .d { font-size: 16px; color: var(--muted); margin-top: 4px; max-width: 52ch; }
+  .facts.pending .d { color: var(--ink); }
+  .calib { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 15px; }
+  .calib th, .calib td { padding: 6px 6px; text-align: right; border-bottom: 1px solid var(--rule); font-variant-numeric: tabular-nums; }
+  .calib th:first-child, .calib td:first-child { text-align: left; }
+  .calib td { font-family: var(--mono); font-size: 14px; }
+  .calib td:first-child { font-family: var(--sans); font-size: 15px; }
+  .calib caption { text-align: left; font-size: 14px; color: var(--muted); caption-side: bottom; padding-top: 8px; }
+  .table-scroll { max-width: 100%; overflow-x: auto; }
+  @media (max-width: 400px) { .calib th, .calib td { padding: 6px 3px; } .calib td { font-size: 12px; } .calib td:first-child, .calib th { font-size: 13px; } }
+
+  /* team */
+  .team { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 56px; align-items: start; }
+  @media (max-width: 860px) { .team { grid-template-columns: minmax(0, 1fr); gap: 36px; } }
+  .specs { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 20px; font-size: 16px; }
+  .specs dt { color: var(--muted); }
+  .specs dd { margin: 0; }
+
+  footer { margin-top: 120px; padding: 32px 0 48px; border-top: 1px solid var(--rule); font-size: 15px; color: var(--muted); }
+  footer p { max-width: 90ch; }
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="brand" href="#top" aria-label="StrandAudit home">
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="var(--tile)"/>
+      <rect x="8" y="26" width="9" height="20" rx="2" fill="var(--bar-a)"/>
+      <rect x="21" y="26" width="9" height="20" rx="2" fill="var(--bar-c)"/>
+      <rect x="34" y="26" width="9" height="20" rx="2" fill="var(--bar-g)"/>
+      <rect x="47" y="26" width="9" height="20" rx="2" fill="var(--bar-g)"/>
+      <rect x="8" y="50" width="48" height="3" rx="1.5" fill="var(--tile-ink)"/>
+      <path d="M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5" fill="none" stroke="var(--tile-ink)" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    StrandAudit
+  </a>
+  <nav aria-label="Sections">
+    <a href="#problem">Problem</a>
+    <a href="#how">How it works</a>
+    <a href="#evidence">Evidence</a>
+    <a href="#results">Results</a>
+    <a href="#team">Team</a>
+  </nav>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <h1>Measure the rule. Keep what pays.</h1>
+    <p class="lead">We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.</p>
+    <p class="by">StrandAudit, an adaptive DNA codec tuner. Built at HackMIT 2026.</p>
+
+    <figure class="specimen" aria-labelledby="specimen-cap">
+      <div class="strand" aria-hidden="true">ACTGA<span class="run">GGGG</span>TCAAGCTTAGCCGATCGGATCCTAGGCTAACGTTGCAAT</div>
+      <figcaption id="specimen-cap" class="readout">
+        <div>
+          <div class="k">Rule under audit</div>
+          <div class="v">No run of the same letter longer than 3. This strand breaks it.</div>
+        </div>
+        <div>
+          <div class="k">Nanopore, tight read budget</div>
+          <div class="v"><span class="tbd">[RESULT: pays off or not, reads per strand with rule on vs off]</span></div>
+        </div>
+        <div>
+          <div class="k">Illumina, standard budget</div>
+          <div class="v"><span class="tbd">[RESULT: pays off or not, reads per strand with rule on vs off]</span></div>
+        </div>
+      </figcaption>
+    </figure>
+  </div>
+
+  <section id="problem" aria-labelledby="problem-h">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="problem-h">Rules chosen once, applied to every channel</h2>
+        <p>DNA stores data at extreme density for centuries, but writing and reading it is noisy. Letters get swapped, added or dropped, and whole strands go missing. Storage pipelines cope with a few hand-written rules. Each rule costs density or reads. They were picked once, copied between papers, and are applied to every sequencing channel. Nobody measures whether they pay off.</p>
+      </div>
+      <table class="rules">
+        <thead><tr><th scope="col">Hand rule</th><th scope="col">Example it rejects</th><th scope="col">What it costs</th></tr></thead>
+        <tbody>
+          <tr><td>No run of the same letter longer than 3</td><td><span class="seq">…TCAGGGGAT…</span></td><td>Fewer valid candidate strands to choose from</td></tr>
+          <tr><td>GC content between 40 and 60%</td><td><span class="seq">GCCGGCGCAGGC…</span></td><td>Fewer valid candidate strands to choose from</td></tr>
+          <tr><td>Fixed redundancy, often 0.3</td><td>Every file, every channel</td><td>30% more strands to synthesize, whether the channel needs them or not</td></tr>
+        </tbody>
+      </table>
+      <div class="channels">
+        <div><h3>Nanopore</h3><p>Many insertions and deletions, especially inside runs of the same letter.</p></div>
+        <div><h3>Illumina</h3><p>Few errors, mostly single wrong letters. Runs matter much less.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" aria-labelledby="how-h">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="how-h">Two tiers, one fixed target</h2>
+        <p>Every setting is judged the same way: recover a fixed 20 KB file exactly in all 300 held-out trials, then count the reads per strand and bits per base it took. The encoder and decoder stay the same. Only the rules, the redundancy and the choice of candidate strands change.</p>
+      </div>
+      <div class="tiers">
+        <article class="tier">
+          <div class="num">Tier 1</div>
+          <h3>Rule audit</h3>
+          <p>Switch each rule off, one at a time, on one channel. Measure what it costs and what it buys at the recovery target. Tune the redundancy the same way. Keep only what pays off.</p>
+          <table class="mini">
+            <caption>Verdict per rule and channel from held-out trials: pays off or not, and the tuned redundancy.</caption>
+            <thead><tr><th scope="col">Rule</th><th scope="col">Nanopore</th><th scope="col">Illumina</th></tr></thead>
+            <tbody>
+              <tr><td>Max run 3</td><td><span class="tbd">[RESULT]</span></td><td><span class="tbd">[RESULT]</span></td></tr>
+              <tr><td>GC 40 to 60%</td><td><span class="tbd">[RESULT]</span></td><td><span class="tbd">[RESULT]</span></td></tr>
+              <tr><td>Redundancy 0.3</td><td><span class="tbd">[RESULT]</span></td><td><span class="tbd">[RESULT]</span></td></tr>
+            </tbody>
+          </table>
+        </article>
+        <article class="tier">
+          <div class="num">Tier 2</div>
+          <h3>Learned selection</h3>
+          <p>A Fountain encoder can write the same data as many different strands at no cost in density. A small CNN, trained on where the decoder actually fails on this channel, scores the candidates. The encoder keeps the safest one.</p>
+          <p>There is something to learn. On real Nanopore reads, errors that every read of a strand shares are largely predictable from the local 5-letter context, in contexts the hand rules don't cover:</p>
+          <ul class="kmers" aria-label="Error-prone contexts found in real Nanopore reads">
+            <li>CGGG<span>substitutions around</span></li>
+            <li>CCCG<span>substitutions around</span></li>
+            <li>CCCT<span>deletions right after</span></li>
+            <li>GGGA<span>deletions right after</span></li>
+          </ul>
+        </article>
+      </div>
+
+      <ol class="loop" aria-label="One round of the tuning loop">
+        <li><b>Adapt the decoder</b><span>to this channel, then freeze it</span></li>
+        <li><b>Label strands</b><span>simulate each 32 times, record how often decoding fails</span></li>
+        <li><b>Train the risk model</b><span>on those failure rates</span></li>
+        <li><b>Search settings</b><span>rules, redundancy, risk threshold; keep the cheapest that meets the target</span></li>
+        <li><b>Re-adapt the decoder</b><span>to the strands the new encoder writes</span></li>
+      </ol>
+      <p class="loop-note">At most three rounds. Each round is one point on the Pareto plot of bits per base against reads per strand.</p>
+    </div>
+  </section>
+
+  <section id="evidence" aria-labelledby="evidence-h">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="evidence-h">Built so we can't fool ourselves</h2>
+        <p>We have no wet lab. So the evidence is designed before any run, and every comparison isolates one change.</p>
+      </div>
+      <div class="evidence">
+        <div>
+          <h3>Rule audit</h3>
+          <p>Each rule, each channel, rule on and off, same decoder. The verdict comes from held-out recovery trials only. This table is the tool's main output.</p>
+        </div>
+        <div>
+          <h3>Ablation ladder</h3>
+          <p>Five systems on the same channel and the same held-out seeds. The default we compare against is always B.</p>
+          <ol class="ladder">
+            <li><span class="l">A</span><span>Fixed rules and redundancy, majority vote decoder</span></li>
+            <li><span class="l">B</span><span>Fixed rules and redundancy, transformer decoder</span></li>
+            <li class="step"><strong>B to C</strong> is tier 1</li>
+            <li><span class="l">C</span><span>Audited rules and tuned redundancy, same decoder</span></li>
+            <li class="step"><strong>C to D</strong> is tier 2</li>
+            <li><span class="l">D</span><span>C plus the learned risk scorer</span></li>
+            <li><span class="l">E</span><span>Full loop, decoder re-adapted</span></li>
+          </ol>
+        </div>
+        <div>
+          <h3>Crossover matrix</h3>
+          <p>If a tuned codec is really tuned, it should win on its own channel and lose its edge on the other.</p>
+          <div class="table-scroll">
+          <table class="matrix">
+            <thead><tr><th scope="col">Codec</th><th scope="col">On Nanopore</th><th scope="col">On Illumina</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Default</th><td>Reference</td><td>Reference</td></tr>
+              <tr><th scope="row">Nanopore tuned</th><td><span class="tbd">[RESULT]</span></td><td><span class="tbd">[RESULT]</span></td></tr>
+              <tr><th scope="row">Illumina tuned</th><td><span class="tbd">[RESULT]</span></td><td><span class="tbd">[RESULT]</span></td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+        <div>
+          <h3>Sim-to-real firewall</h3>
+          <p>The loop might learn a quirk of our simulator instead of a property of DNA. Three checks catch that.</p>
+          <ul class="firewall">
+            <li><b>Simulator A, held-out seeds</b>The calibrated simulator we optimize on, with seeds no training touched.</li>
+            <li><b>Simulator B</b>Same channel built from different mechanisms: bursty errors, a different position curve, a context table from another dataset. Never used for optimization.</li>
+            <li><b>Real reads</b>Decoder accuracy and the risk model's ranking on held-out real Nanopore clusters.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="results" aria-labelledby="results-h">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="results-h">What we've measured, and what's still running</h2>
+        <p>The groundwork is measured on real data. The tuning runs are starting now on the GX10.</p>
+        <p class="notice" role="note">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="var(--tbd-ink)" stroke-width="2" stroke-dasharray="3.5 3"/></svg>
+          <span>Everything in a dashed amber box is a placeholder, not a result. It gets replaced by numbers from held-out trials, whether they show a gain or show that the hand rules are already near optimal.</span>
+        </p>
+      </div>
+
+      <div class="results-grid">
+        <div>
+          <h3>Measured</h3>
+          <ul class="facts">
+            <li><div class="n">within about 3 points</div><div class="d">Simulator vs real Nanopore reads, baseline decoder accuracy at every read count from 2 to 16, on held-out Microsoft data. Where it deviates, it's slightly harder.</div></li>
+            <li><div class="n">30 to 66%</div><div class="d">Share of the shared Nanopore errors explained by the local 5-letter context, on held-apart data, in two independent datasets.</div></li>
+            <li><div class="n">AUC 0.80 to 0.90</div><div class="d">The same 5-letter context predicting error hot spots on real Nanopore reads.</div></li>
+            <li><div class="n">90.6%</div><div class="d">Exact strands for the majority vote baseline at 16 reads on real held-out Nanopore data. The bar every model result is compared against.</div></li>
+          </ul>
+          <div class="table-scroll">
+          <table class="calib">
+            <caption>Exact strands, baseline decoder, Microsoft held-out split. Source: docs/ERRORS.md.</caption>
+            <thead><tr><th scope="col">Reads per strand</th><th scope="col">2</th><th scope="col">4</th><th scope="col">6</th><th scope="col">10</th><th scope="col">16</th></tr></thead>
+            <tbody>
+              <tr><td>Real reads</td><td>4.9%</td><td>39.8%</td><td>66.5%</td><td>84.5%</td><td>90.1%</td></tr>
+              <tr><td>Simulator A</td><td>3.6%</td><td>40.3%</td><td>63.7%</td><td>83.0%</td><td>90.3%</td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+        <div>
+          <h3>Running now</h3>
+          <ul class="facts pending">
+            <li><div class="d">Reads per strand to hit the target on Nanopore, default vs tuned, at matched density: <span class="tbd">[RESULT: default N, tuned M]</span></div></li>
+            <li><div class="d">Bits per base at the Illumina read budget, default vs tuned: <span class="tbd">[RESULT: default vs tuned bits per base]</span></div></li>
+            <li><div class="d">Which rules pay off on which channel: <span class="tbd">[RESULT: rule audit verdicts]</span></div></li>
+            <li><div class="d">Learned selection on top of the audit, C to D on Nanopore: <span class="tbd">[RESULT: reads per strand, C vs D]</span></div></li>
+            <li><div class="d">Does the gain survive Simulator B, and does the risk ranking hold on real reads: <span class="tbd">[RESULT: Simulator B outcome, real-read AUC]</span></div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="team" aria-labelledby="team-h">
+    <div class="wrap team">
+      <div>
+        <h2 id="team-h">Built at HackMIT 2026</h2>
+        <p style="margin-top:20px">Coding agents wrote much of the code in parallel. We owned the interfaces, the held-out data discipline, the verification of every number, and the story. The team: <span class="tbd">[TEAM: names and roles]</span></p>
+        <p>What we are not claiming: a new encoder (ours is a standard Fountain code on purpose), a decoder that beats published ones, or any wet lab work.</p>
+        <p><a href="https://github.com/timarnoldev/hackmit2026">Read the code on GitHub</a></p>
+      </div>
+      <dl class="specs">
+        <dt>Hardware</dt><dd>ASUS Ascent GX10, NVIDIA GB10, 128 GB unified memory</dd>
+        <dt>Models</dt><dd>Transformer decoder for trace reconstruction, 1D CNN risk model</dd>
+        <dt>Classic parts</dt><dd>Fountain (LT) encoder with a CRC per strand, calibrated channel simulator, settings grid search</dd>
+        <dt>Interface</dt><dd>Streamlit dashboard: rule audit, Pareto plot, crossover matrix, ablation ladder</dd>
+        <dt>Code</dt><dd>About 10,900 lines of Python, about 2,400 of them tests</dd>
+        <dt>Test</dt><dd>Fixed 20 KB file, 300 held-out trials per evaluation</dd>
+      </dl>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Real reads from the Microsoft clustered Nanopore reads dataset (MIT license) and the DNAformer binned reads dataset from Technion (CC BY 4.0). We thank their authors for publishing them. Naming a dataset implies no endorsement.</p>
+    <p>StrandAudit is a HackMIT 2026 project. Results marked as placeholders are pending.</p>
+  </div>
+</footer>
+
+</body>
+</html>
