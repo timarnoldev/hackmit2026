@@ -6,8 +6,10 @@ embedding) run through transformer decoder layers: self-attention over output po
 cross-attention to every read token of the cluster (Perceiver style)
 -> logits (B, S, 4) over ACGT.
 
-Positions are shared between read tokens and output queries, so query i starts out looking
-near base i of each read; the layers learn to follow indel shifts.
+Positions are shared between read tokens and output queries and are anchored at both ends
+(sinusoids of the position from the start and from the end, see ModelConfig.pos_encoding),
+so query i starts out looking near base i of each read counted from either end; the layers
+learn to follow the indel shifts in between.
 """
 
 from __future__ import annotations

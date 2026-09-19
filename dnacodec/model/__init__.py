@@ -6,8 +6,10 @@ Contents:
   a wide range of error rates, seeds via train_seed()), MixedSource. Coverage augmentation:
   every training cluster keeps a random 1..16 reads, with extra weight on 1..6.
 - net.py: ConsensusNet. Per-read transformer encoder (token + position + read-index
-  embeddings), then strand_length learned output queries (+ shared position embedding +
-  strand-length embedding) through transformer decoder layers that self-attend over output
+  embeddings), then strand_length learned output queries (+ shared position code +
+  strand-length embedding). Positions are anchored at both ends (sinusoids of the index from
+  the start and from the end of each read / of the strand), which fixed a plateau where
+  accuracy decayed along the strand from indel drift. Output queries go through transformer decoder layers that self-attend over output
   positions and cross-attend to every read token (Perceiver style). Logits over ACGT per
   position. Strands up to 160 bases, up to 16 reads, padding and empty reads masked.
   Presets: tiny (0.2M, smoke), small (3.8M), base (9.6M, default), large (~21M).
