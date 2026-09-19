@@ -11,7 +11,7 @@ For a given channel (sequencing technology, read budget, recovery target), our t
 
 The result is a codec tuned to that channel that reaches the same recovery target with fewer reads per strand or less redundancy than the hand-tuned default, with the **same** encoder and the **same** decoder.
 
-> **Status: in progress.** Simulator, encoder, baseline decoder, evaluation, risk model and dashboard are merged. The transformer decoder and the loop are being built. See [Status](#status).
+> **Status: in progress.** Simulator, encoder, baseline decoder, evaluation, risk model and dashboard are merged. Transformer training and the loop are in progress. See [Status](#status).
 
 ---
 
@@ -49,7 +49,7 @@ Which errors dominate depends on the situation:
 | Long-term storage | DNA degrades, more strands are lost entirely |
 | Tight reading budget | Few noisy copies per strand to reconstruct from |
 
-Today's codecs are **one size fits all**. Encoders follow fixed, hand-written rules such as "avoid long runs of the same letter" and "keep GC content near 50%". Every rule costs storage density. Rules that are too strict waste space on an easy channel, and rules that are too loose lose data on a hard one. Decoders, including recent AI decoders, are trained once and used as they are.
+Practical pipelines fix their sequence rules ("avoid long runs of the same letter", "keep GC content near 50%") and their redundancy by hand, and train decoders once. Adaptive constrained coding, learned decoders and end-to-end learned codes all exist, but they tune the rules, the redundancy or the decoder in isolation. Nobody measures, on a given channel, which rules and how much redundancy actually buy fewer decoding failures.
 
 An engineer who wants to archive data in DNA has no tool that answers:
 
@@ -57,32 +57,30 @@ An engineer who wants to archive data in DNA has no tool that answers:
 
 ## The idea
 
-Close the loop between encoder and decoder, separately for each situation.
+Instead of deciding in advance which DNA sequences are dangerous, let decoding failures tell the encoder what to avoid, separately for each channel. A rule, or an extra strand of redundancy, is only kept when it measurably reduces decoding failure there.
+
+The loop alternates and freezes instead of co-training, so the risk model never learns from a decoder that changes under it:
 
 ```
-                        Situation profile
-           (sequencing tech, storage time, read budget)
-                               │
-                               ▼
- ┌─────────────────┐    ┌────────────┐    ┌──────────┐    ┌──────────────┐
- │ Encoder         │──▶ │  Channel   │──▶ │ AI       │──▶ │ Failure      │
- │ generates       │    │ for this   │    │ decoder  │    │ analysis     │
- │ candidates,     │    │ situation  │    │ (adapts) │    │              │
- │ risk model      │    │            │    │          │    │              │
- │ picks safest    │    │            │    │          │    │              │
- └─────────────────┘    └────────────┘    └──────────┘    └──────────────┘
-          ▲                                                      │
-          └────── retrain risk model, adjust redundancy ◀────────┘
-
-             repeat until density, accuracy and cost stop improving
-                               │
-                               ▼
-                 Tailored codec for this situation
+               Situation profile + read budget B + recovery target
+                                      │
+                                      ▼
+  ┌────────────────────────────────────────────────────────────────────┐
+  │ 1. Adapt the decoder to this channel, then freeze it               │
+  │ 2. Label strands: simulate each K times, measure failure rate      │
+  │ 3. Train the risk model on those labels                            │
+  │ 4. Grid search settings with the risk-scored encoder; keep the     │
+  │    cheapest point that meets the recovery target (train seeds)     │
+  │ 5. Re-adapt the decoder to the strands the new encoder produces    │
+  └────────────────────────────────────────────────────────────────────┘
+                 steps 2 to 5 run at most twice more
+                                      │
+                                      ▼
+        Tailored codec = risk model + settings + decoder weights
+        evaluated once on held-out seeds, reported on the Pareto plot
 ```
 
-The output for each situation is a tailored codec (encoder settings, risk model, decoder weights) along with its expected density, accuracy, and cost.
-
-Encoder and decoder **co-adapt**. A stronger decoder fails less, so the risk model becomes more permissive and more data fits per strand. A harder channel makes the risk model steer away from the patterns the decoder struggles with.
+**Where the gain comes from.** A Fountain encoder tries many candidate seeds per strand anyway, so picking the safest one costs no density. Safer strands fail less often, which turns into fewer reads per strand at the recovery target, or less redundancy (more bits per base) at the same coverage. We don't claim large density gains from dropping rules alone, because in a Fountain code they are nearly free.
 
 ## How it works
 
@@ -90,36 +88,29 @@ Encoder and decoder **co-adapt**. A stronger decoder fails less, so the risk mod
 
 | Component | What it does | Module |
 |---|---|---|
-| **Channel simulator** | Turns strands into clusters of noisy reads for a situation: substitutions, insertions, deletions, homopolymer and position effects, dropouts, uneven coverage. Calibrated on real sequencing data | `dnacodec/simulator.py` |
+| **Channel simulator** | Turns strands into clusters of noisy reads for a situation: substitutions, insertions, deletions, run-length, 5-mer context and position effects, read quality spread, malformed reads, dropouts, uneven coverage. Calibrated on real sequencing data | `dnacodec/simulator.py` |
+| **Simulator B** | Structurally different channel with perturbed rates and a context table fit on another dataset. Used only for the firewall test, never for optimization | `dnacodec/simulator_b.py` |
 | **Encoder** | DNA Fountain style LT code. For each strand it generates several candidates, rejects those that break hard constraints, and keeps the one the scorer rates safest. A checksum per strand lets recovery discard corrupted strands | `dnacodec/encoder.py` |
 | **Baseline decoder** | Classic alignment plus majority vote. Reported next to every model result | `dnacodec/baseline.py` |
 | **Transformer decoder** | Reconstructs the original strand from up to 16 noisy reads. Pretrained on simulated and real data, fine-tuned per situation | `dnacodec/model/` |
-| **Risk model** | Small CNN that learns which strands the decoder fails on in a given situation. Replaces the encoder's hand-written rejection rules | `dnacodec/risk.py` |
-| **Loop** | Runs encode, simulate, fine-tune, analyze, retrain, repeat. Writes results after every iteration | `dnacodec/loop.py` |
-| **Evaluation** | The only place metrics are computed | `dnacodec/evaluate.py` |
-| **Dashboard** | Streamlit app showing the loop, tailored vs default codecs, accuracy vs coverage, error patterns, and cost | `dashboard/` |
-
-### One loop iteration
-
-1. **Encode** test data. The risk model picks the lowest-risk candidate strands.
-2. **Simulate** the channel for this situation.
-3. **Fine-tune the decoder** on this channel.
-4. **Analyze failures**: which strands, patterns, and positions the decoder could not fix.
-5. **Retrain the risk model** on those failures and adjust redundancy.
-6. **Evaluate** on held-out seeds and record the iteration.
+| **Risk model** | Small CNN predicting each strand's failure rate in a given situation, trained on controlled sequences labeled by K simulations each. Works on top of the audited hand rules and catches patterns they don't cover | `dnacodec/risk.py` |
+| **Loop** | Alternating loop with a plain grid search over redundancy, strand length, which rules are on, and the risk threshold. Writes results after every alternation | `dnacodec/loop.py` |
+| **Experiments** | Rule audit, ablation ladder A to E, crossover matrix, sim-to-real firewall, candidate examples | `scripts/run_experiments.py` |
+| **Evaluation** | The only place metrics are computed, including trial-based file recovery and fewest reads at the recovery target | `dnacodec/evaluate.py` |
+| **Dashboard** | Streamlit app showing the rule audit, the Pareto plot, crossover, ablation, learned patterns, accuracy vs coverage, and cost | `dashboard/` |
 
 ### Why the encoder isn't a neural network
 
-A fully learned encoder (an autoencoder trained through the channel) sounds appealing, but insertions and deletions are hard to differentiate through, and storage needs every bit back, not "mostly right". We keep a classic fountain code at the core, which guarantees exact recovery once enough strands survive, and let AI decide which candidate strands to use. DNA Fountain already generates and screens candidates with hand-written rules. We replace those rules with a learned, situation-specific risk model.
+A fully learned encoder (an autoencoder trained through the channel) sounds appealing, but insertions and deletions are hard to differentiate through, and storage needs every bit back, not "mostly right". We keep a classic fountain code at the core, which guarantees exact recovery once enough strands survive, and let AI decide which candidate strands to use. DNA Fountain already generates and screens candidates with hand-written rules. We audit those rules per channel and add a learned, situation-specific risk model on top.
 
 ## What's new
 
 | Existing work | What we add |
 |---|---|
 | One fixed codec for every situation | A codec tuned per situation |
-| Hand-written rules for rejecting candidate strands | A learned risk model trained on actual decoder failures |
+| Hand-written rules applied to every channel | Each rule audited per channel, plus a learned risk model trained on actual decoder failures |
 | AI decoders trained once | A decoder fine-tuned to the specific channel |
-| Encoder and decoder designed separately | Encoder and decoder adapting to each other in a loop |
+| Encoder and decoder designed separately | Encoder and decoder adapting to each other in an alternating loop |
 | Papers with fixed parameters | An interactive tool for an engineer's real constraints |
 
 We compete at the **system level**: how an existing codec should be configured for one channel. Our opponent is the hand-tuned default practitioners use, not other papers' components. We don't claim a better encoder than DNA Fountain (ours is a standard Fountain code on purpose) or a better decoder than DNAformer, and the encoder is not a neural network.
@@ -256,16 +247,19 @@ The loop and experiment commands will be added when they're merged. They run ful
 │   ├── seeds.py            Train vs held-out seed discipline
 │   ├── realdata.py         Loaders for real datasets and the fixed held-out split
 │   ├── results.py          Result file format (the contract between loop and dashboard)
+│   ├── testfile.py         The fixed 20 KB test file (never change its size or seed)
 │   ├── simulator.py        Channel simulator
+│   ├── simulator_b.py      Simulator B, for the firewall test only
 │   ├── encoder.py          Fountain encoder, rule scorer, recovery
 │   ├── baseline.py         Majority vote baseline decoder
-│   ├── evaluate.py         Metrics
+│   ├── evaluate.py         Metrics, recovery trials, fewest reads at the target
 │   ├── model/              Transformer decoder: data, network, training, inference
 │   ├── risk.py             Risk model
-│   └── loop.py             The adaptive loop
-├── profiles/               Situation profiles as JSON
+│   └── loop.py             The alternating loop
+├── profiles/               Situation profiles as JSON, context/ holds the 5-mer error tables
+├── docs/                   MODELS.md and ERRORS.md deep dives
 ├── dashboard/              Streamlit dashboard
-├── scripts/                Data download, mock results, calibration, evaluation
+├── scripts/                Data download, calibration, risk training, loop, experiments, evaluation, mock results
 ├── tests/                  pytest suite
 ├── data/                   Downloaded datasets (not committed)
 ├── checkpoints/            Model checkpoints (not committed)
@@ -288,7 +282,7 @@ How real data is used:
 3. **Validate the risk model**: its predicted risk must rank real failing strands above succeeding ones.
 4. **Benchmark honestly** on held-out real clusters that no training touches.
 
-**Caveat:** the Microsoft README (note of 8/12/2024) states that its references are not uniformly random due to a generation bug, and some clusters may be malformed. We use it for reconstruction benchmarks and calibration, never to learn risky motifs.
+**Caveat:** the Microsoft README (note of 8/12/2024) states that its references are not uniformly random due to a generation bug, and some clusters may be malformed. We use it for reconstruction benchmarks and calibration, and the risk model never trains on its references. The 5-mer error table fit on its reads measures the error rate *given* a context, which the skewed composition makes noisier but not biased; the same context families lead on DNAformer, and Simulator B uses a DNAformer table instead.
 
 Loading:
 
@@ -315,6 +309,11 @@ A profile describes the storage channel in one situation. Profiles live in `prof
 | `storage_years`, `decay_per_year` | Extra strand loss from aging |
 | `synthesis_usd_per_base`, `sequencing_usd_per_read` | Cost model |
 | `calibrated_from` | Dataset the numbers were fit to, or `null` if estimated |
+| `homopolymer_run_factors` | Optional deletion multiplier per run length, overrides `homopolymer_factor` for deletions |
+| `read_quality_spread` | Spread of a per-read error multiplier (some reads are much worse than others) |
+| `malformed_read_rate` | Fraction of reads that actually belong to another strand (clustering errors) |
+| `position_rate_spread` | Spread of a per-position error multiplier shared by all reads of a strand, random so it carries no motif |
+| `context_table` | File under `profiles/` with per-5-mer error multipliers, or `null` for no context dependence |
 
 Current profiles:
 
@@ -324,7 +323,7 @@ Current profiles:
 | `illumina_standard` | Lab Illumina reading, normal budget, short-term storage |
 | `illumina_archive_100y` | Stretch goal. Century-scale archive read with Illumina; heavy strand loss (extrapolated, no real data exists) |
 
-The two core situations are `nanopore_budget` and `illumina_standard`. `nanopore_budget` is calibrated on the Microsoft train split.
+The two core situations are `nanopore_budget` and `illumina_standard`. `nanopore_budget` is calibrated on the Microsoft train split, `illumina_standard` on the DNAformer Illumina train split.
 
 > Cost numbers are placeholders until verified and are not presented as real figures.
 
@@ -339,6 +338,8 @@ Our numbers are only worth something if they're measured cleanly. These rules ar
 - **Uncalibrated or extrapolated numbers are labeled** as such.
 
 Metrics per evaluation: exact strand accuracy, mean edit distance, dropout rate, reads per strand, per-position error, file recovered (yes or no), net density in bits per base, and write and read cost per MB.
+
+On top of that, `recovery_trials` runs repeated independent passes of the fixed test file through the channel, and `min_reads_at_target` finds the fewest mean reads per strand (on a fixed coverage grid) at which the recovery rate meets the target, by default every trial. These two drive the settings search (train seeds) and the final numbers (300 held-out trials per codec).
 
 ## Development workflow
 

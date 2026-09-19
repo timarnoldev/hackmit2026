@@ -71,7 +71,7 @@ Only edit files you own. If you need something from another module that doesn't 
 ## Data facts
 
 - Microsoft Nanopore set: 10,000 references of length 110, 269,709 reads, mean cluster size 27, median 21, 16 empty clusters. Error rates roughly 1.7% insertions, 2.0% deletions, 2.2% substitutions.
-- **Microsoft caveat:** its README (note of 8/12/2024) says the references are *not* uniformly random (generation bug, long-range dependencies) and some clusters may be malformed. Use it for reconstruction benchmarks, calibration, and comparison with papers. **Never learn risky motifs from it.**
+- **Microsoft caveat:** its README (note of 8/12/2024) says the references are *not* uniformly random (generation bug, long-range dependencies) and some clusters may be malformed. Use it for reconstruction benchmarks, calibration, and comparison with papers. **Never train the risk model on its references.** The per-5-mer error table fit on its reads is allowed: it's an error rate given a context, cross-checked on DNAformer, and Simulator B uses a DNAformer table instead.
 - DNAformer set: references of length 140, Nanopore (2 flowcells) and Illumina, random and semantic files.
 - Decoders must handle strand lengths up to 140 and clusters up to 16 reads (subsample larger clusters).
 - Profile costs are placeholders. Don't present them as real.
@@ -103,11 +103,11 @@ Done when it beats the baseline on the Microsoft held-out split at low coverage 
 
 **Agent E, dashboard.** Streamlit app in `dashboard/app.py`, built on `results/mock/` (run `uv run python -m scripts.make_mock_results`). Reads `load_runs()` and `load_summary()`. Views, in priority order:
 1. **Rule audit** (main view, from `summary.rule_audit`): per channel, every rule with its verdict and measured cost and benefit.
-1. **Pareto plot** (main view): bits per base on x, reads per strand needed on y; default point plus one point per alternation, one panel per channel.
-2. Crossover matrix, colored.
-3. Ablation ladder A to E as bars, baseline always visible.
-4. What the encoder learned: risky patterns per channel side by side, plus accepted and rejected candidate examples.
-5. Per-position error heatmap, accuracy vs coverage, cost per MB labeled as placeholder prices.
+2. **Pareto plot** (main view): bits per base on x, reads per strand needed on y; default point plus one point per alternation, one panel per channel.
+3. Crossover matrix, colored.
+4. Ablation ladder A to E as bars, baseline always visible.
+5. What the encoder learned: risky patterns per channel side by side, plus accepted and rejected candidate examples.
+6. Per-position error heatmap, accuracy vs coverage, cost per MB labeled as placeholder prices.
 Done when it renders every run in `results/` and shows a MOCK banner for mock data.
 
 **Agent F, risk model.** In `dnacodec/risk.py`:
