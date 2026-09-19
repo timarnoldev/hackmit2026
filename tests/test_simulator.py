@@ -18,7 +18,8 @@ def random_strands(n: int, length: int = 110, seed: int = 0) -> list[str]:
 
 
 def flat_profile(**overrides):
-    """Nanopore profile without position or homopolymer effects and without dropouts."""
+    """Nanopore profile reduced to the simple model: no position, homopolymer, spread,
+    malformed-read or dropout effects."""
     base = load_profile("nanopore_budget")
     defaults = dict(
         homopolymer_factor=1.0,
@@ -26,6 +27,10 @@ def flat_profile(**overrides):
         dropout_rate=0.0,
         decay_per_year=0.0,
         gc_dropout_factor=0.0,
+        homopolymer_run_factors=None,
+        read_quality_spread=0.0,
+        position_rate_spread=0.0,
+        malformed_read_rate=0.0,
     )
     return replace(base, **{**defaults, **overrides})
 
