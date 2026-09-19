@@ -143,6 +143,28 @@ class FirewallEntry:
 
 
 @dataclass
+class Tier2Entry:
+    """Direct tier-2 test: rule scorer vs learned risk scorer with otherwise identical settings,
+    same decoder, same held-out seeds (paired by trial). diff = risk - rule, so negative strand
+    failure and positive recovery mean the learned scorer is better. CIs are 95% paired bootstrap."""
+
+    situation: str
+    coverage: float  # mean reads per strand of the comparison
+    candidates_per_strand: int
+    n_trials: int
+    strand_fail_rule: float
+    strand_fail_risk: float
+    strand_fail_diff: float
+    strand_fail_diff_ci: tuple[float, float]
+    recovery_rule: float
+    recovery_risk: float
+    recovery_diff: float
+    recovery_diff_ci: tuple[float, float]
+    simulator: str = "A"  # "A" or "B" (firewall)
+    note: str = ""
+
+
+@dataclass
 class CandidateExample:
     """The same strand judged by each situation's risk model: accepted on one channel, rejected on another."""
 
@@ -155,6 +177,7 @@ class CandidateExample:
 class ExperimentSummary:
     ablation: list[AblationEntry] = field(default_factory=list)
     rule_audit: list[RuleAuditEntry] = field(default_factory=list)
+    tier2: list[Tier2Entry] = field(default_factory=list)
     crossover: list[CrossoverEntry] = field(default_factory=list)
     firewall: list[FirewallEntry] = field(default_factory=list)
     examples: list[CandidateExample] = field(default_factory=list)
@@ -169,6 +192,11 @@ class ExperimentSummary:
         return cls(
             ablation=[AblationEntry(**{**e, "metrics": Metrics(**e["metrics"])}) for e in d["ablation"]],
             rule_audit=[RuleAuditEntry(**e) for e in d.get("rule_audit", [])],
+            tier2=[
+                Tier2Entry(**{**e, "strand_fail_diff_ci": tuple(e["strand_fail_diff_ci"]),
+                              "recovery_diff_ci": tuple(e["recovery_diff_ci"])})
+                for e in d.get("tier2", [])
+            ],
             crossover=[CrossoverEntry(**{**e, "metrics": Metrics(**e["metrics"])}) for e in d["crossover"]],
             firewall=[FirewallEntry(**e) for e in d["firewall"]],
             examples=[CandidateExample(**e) for e in d["examples"]],
