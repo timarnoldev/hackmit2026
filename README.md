@@ -92,7 +92,7 @@ The loop alternates and freezes instead of co-training, so the risk model never 
 | **Simulator B** | Structurally different channel with perturbed rates and a context table fit on another dataset. Used only for the firewall test, never for optimization | `dnacodec/simulator_b.py` |
 | **Encoder** | DNA Fountain style LT code. For each strand it generates several candidates, rejects those that break hard constraints, and keeps the one the scorer rates safest. A checksum per strand lets recovery discard corrupted strands | `dnacodec/encoder.py` |
 | **Baseline decoder** | Classic alignment plus majority vote. Reported next to every model result | `dnacodec/baseline.py` |
-| **Transformer decoder** | Reconstructs the original strand from up to 16 noisy reads. Pretrained on simulated and real data, fine-tuned per situation | `dnacodec/model/` |
+| **Polisher (learned decoder)** | Corrects the baseline's draft with a small 1D CNN over the vote columns. Beats the baseline by 15 points at 6 reads on real held-out data | `dnacodec/model/polish.py` |
 | **Risk model** | Small CNN predicting each strand's failure rate in a given situation, trained on controlled sequences labeled by K simulations each. Works on top of the audited hand rules and catches patterns they don't cover | `dnacodec/risk.py` |
 | **Loop** | Alternating loop with a plain grid search over redundancy, strand length, which rules are on, and the risk threshold. Writes results after every alternation | `dnacodec/loop.py` |
 | **Experiments** | Rule audit, ablation ladder A to E, crossover matrix, sim-to-real firewall, candidate examples | `scripts/run_experiments.py` |
@@ -138,7 +138,8 @@ The claim has two tiers:
 | Channel simulator | ✅ Calibrated on real Nanopore and Illumina reads, incl. 5-mer context errors; Simulator B for the firewall |
 | Fountain encoder (LT, CRC-16 per strand, risk threshold) | ✅ Done |
 | Baseline decoder and evaluation | ✅ Done |
-| Transformer decoder | ✅ Code done, smoke-tested; full training on the GX10 pending |
+| Decoder: learned polisher (CNN correcting the classic draft) | ✅ Trained, beats the baseline on real held-out data (82.5% vs 67.0% exact strands at 6 reads) |
+| From-scratch transformer decoder | ❌ Built, did not beat the baseline in the time budget; documented in docs/MODELS.md |
 | Dashboard (rule audit, Pareto, crossover, ablation A to E, learned patterns) | ✅ Done on mock data |
 | Risk model (controlled strands, failure-rate labels, CNN) | ✅ Done |
 | Alternating loop and evidence experiments | ✅ Done; first full run (baseline decoder) on the GX10 |

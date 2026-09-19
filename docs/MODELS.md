@@ -4,85 +4,85 @@ The project has exactly two learned models. Everything else (encoder, simulator,
 
 | Model | Question it answers | Input | Output | Used by |
 |---|---|---|---|---|
-| **Transformer decoder** (`ConsensusNet`) | "What was the original strand?" | Up to 16 noisy reads of one strand | One strand of exactly `strand_length` letters (or `None`) | Evaluation, the loop, the demo |
+| **Polisher** (`PolishNet`, a 1D CNN) | "What was the original strand?" | The classic decoder's draft plus its vote columns, from up to 16 noisy reads | One strand of exactly `strand_length` letters (or `None`) | Evaluation, the loop, the demo |
 | **Risk model** (1D CNN) | "How likely is this strand to be decoded wrongly on this channel?" | One or more candidate strands | One number in [0, 1] per strand | The encoder, when choosing between candidate strands |
 
-Both are plugged in through the shared interfaces in `dnacodec/types.py` (`Decoder` and `Scorer`), so either can be swapped for the classic alternative: the majority vote baseline decoder, or the hand-written rule scorer.
+Both are plugged in through the shared interfaces in `dnacodec/types.py` (`Decoder` and `Scorer`), so either can be swapped for the classic alternative: the majority vote baseline decoder, or the hand-written rule scorer. A third model, a from-scratch transformer, was built and did not work; section 3 says what happened and why.
 
 ---
 
-## 1. Transformer decoder
+## 1. Decoder: the learned polisher
 
-Code: `dnacodec/model/` (`net.py` model, `decoder.py` inference, `train.py` training, `finetune.py` per-channel adaptation, `benchmark.py` real-data comparison).
+Code: `dnacodec/model/polish.py` (model and `PolishDecoder`), training in `scripts/train_polish.py`, comparison against the baseline in `dnacodec/model/benchmark.py --polish`.
 
 ### What it does
 
-Sequencing returns many noisy copies ("reads") of each stored strand. Each read has wrong, extra, or missing letters at different places. The decoder takes the reads of one strand and reconstructs the original strand. This task is called trace reconstruction.
+Sequencing returns many noisy copies ("reads") of each stored strand: wrong letters, extra letters, missing letters, each read different. Reconstructing the original strand from them is called trace reconstruction.
+
+We split that in two: the classic majority vote decoder does the **alignment** (which letter of read 3 belongs to position 47), and a small learned model does the **correction** of what's left. That's how Nanopore assembly polishers work, and it's why this model trains in 13 minutes while a from-scratch transformer failed (see section 3).
 
 ### Output, exactly
 
 ```python
-from dnacodec.model.decoder import TransformerDecoder
+from dnacodec.model.polish import PolishDecoder
 
-decoder = TransformerDecoder("checkpoints/mixed_ft/best.pt")
+decoder = PolishDecoder("checkpoints/polish/polish.pt")
 strands = decoder.decode(clusters, strand_length=110)
 ```
 
-- `clusters`: a list of clusters, each a list of read strings over `ACGT`. Reads can differ in length.
-- Returns a list of the same length as `clusters`, in the same order. Each entry is either:
-  - a string of **exactly** `strand_length` letters over `ACGT`: the model's best guess for the original strand, or
-  - `None`, if the cluster has no reads (the strand was lost).
-- Internally the network produces, for every output position, a probability over the four letters (logits of shape `clusters × strand_length × 4`). The returned letter is the most likely one at each position.
-- The decoder never says "I'm not sure". A wrong guess is still a full-length strand. Catching wrong guesses is the job of the per-strand checksum in the encoder, which turns them into lost strands (see [ERRORS.md](ERRORS.md)).
+- Same contract as any `Decoder`: one entry per cluster, in order; each is a string of **exactly** `strand_length` letters over ACGT, or `None` for an empty cluster.
+- `name = "polish"`, `main_process_only = True` (it decodes on the GPU in the main process and batches internally, 512 clusters per batch by default).
+- Speed: about 2,300 to 4,700 clusters per second on the GX10, roughly 1.3 to 1.7 times the cost of the baseline, which dominates through the shared draft building.
 
-Behavior details:
-
-- Clusters with more than 16 reads keep the 16 reads whose length is closest to `strand_length`.
-- Strands up to 160 letters are supported. Our data uses 110 (Microsoft) and 140 (DNAformer).
-- `main_process_only = True`: the evaluation code gathers the clusters of many trials and calls `decode()` once in the main process. `decode()` then works through them in GPU-sized chunks (at most 256 clusters and 1,024 reads per chunk).
-
-### Architecture
+### How it works
 
 ```
-reads of one cluster (up to 16, each up to ~180 letters)
-  │
-  │  embedding per letter: letter + read number + position
-  │  (position is anchored at both ends of the read, because insertions and
-  │   deletions shift everything after them; counting from both ends keeps
-  │   the tail of the strand locatable)
-  ▼
-Transformer encoder, run on each read separately
-  │
-  ▼
-all read tokens of the cluster
-  │
-  │  one learned query per output position (plus position code and strand length)
-  │  Transformer decoder layers: queries attend to each other and to every read token
-  │  (Perceiver-style cross-attention)
-  ▼
-logits over A, C, G, T for each output position  →  most likely letter per position
+cluster of up to 16 reads
+   │  classic: pick a medoid draft, align every read to it, count votes per position,
+   │  rebuild, repeat 3 times, force the draft to strand_length
+   ▼
+draft (already about 90% correct at 16 reads) + vote columns
+   │  17 features per draft position:
+   │    votes for A, C, G, T, votes for "this position is missing in the read",
+   │    votes for "an extra letter in the gap before this position" and which letter,
+   │    coverage, the draft base, agreement, relative position
+   ▼
+dilated 1D CNN: stem (kernel 5) + 8 residual blocks with dilations 1,2,4,8,1,2,4,8,
+128 channels, about 0.8M parameters, receptive field about 65 positions
+   │
+   ├─▶ op head, 6 classes per position: keep, substitute to A/C/G/T, delete
+   └─▶ insert head, 5 classes per gap: nothing, insert A/C/G/T
+   │
+   ▼  apply_edits: draft and truth both have exactly strand_length bases, so a correct
+      edit script has as many deletions as insertions. Keeping the k most confident of
+      each makes the output exactly strand_length by construction.
+corrected strand
 ```
 
-| Size | d_model | Heads | Encoder layers | Decoder layers | Parameters |
-|---|---|---|---|---|---|
-| tiny (smoke test only) | 64 | 4 | 1 | 2 | 0.2M |
-| small | 192 | 6 | 3 | 4 | 3.8M |
-| **base (default)** | 256 | 8 | 4 | 6 | 9.6M |
-| large | 384 | 8 | 4 | 6 | 21.5M |
+**Why it beats plain voting:** the model may overrule the majority, because it sees two things voting ignores. First the **local context**, about 65 neighbouring positions, so it learns that Nanopore drops a letter after CCCT more often than elsewhere, which is exactly the 5-mer context effect measured on real reads (see [ERRORS.md](ERRORS.md)). Second the **coverage**, so "4 against 2" means something different at 6 reads than at 16.
 
 ### Training
 
-- **Loss:** cross-entropy per position against the true strand.
-- **Data sources:** `sim` (unlimited clusters from the channel simulator across a wide range of error rates), `real` (Microsoft train clusters), or `mixed`.
-- **Plan:** pretrain on `sim`, then fine-tune on `mixed` (70% real). Per channel, the loop fine-tunes further with `finetune()`.
-- **Coverage augmentation:** each training cluster keeps a random 1 to 16 reads, and half the time at most 6. That weights low coverage, where the baseline is weakest.
-- **Seeds:** all training data uses `train_seed()`. Checkpoints are selected on a validation subset of the train split. Held-out numbers are only logged, never used for selection.
+- **Data:** 577k examples in 18 seconds: 400k simulated clusters across randomly drawn channels (wide error-rate range, coverage 1 to 16 weighted toward low coverage, strand lengths 110 and 140) plus 24 passes over the real Microsoft **train** clusters. Drafts and features are built in 8 worker processes.
+- **Loss:** cross-entropy on both heads, labels from `Levenshtein.editops(draft, truth)`.
+- **Steps:** 10,000, about 13 minutes on the GX10. Validation accuracy plateaued around step 8,000.
+- **Thresholds:** the confidence thresholds for applying deletions and insertions are tuned on a validation carve of the train split, separately for clusters with at most 3 reads and for larger ones.
+- Held-out data is never used for training or tuning.
 
-### Status
+### Status: this is the decoder used in all results
 
-The code is complete and tested. The model is **not trained yet**: 600 steps on a busy laptop showed only that the pipeline runs (2% exact strands at 16 reads, vs 91% for the baseline). Full training runs on the GX10 (see README, "Running on the GX10"). Measure it against the baseline with `python -m dnacodec.model.benchmark <checkpoint>`.
+Measured on the real Microsoft **held-out** split (1,996 clusters), exact strands, with the protocol of `scripts/eval_real.py`:
 
-**Fallback:** if it doesn't beat the baseline in time, the whole pipeline runs with the majority vote baseline. Both claim tiers compare codecs with the same decoder, so they hold with any fixed decoder.
+| Reads per strand | 2 | 4 | 6 | 10 | 16 | full |
+|---|---|---|---|---|---|---|
+| Baseline (majority vote) | 5.0% | 41.0% | 67.0% | 83.0% | 90.0% | 90.3% |
+| **Polisher** | 5.9% | **56.8%** | **82.5%** | **92.7%** | **95.1%** | **95.3%** |
+
+The gain is largest at 4 to 6 reads, which is the range the loop operates in. At 2 reads it's a tie: the draft is essentially a single read there, so there is nothing to correct with.
+
+**On simulated channels:** on `nanopore_budget` it gains everywhere (6 reads: 55.4% vs 48.3%). On `illumina_standard` it matches the baseline to within 0.2 points, because that channel is clean enough that the draft is already right.
+
+**Ceiling:** at 6 reads the polisher fails on 18.6% of strands, and 19.6% of those also fail with all 27 reads. So 4.7% of strands are unrecoverable in principle (errors shared by all reads, plus malformed clusters in the dataset), and about 14.9% is headroom at 6 reads.
 
 ---
 
@@ -146,3 +146,15 @@ Trained locally for both core channels (baseline decoder, 12,000 strands, K = 32
 What it has learned so far: risk rises steeply with the longest run of identical letters (0.36 for runs of 3 or less, 0.81 for runs of 8 or more). That was the only sequence effect in the simulator it was trained on, and the hand-written homopolymer rule already covers it.
 
 **Next:** the simulator now includes sequence-context error patterns measured on real reads (see [ERRORS.md](ERRORS.md)). The risk model will be retrained on that simulator. Then it can learn patterns the hand rules don't cover, which is what claim tier 2 needs. The real-data AUC is the check for whether it learned something real.
+## 3. What didn't work: a from-scratch transformer
+
+Code is still in `dnacodec/model/` (`net.py`, `train.py`, `decoder.py`) and unused.
+
+`ConsensusNet` (9.6M parameters) was meant to learn the whole task: a transformer encoder per read, then `strand_length` learned queries cross-attending to all read tokens (Perceiver style), predicting each output letter directly. It had to learn the alignment itself, which is the hard part of the problem, because insertions and deletions shift every read differently.
+
+After 11,300 steps on simulated data it reached 1.4% / 5.6% / 10.8% exact strands at 2 / 6 / 16 reads on real Microsoft validation data, against 4.8% / 68.1% / 90.6% for the baseline, and it improved too slowly to catch up in the time available. We stopped it and built the polisher instead, which is 12 times smaller, trained in 13 minutes, and beats the baseline.
+
+**The lesson, and it belongs in the pitch:** we didn't need a bigger model, we needed the model in the right place. The classic algorithm is very good at alignment. What it lacks is knowledge about the channel, and that is exactly what the small CNN supplies.
+
+---
+
