@@ -18,6 +18,15 @@ scripts/download_data.sh         # real datasets (--full on the GPU machine)
 uv run pytest -q                 # must stay green
 ```
 
+## Compute: ASUS Ascent GX10
+
+All GPU work runs on one ASUS Ascent GX10 (NVIDIA GB10 Grace Blackwell, the same chip as DGX Spark).
+- **ARM64 (aarch64), not x86.** Every dependency must work on linux-aarch64. The first check on the machine is `python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"` plus a small matmul on the GPU. If the pip wheel doesn't see the GPU, use NVIDIA's NGC PyTorch container instead of fighting wheels.
+- **128 GB unified memory** shared by CPU and GPU. Memory is never the limit for our model sizes; keep simulated datasets in RAM.
+- **Blackwell GPU:** train in bf16 autocast. It's roughly a strong desktop GPU for training, well below a datacenter H100, so don't scale models up because of the name.
+- **20 ARM CPU cores:** the simulator, the baseline decoder, recovery trials and risk labeling are CPU work. Parallelize them across cores with `concurrent.futures.ProcessPoolExecutor`, one seed per task, so results stay deterministic per seed.
+- **One shared GPU.** Long jobs declare themselves in `GPU_JOBS.md` (who, what, expected end). Pretraining has priority until hour 10.
+
 ## Layout
 
 | Path | Owner | What |
@@ -70,6 +79,8 @@ Only edit files you own. If you need something from another module that doesn't 
 ## Objective (fixed, from PROJECT.md)
 
 - Recovery target: file recovered exactly in all 300 held-out trials.
+- Test file: `dnacodec/testfile.py:test_file()`, 20 KB of random bytes from a fixed seed. Never change its size or seed.
+- Trial budget: 50 train-seed trials per candidate in the settings search, a 300 train-seed re-check before choosing a setting, 300 held-out trials once per final codec.
 - Primary metrics: minimum mean reads per strand meeting the target (at matched bits per base), and maximum bits per base meeting the target (at the situation's budget). Results are judged on the Pareto front of (bits per base, reads per strand). Buying accuracy with extra redundancy is not an improvement.
 - The comparison default is always system B: fixed rules and redundancy, **same transformer decoder**.
 
