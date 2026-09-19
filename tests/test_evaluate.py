@@ -111,3 +111,153 @@ def test_density_and_costs():
     m2 = evaluate(refs, list(refs), clusters, meta=meta)
     assert m2.bits_per_base == pytest.approx(2.0)
     assert m2.write_cost_usd_per_mb is None
+
+
+# ---- recovery_trials and min_reads_at_target ------------------------------------------
+
+from dnacodec.baseline import MajorityVoteDecoder  # noqa: E402
+from dnacodec.encoder import encode  # noqa: E402
+from dnacodec.encoder import payload_bits_per_base as _bpb  # noqa: E402
+from dnacodec.evaluate import _TrialRunner, min_reads_at_target, recovery_trials  # noqa: E402
+from dnacodec.seeds import train_seed  # noqa: E402
+
+DATA = bytes(range(256)) * 4  # 1 KB, about 60 strands: keeps trials fast
+SETTINGS = EncoderSettings()
+
+
+class FirstReadDecoder:
+    """Takes the first read as is. Exact on a noise-free channel. Module level: picklable."""
+
+    name = "first_read"
+
+    def decode(self, clusters, strand_length):
+        return [c[0] if c else None for c in clusters]
+
+
+class NoneDecoder:
+    name = "none"
+
+    def decode(self, clusters, strand_length):
+        return [None] * len(clusters)
+
+
+def _clean(coverage=30.0):
+    """Noise-free channel; strands are lost only when they get zero reads."""
+    return dataclasses.replace(
+        load_profile("illumina_standard"),
+        sub_rate=0.0,
+        ins_rate=0.0,
+        del_rate=0.0,
+        dropout_rate=0.0,
+        decay_per_year=0.0,
+        gc_dropout_factor=0.0,
+        coverage_mean=coverage,
+        coverage_dispersion=1000.0,  # nearly Poisson
+    )
+
+
+def _seeds(n, start=100):
+    return [train_seed(start + i) for i in range(n)]
+
+
+def test_recovery_clean_channel():
+    encoded = encode(DATA, SETTINGS)
+    m = recovery_trials(DATA, SETTINGS, None, FirstReadDecoder(), _clean(), _seeds(4), workers=1)
+    assert m.recovery_rate == 1.0
+    assert m.file_recovered is True
+    assert m.n_trials == 4
+    assert m.n_strands == len(encoded.strands)
+    assert m.extra["n_strand_decodes"] == 4 * len(encoded.strands)
+    assert m.strand_accuracy == pytest.approx(1.0 - m.dropout_rate)
+    assert m.bits_per_base == pytest.approx(_bpb(encoded.meta, len(encoded.strands)))
+    assert m.write_cost_usd_per_mb is not None and m.read_cost_usd_per_mb is not None
+    assert m.reads_per_strand == pytest.approx(30, rel=0.1)
+    assert "early_exit" not in m.extra
+
+
+def test_recovery_hopeless_decoder():
+    m = recovery_trials(DATA, SETTINGS, None, NoneDecoder(), _clean(), _seeds(3), workers=1)
+    assert m.recovery_rate == 0.0
+    assert m.file_recovered is False
+    assert m.n_trials == 3
+    assert m.strand_accuracy == 0.0
+
+
+def test_recovery_parallel_equals_serial():
+    profile = load_profile("nanopore_budget")  # real noise, mixed outcomes per strand
+    args = (DATA, SETTINGS, None, MajorityVoteDecoder(), profile, _seeds(6))
+    serial = recovery_trials(*args, workers=1)
+    parallel = recovery_trials(*args, workers=3)
+    assert dataclasses.asdict(serial) == dataclasses.asdict(parallel)
+    assert serial.n_trials == 6
+    assert 0.0 < serial.strand_accuracy < 1.0
+
+
+def test_recovery_is_deterministic_and_seed_dependent():
+    profile = load_profile("nanopore_budget")
+    a = recovery_trials(DATA, SETTINGS, None, MajorityVoteDecoder(), profile, _seeds(2), workers=1)
+    b = recovery_trials(DATA, SETTINGS, None, MajorityVoteDecoder(), profile, _seeds(2), workers=1)
+    c = recovery_trials(
+        DATA, SETTINGS, None, MajorityVoteDecoder(), profile, _seeds(2, start=500), workers=1
+    )
+    assert dataclasses.asdict(a) == dataclasses.asdict(b)
+    assert a.per_position_error != c.per_position_error
+
+
+def test_early_exit_is_reported_honestly():
+    encoded = encode(DATA, SETTINGS)
+    for workers in (1, 2):
+        with _TrialRunner(encoded, DATA, NoneDecoder(), workers, 5) as runner:
+            m = runner.run(_clean(), _seeds(5), max_failures=1)
+        assert m.n_trials == 2  # second failure makes "at most 1 failure" unreachable
+        assert m.recovery_rate == 0.0
+        assert m.extra["early_exit"] == 1.0
+        assert m.extra["n_trials_requested"] == 5.0
+        assert m.file_recovered is False
+
+
+def test_min_reads_at_target_clean_channel():
+    grid = (0.25, 0.5, 1.0, 2.0, 4.0, 8.0)
+    seeds = _seeds(8)
+    c = min_reads_at_target(
+        DATA, SETTINGS, None, FirstReadDecoder(), _clean(), seeds, coverages=grid, workers=1
+    )
+    assert c is not None and c in grid
+    at_c = recovery_trials(
+        DATA, SETTINGS, None, FirstReadDecoder(), _clean(c), seeds, workers=1
+    )
+    assert at_c.recovery_rate == 1.0
+    below = grid[grid.index(c) - 1]
+    assert grid.index(c) > 0, "grid starts too high to test the step below"
+    at_below = recovery_trials(
+        DATA, SETTINGS, None, FirstReadDecoder(), _clean(below), seeds, workers=1
+    )
+    assert at_below.recovery_rate < 1.0
+    # a looser target can only need the same coverage or less
+    loose = min_reads_at_target(
+        DATA, SETTINGS, None, FirstReadDecoder(), _clean(), seeds, target=0.5, coverages=grid,
+        workers=1,
+    )
+    assert loose is not None and loose <= c
+    # grid order does not matter
+    assert c == min_reads_at_target(
+        DATA, SETTINGS, None, FirstReadDecoder(), _clean(), seeds, coverages=grid[::-1], workers=1
+    )
+
+
+def test_min_reads_at_target_none_when_unreachable():
+    c = min_reads_at_target(
+        DATA, SETTINGS, None, NoneDecoder(), _clean(), _seeds(4), coverages=(2, 4), workers=1
+    )
+    assert c is None
+
+
+def test_min_reads_parallel_equals_serial():
+    # real noise; low grid points fail (early exit), a high one passes
+    profile = load_profile("nanopore_budget")
+    settings = dataclasses.replace(SETTINGS, redundancy=1.0)
+    args = (DATA, settings, None, MajorityVoteDecoder(), profile, _seeds(6))
+    kw = dict(coverages=(3, 6, 10, 16, 24))
+    serial = min_reads_at_target(*args, workers=1, **kw)
+    assert serial is not None and serial > 3
+    assert serial == min_reads_at_target(*args, workers=3, **kw)
