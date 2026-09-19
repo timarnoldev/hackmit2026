@@ -34,12 +34,15 @@ from dnacodec.baseline import MajorityVoteDecoder  # noqa: E402
 from dnacodec.evaluate import evaluate  # noqa: E402
 from dnacodec.model.data import random_profile, random_strands, split_train_val  # noqa: E402
 from dnacodec.model.polish import (  # noqa: E402
-    N_FEATURES,
+    DEFAULT_THRESHOLDS,
     PolishConfig,
     PolishNet,
     count_parameters,
+    edits_from_probs,
     example_of,
+    load_checkpoint,
     polish_clusters,
+    predict_probs,
     save_checkpoint,
 )
 from dnacodec.seeds import HELDOUT_COUNT, HELDOUT_START, train_seed  # noqa: E402
@@ -186,12 +189,13 @@ def _train_indices(val_size: int):
     return indices, val
 
 
-def evaluate_polish(model, val, device, coverages=EVAL_COVERAGES, baseline_cache={}) -> dict:
+def evaluate_polish(model, val, device, coverages=EVAL_COVERAGES, thresholds=None,
+                    baseline_cache={}) -> dict:
     refs, clusters = val
     result = {}
     for k in coverages:
         cut = [[r for r in c if r][:k] for c in clusters]
-        decoded = polish_clusters(model, cut, len(refs[0]), device=device)
+        decoded = polish_clusters(model, cut, len(refs[0]), device=device, thresholds=thresholds)
         result[f"cov{k}"] = float(evaluate(refs, decoded, cut).strand_accuracy)
         if k not in baseline_cache:
             base = MajorityVoteDecoder().decode(cut, len(refs[0]))
@@ -200,6 +204,34 @@ def evaluate_polish(model, val, device, coverages=EVAL_COVERAGES, baseline_cache
     result["mean"] = float(np.mean([result[f"cov{k}"] for k in coverages]))
     result["base_mean"] = float(np.mean([result[f"base{k}"] for k in coverages]))
     return result
+
+
+def tune_thresholds(model, val, device, grid=(0.0, 0.3, 0.5, 0.7, 0.9, 0.98)) -> dict:
+    """Pick the confidence thresholds on the VALIDATION carve of the train split.
+
+    Two regimes: clusters with at most low_max_reads reads (where an unsure edit usually
+    hurts) and the rest. Chosen by mean strand accuracy over the evaluation budgets.
+    """
+    refs = val[0]
+    length = len(refs[0])
+    cached = []
+    for k in EVAL_COVERAGES:
+        cut = [[r for r in c if r][:k] for c in val[1]]
+        cached.append((cut, predict_probs(model, cut, length, device=device)))
+    best = dict(DEFAULT_THRESHOLDS)
+    for regime in ("low", "high"):
+        scores = {}
+        for sub_t in grid:
+            for ins_t in grid:
+                cand = {**best, regime: (sub_t, ins_t)}
+                acc = [
+                    evaluate(refs, edits_from_probs(len(refs), probs, length, cand), cut).strand_accuracy
+                    for cut, probs in cached
+                ]
+                scores[(sub_t, ins_t)] = float(np.mean(acc))
+        best[regime] = max(scores, key=scores.get)
+        log.info(f"thresholds {regime}: {best[regime]} (val mean {scores[best[regime]]:.4f})")
+    return best
 
 
 def main(argv=None) -> None:
@@ -221,6 +253,8 @@ def main(argv=None) -> None:
     p.add_argument("--run-name", default="polish")
     p.add_argument("--checkpoint-dir", default=str(Path(__file__).resolve().parents[1] / "checkpoints"))
     p.add_argument("--device", default=None)
+    p.add_argument("--tune-only", default=None,
+                   help="skip training: tune the thresholds of this checkpoint and save them back")
     args = p.parse_args(argv)
 
     run_dir = Path(args.checkpoint_dir) / args.run_name
@@ -232,6 +266,19 @@ def main(argv=None) -> None:
     if device.type == "cuda":
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
+
+    if args.tune_only:
+        model, ckpt = load_checkpoint(args.tune_only, device)
+        _, val = _train_indices(args.val_size)
+        th = tune_thresholds(model, val, device)
+        rec = evaluate_polish(model, val, device, thresholds=th)
+        log.info("after tuning: polish {} | baseline {}".format(
+            " ".join(f"{k}r={rec[f'cov{k}']:.3f}" for k in EVAL_COVERAGES),
+            " ".join(f"{k}r={rec[f'base{k}']:.3f}" for k in EVAL_COVERAGES)))
+        extra = {k: v for k, v in ckpt.items() if k not in ("config", "model", "thresholds")}
+        save_checkpoint(args.tune_only, model, thresholds=th, tuned_metrics=rec, **extra)
+        log.info(f"saved thresholds {th} into {args.tune_only}")
+        return
 
     data, val = build_dataset(args)
     lengths = sorted(data)
@@ -291,6 +338,15 @@ def main(argv=None) -> None:
             break
     metrics_file.close()
     log.info(f"done in {(time.time() - t0) / 60:.1f} min, best validation mean {best:.4f}")
+    model, ckpt = load_checkpoint(run_dir / "polish.pt", device)
+    th = tune_thresholds(model, val, device)
+    rec = evaluate_polish(model, val, device, thresholds=th)
+    log.info("after tuning: polish {} | baseline {}".format(
+        " ".join(f"{k}r={rec[f'cov{k}']:.3f}" for k in EVAL_COVERAGES),
+        " ".join(f"{k}r={rec[f'base{k}']:.3f}" for k in EVAL_COVERAGES)))
+    extra = {k: v for k, v in ckpt.items() if k not in ("config", "model", "thresholds")}
+    save_checkpoint(run_dir / "polish.pt", model, thresholds=th, tuned_metrics=rec, **extra)
+    log.info(f"saved thresholds {th}")
 
 
 if __name__ == "__main__":

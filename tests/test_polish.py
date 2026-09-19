@@ -139,6 +139,29 @@ def test_untrained_polisher_keeps_baseline_quality():
     assert all(len(o) == 110 for o in out)
 
 
+def test_thresholds_gate_the_edits():
+    """With a high threshold nothing is edited; with a low one the argmax decides."""
+    rng = np.random.default_rng(23)
+    draft = random_ref(40, rng)
+    op_p = np.full((N_OPS, 40), 0.1, dtype=np.float32)
+    op_p[1] = 0.6  # substitute to A everywhere, 60% sure
+    ins_p = np.zeros((N_INS, 40), dtype=np.float32)
+    ins_p[0] = 1.0
+    assert apply_edits(draft, op_p, ins_p, 40, sub_threshold=0.9, indel_threshold=0.9) == draft
+    assert apply_edits(draft, op_p, ins_p, 40, sub_threshold=0.5, indel_threshold=0.5) == "A" * 40
+
+
+def test_decoder_uses_thresholds_from_the_checkpoint(tmp_path):
+    from dnacodec.model.polish import load_checkpoint
+
+    th = {"low_max_reads": 4, "low": (0.9, 0.9), "high": (0.2, 0.3)}
+    save_checkpoint(tmp_path / "t.pt", PolishNet(TINY), thresholds=th)
+    _, ckpt = load_checkpoint(tmp_path / "t.pt")
+    assert ckpt["thresholds"] == th
+    dec = PolishDecoder(tmp_path / "t.pt", device="cpu")
+    assert dec.thresholds == th
+
+
 def test_example_of_returns_features_and_labels():
     rng = np.random.default_rng(17)
     ref = random_ref(110, rng)

@@ -190,9 +190,22 @@ def load_checkpoint(path, device: torch.device | str = "cpu") -> tuple[PolishNet
 # ---------------------------------------------------------------- applying the edits
 
 
-def apply_edits(draft: str, op_prob: np.ndarray, ins_prob: np.ndarray, strand_length: int) -> str:
+DEFAULT_THRESHOLDS = {"low_max_reads": 3, "low": (0.5, 0.5), "high": (0.5, 0.5)}
+
+
+def apply_edits(
+    draft: str,
+    op_prob: np.ndarray,
+    ins_prob: np.ndarray,
+    strand_length: int,
+    sub_threshold: float = 0.5,
+    indel_threshold: float = 0.5,
+) -> str:
     """Edit the draft with the predicted ops. op_prob (N_OPS, L), ins_prob (N_INS, L).
 
+    An edit is only applied when the model is at least sub_threshold (substitutions) or
+    indel_threshold (deletions and insertions) sure; thresholds are tuned on the validation
+    split, because at very low coverage an unsure edit is worse than keeping the draft.
     Substitutions are free. Deletions and insertions are paired: both draft and truth have
     strand_length bases, so a correct script has equally many, and keeping the k most
     confident of each makes the result exactly strand_length without any padding.
@@ -200,12 +213,16 @@ def apply_edits(draft: str, op_prob: np.ndarray, ins_prob: np.ndarray, strand_le
     length = len(draft)
     op_choice = op_prob.argmax(0)
     base_choice = op_prob[1:5].argmax(0)  # best substitution if we substitute
+    sub_score = op_prob[1:5].max(0)
     del_score = op_prob[DELETE]
     ins_choice = ins_prob.argmax(0)
     ins_score = 1.0 - ins_prob[0]
+    # unsure edits fall back to the draft
+    substitute = (op_choice >= 1) & (op_choice <= 4) & (sub_score >= sub_threshold)
+    op_choice = np.where(substitute, op_choice, np.where(op_choice == DELETE, DELETE, KEEP))
 
-    del_pos = np.flatnonzero(op_choice == DELETE)
-    ins_pos = np.flatnonzero(ins_choice > 0)
+    del_pos = np.flatnonzero((op_choice == DELETE) & (del_score >= indel_threshold))
+    ins_pos = np.flatnonzero((ins_choice > 0) & (ins_score >= indel_threshold))
     k = min(len(del_pos), len(ins_pos))
     if k < len(del_pos):
         del_pos = del_pos[np.argsort(-del_score[del_pos])[:k]]
@@ -217,8 +234,7 @@ def apply_edits(draft: str, op_prob: np.ndarray, ins_prob: np.ndarray, strand_le
     inserted[ins_pos] = True
 
     draft_codes = _to_array(draft)
-    out_codes = np.where(op_choice == KEEP, draft_codes, base_choice)
-    out_codes = np.where(dropped, draft_codes, out_codes)  # value unused where dropped
+    out_codes = np.where(substitute, base_choice, draft_codes)
 
     if not inserted.any() and not dropped.any():
         return _LETTERS[out_codes].tobytes().decode()
@@ -239,25 +255,28 @@ def apply_edits(draft: str, op_prob: np.ndarray, ins_prob: np.ndarray, strand_le
 
 
 @torch.no_grad()
-def polish_clusters(
+def predict_probs(
     model: PolishNet,
     clusters: Sequence[Cluster],
     strand_length: int,
     batch_size: int = 512,
     device: torch.device | str | None = None,
-) -> list[Strand | None]:
+):
+    """Drafts and edit probabilities for every non-empty cluster.
+
+    Returns (index, draft, op probabilities (N_OPS, L), insert probabilities (N_INS, L),
+    number of reads) per non-empty cluster, in input order.
+    """
     device = torch.device(device) if device is not None else next(model.parameters()).device
-    out: list[Strand | None] = [None] * len(clusters)
-    drafts: dict[int, str] = {}
-    feats: dict[int, np.ndarray] = {}
+    drafts, feats, sizes, idx = {}, {}, {}, []
     for i, cluster in enumerate(clusters):
         if not any(cluster):
             continue
         draft, votes = draft_of(cluster, strand_length)
-        drafts[i] = draft
-        feats[i] = features_of(draft, votes)
-    idx = list(drafts)
+        drafts[i], feats[i], sizes[i] = draft, features_of(draft, votes), votes[3]
+        idx.append(i)
     amp = device.type == "cuda"
+    out = []
     for start in range(0, len(idx), batch_size):
         chunk = idx[start : start + batch_size]
         x = torch.from_numpy(np.stack([feats[i] for i in chunk])).to(device)
@@ -265,9 +284,31 @@ def polish_clusters(
             op_logits, ins_logits = model(x)
         op_p = op_logits.float().softmax(1).cpu().numpy()
         ins_p = ins_logits.float().softmax(1).cpu().numpy()
-        for j, i in enumerate(chunk):
-            out[i] = apply_edits(drafts[i], op_p[j], ins_p[j], strand_length)
+        out.extend((i, drafts[i], op_p[j], ins_p[j], sizes[i]) for j, i in enumerate(chunk))
     return out
+
+
+def edits_from_probs(n: int, probs, strand_length: int, thresholds: dict | None = None):
+    """Apply the predicted edits to n clusters' drafts with the given thresholds."""
+    th = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
+    out: list[Strand | None] = [None] * n
+    for i, draft, op_p, ins_p, size in probs:
+        sub_t, ins_t = th["low"] if size <= th["low_max_reads"] else th["high"]
+        out[i] = apply_edits(draft, op_p, ins_p, strand_length, sub_t, ins_t)
+    return out
+
+
+def polish_clusters(
+    model: PolishNet,
+    clusters: Sequence[Cluster],
+    strand_length: int,
+    batch_size: int = 512,
+    device: torch.device | str | None = None,
+    thresholds: dict | None = None,
+) -> list[Strand | None]:
+    """Baseline draft plus learned corrections. None for clusters without any read."""
+    probs = predict_probs(model, clusters, strand_length, batch_size, device)
+    return edits_from_probs(len(clusters), probs, strand_length, thresholds)
 
 
 class PolishDecoder:
@@ -276,14 +317,22 @@ class PolishDecoder:
     name = "polish"
     main_process_only = True  # the CNN runs on one GPU; feature building is CPU work
 
-    def __init__(self, checkpoint_path: str | Path, device: str | None = None, batch_size: int = 512):
+    def __init__(
+        self,
+        checkpoint_path: str | Path,
+        device: str | None = None,
+        batch_size: int = 512,
+        thresholds: dict | None = None,
+    ):
         from .net import pick_device
 
         self.device = pick_device(device)
         self.model, ckpt = load_checkpoint(checkpoint_path, self.device)
         self.batch_size = batch_size
+        self.thresholds = thresholds or ckpt.get("thresholds") or DEFAULT_THRESHOLDS
         self.checkpoint_path = Path(checkpoint_path)
         self.checkpoint_info = {k: v for k, v in ckpt.items() if k in ("step", "metrics", "source")}
 
     def decode(self, clusters: Sequence[Cluster], strand_length: int) -> list[Strand | None]:
-        return polish_clusters(self.model, clusters, strand_length, self.batch_size, self.device)
+        return polish_clusters(self.model, clusters, strand_length, self.batch_size, self.device,
+                               self.thresholds)
