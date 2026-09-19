@@ -32,6 +32,7 @@ import torch
 import torch.nn.functional as F
 
 from .. import realdata
+from ..evaluate import evaluate
 from ..seeds import train_seed
 from ..types import Cluster, Strand
 from .data import (
@@ -74,15 +75,8 @@ def setup_logging(log_file: Path | None = None) -> None:
 def strand_accuracy(
     references: Sequence[Strand], decoded: Sequence[Strand | None], clusters: Sequence[Cluster]
 ) -> float:
-    """Strand accuracy from dnacodec.evaluate (the only official metric). Until Agent C lands
-    evaluate(), falls back to the plain exact-match fraction, which is what evaluate() defines
-    strand_accuracy to be."""
-    try:
-        from ..evaluate import evaluate
-
-        return float(evaluate(references, decoded, clusters).strand_accuracy)
-    except NotImplementedError:
-        return float(np.mean([d is not None and d == r for d, r in zip(decoded, references)]))
+    """Strand accuracy from dnacodec.evaluate, the only place metrics are computed."""
+    return float(evaluate(references, decoded, clusters).strand_accuracy)
 
 
 def coverage_accuracy(
@@ -103,7 +97,9 @@ def coverage_accuracy(
             idx = [i for i, r in enumerate(references) if len(r) == s]
             for i, d in zip(idx, predict(model, [cut[i] for i in idx], s, batch_size)):
                 decoded[i] = d
-        result[f"cov{k}"] = strand_accuracy(references, decoded, cut)
+        m = evaluate(references, decoded, cut)
+        result[f"cov{k}"] = float(m.strand_accuracy)
+        result[f"edit{k}"] = float(m.mean_edit_distance)
     result["mean"] = float(np.mean([result[f"cov{k}"] for k in coverages]))
     return result
 
@@ -211,6 +207,9 @@ def train(args: argparse.Namespace) -> Path:
     run_dir = Path(args.checkpoint_dir) / args.run_name
     setup_logging(run_dir / "train.log")
     device = pick_device(args.device)
+    if device.type == "cuda":
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
     log.info(f"run {args.run_name} on {device}, args {vars(args)}")
 
     # Data. Validation is carved from real TRAIN data and excluded from training.
@@ -277,8 +276,9 @@ def train(args: argparse.Namespace) -> Path:
         sel = float(np.mean([rec[f"val/{n}"]["mean"] for n in val])) if val else -train_loss
         rec["select"] = sel
         model.train()
-        parts = [f"{k} " + " ".join(f"{c}={v:.3f}" for c, v in d.items())
-                 for k, d in rec.items() if isinstance(d, dict)]
+        parts = [f"{name} acc(edit) " + " ".join(f"{c}r={d[f'cov{c}']:.3f}({d[f'edit{c}']:.2f})"
+                                                   for c in EVAL_COVERAGES) + f" mean={d['mean']:.3f}"
+                 for name, d in rec.items() if isinstance(d, dict)]
         log.info(f"eval step {step} ({time.time() - t:.0f}s): " + " | ".join(parts))
         metrics_file.write(json.dumps(rec) + "\n")
         metrics_file.flush()
@@ -338,7 +338,7 @@ def smoke(args: argparse.Namespace) -> float:
     t0 = time.time()
     steps = args.steps if args.steps_given else 3000
     ema = run_steps(model, batches, optimizer, steps, 2e-3, 100, log_every=100,
-                    on_step=lambda step, ema: ema < 0.01)
+                    on_step=lambda step, ema: ema < 0.02)
     minutes = (time.time() - t0) / 60
     save_checkpoint(run_dir / "smoke.pt", model, step=-1, source="smoke")
     from .decoder import TransformerDecoder
