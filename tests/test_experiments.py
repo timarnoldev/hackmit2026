@@ -23,10 +23,10 @@ from scripts.run_experiments import (
     accepted_by,
     build_summary,
     candidate_examples,
+    load_simulator_b,
     roc_auc,
-    use_simulator,
 )
-from scripts.run_loop import MockRiskModel, mock_components, mock_generate_strands
+from scripts.run_loop import MockRiskModel, mock_components, mock_generate_strands, mock_min_reads
 
 DATA = np.random.default_rng(11).bytes(2000)
 
@@ -131,19 +131,23 @@ def test_roc_auc_matches_pairwise_definition():
     assert math.isnan(roc_auc(np.ones(3), np.zeros(3, dtype=bool)))
 
 
-def test_use_simulator_patches_and_restores():
-    original = simulator.simulate
-    calls = []
+def test_sim_b_goes_through_the_simulator_argument(finished_run):
+    seen = []
+    comps = mock_components()
+    comps.mocked = ("risk",)  # pretend the trial runner is real, so Simulator B is attempted
+    inner = comps.recovery_trials
 
-    def fake(strands, profile, seed):
-        calls.append(seed)
-        return [[s] for s in strands]
+    def runner(*args, simulator=None, **kw):
+        seen.append(simulator)
+        return inner(*args, **kw)
 
-    with use_simulator(fake) as used:
-        assert not used()
-        out = simulator.simulate(["ACGT"], load_profile("nanopore_budget"), 3)
-        assert out == [["ACGT"]] and used() and calls == [3]
-    assert simulator.simulate is original
+    comps.recovery_trials = runner
+    comps.min_reads_at_target = mock_min_reads(runner)
+    summary = build_summary(finished_run, CORE, tiny_config(), comps, real_clusters=0, data=DATA)
+    sim_b = load_simulator_b()
+    assert sim_b is not None and sim_b in seen
+    assert simulator.simulate not in seen  # never patched, never passed explicitly
+    assert all(e.metric != "not_run" for e in summary.firewall if e.test == "sim_b")
 
 
 def test_candidate_examples_disagree_between_channels():

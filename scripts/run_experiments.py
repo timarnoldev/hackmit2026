@@ -27,18 +27,13 @@ import argparse
 import importlib
 import importlib.util
 import logging
-import multiprocessing
-import os
-import shutil
-import tempfile
-from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Callable, Iterator, Sequence
+from typing import Callable, Sequence
 
 import numpy as np
 
-from dnacodec.encoder import rule_scorer
+from dnacodec.encoder import encode, rule_scorer
 from dnacodec.evaluate import evaluate
 from dnacodec.loop import Components, LoopConfig, _evaluate_heldout, bits_per_base, decoder_spec, load_codecs
 from dnacodec.results import (
@@ -73,38 +68,7 @@ class Codec:
         self.name, self.settings, self.scorer = name, settings, scorer
 
 
-# ---------------------------------------------------------------- Simulator B routing
-
-
-@contextmanager
-def use_simulator(sim_fn: Callable) -> Iterator[Callable[[], bool]]:
-    """Route recovery_trials through another simulator by patching the module-level simulate.
-
-    recovery_trials has no simulator parameter (interface gap, reported to the architect), so
-    this patches dnacodec.simulator.simulate and dnacodec.evaluate.simulate. Every call of the
-    patched function touches a sentinel file, and the yielded check tells whether the trials
-    really went through sim_fn (they don't if workers were spawned fresh or a mock ran).
-    """
-    import dnacodec.evaluate as evaluate_mod
-    import dnacodec.simulator as simulator_mod
-
-    sentinel = Path(tempfile.mkdtemp(prefix="simb_"))
-
-    def patched(strands, profile, seed):
-        (sentinel / str(os.getpid())).touch()
-        return sim_fn(strands, profile, seed)
-
-    saved = {m: m.__dict__.get("simulate") for m in (simulator_mod, evaluate_mod)}
-    for mod in saved:
-        if "simulate" in mod.__dict__:
-            mod.simulate = patched
-    try:
-        yield lambda: any(sentinel.iterdir())
-    finally:
-        for mod, fn in saved.items():
-            if fn is not None:
-                mod.simulate = fn
-        shutil.rmtree(sentinel, ignore_errors=True)
+# ---------------------------------------------------------------- Simulator B
 
 
 def load_simulator_b() -> Callable | None:
@@ -267,7 +231,8 @@ def rule_audit(situation: str, run: RunResult, manifest: dict, data: bytes, conf
 
     def measure(settings: EncoderSettings) -> tuple[float | None, float]:
         reads = comps.min_reads_at_target(data, settings, None, decoder, run.profile, seeds,
-                                          config.target, config.coverages, config.workers)
+                                          config.target, config.coverages, config.workers,
+                                          encoded=encode(data, settings))
         return reads, bits_per_base(data, settings)
 
     toggles = []
@@ -441,15 +406,10 @@ def _comparison(s, test, d_m, d_r, t_m, t_r, note) -> list[FirewallEntry]:
 
 
 def _sim_b_comparison(s, sim_b, run, codec, decoder, data, config, comps) -> list[FirewallEntry]:
-    workers = config.workers if multiprocessing.get_start_method() == "fork" else 1
-    cfg = replace(config, workers=workers)
-    with use_simulator(sim_b) as used:
-        d_m, d_r = _evaluate_heldout(data, run.default_settings, None, decoder, run.profile, cfg, comps)
-        t_m, t_r = _evaluate_heldout(data, codec.settings, codec.scorer, decoder, run.profile, cfg, comps)
-        routed = used()
-    if not routed:
-        return [FirewallEntry(s, "sim_b", "not_run", 0.0,
-                              "trials did not go through Simulator B (mock trial runner or spawned workers)")]
+    if "trials" in comps.mocked:
+        return [FirewallEntry(s, "sim_b", "not_run", 0.0, "mock trial runner has no channel to swap")]
+    d_m, d_r = _evaluate_heldout(data, run.default_settings, None, decoder, run.profile, config, comps, sim_b)
+    t_m, t_r = _evaluate_heldout(data, codec.settings, codec.scorer, decoder, run.profile, config, comps, sim_b)
     return _comparison(s, "sim_b", d_m, d_r, t_m, t_r, "Simulator B, held-out seeds")
 
 

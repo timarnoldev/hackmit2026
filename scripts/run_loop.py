@@ -90,13 +90,20 @@ class MockTrialRunner:
         self._cache: dict = {}
         self.calls: list[tuple[EncoderSettings, list[int], str]] = []
 
-    def __call__(self, data, settings, scorer, decoder, profile, seeds, workers=None) -> Metrics:
+    def __call__(self, data, settings, scorer, decoder, profile, seeds, workers=None, *,
+                 simulator=None, encoded=None) -> Metrics:
+        """simulator= is ignored: the mock channel has nothing to swap."""
         seeds = list(seeds)
         self.calls.append((settings, seeds, profile.name))
-        key = (bytes(data[:32]), len(data), settings, id(scorer))
-        if key not in self._cache:
-            self._cache[key] = (encode(data, settings, scorer), scorer)
-        enc = self._cache[key][0]
+        if encoded is not None:
+            if encoded.meta.settings != settings or encoded.meta.n_bytes != len(data):
+                raise ValueError("encoded file does not match settings or data")  # same contract as evaluate
+            enc = encoded
+        else:
+            key = (bytes(data[:32]), len(data), settings, id(scorer))
+            if key not in self._cache:
+                self._cache[key] = (encode(data, settings, scorer), scorer)
+            enc = self._cache[key][0]
         n = len(enc.strands)
         difficulty = mock_strand_difficulty(enc.strands, profile)
         recovered = 0
@@ -133,9 +140,9 @@ class MockTrialRunner:
 def mock_min_reads(runner):
     """Stand-in for dnacodec.evaluate.min_reads_at_target built on a trial runner."""
 
-    def min_reads(data, settings, scorer, decoder, profile, seeds, target, coverages, workers=None):
+    def min_reads(data, settings, scorer, decoder, profile, seeds, target, coverages, workers=None, **kw):
         for c in sorted(coverages):
-            m = runner(data, settings, scorer, decoder, replace(profile, coverage_mean=float(c)), seeds, workers)
+            m = runner(data, settings, scorer, decoder, replace(profile, coverage_mean=float(c)), seeds, workers, **kw)
             if (m.recovery_rate or 0.0) >= target:
                 return float(c)
         return None

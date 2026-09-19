@@ -169,18 +169,24 @@ def _call_flexible(fn: Callable, **available: Any) -> Any:
     return fn(**kwargs)
 
 
-def _real_recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=None) -> Metrics:
+def _real_recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=None, **kw) -> Metrics:
+    """kw: simulator= (another channel, e.g. Simulator B) and encoded= (skip re-encoding)."""
     from .evaluate import recovery_trials
 
-    return recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=workers)
+    return recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=workers, **kw)
 
 
-def _real_min_reads(data, settings, scorer, decoder, profile, seeds, target, coverages, workers=None):
+def _real_min_reads(data, settings, scorer, decoder, profile, seeds, target, coverages, workers=None, **kw):
     from .evaluate import min_reads_at_target
 
     return min_reads_at_target(
-        data, settings, scorer, decoder, profile, seeds, target=target, coverages=coverages, workers=workers
+        data, settings, scorer, decoder, profile, seeds, target=target, coverages=coverages, workers=workers, **kw
     )
+
+
+def _options(simulator=None, encoded=None) -> dict:
+    """Only pass the keyword options that are set, so simple injected runners keep working."""
+    return {k: v for k, v in (("simulator", simulator), ("encoded", encoded)) if v is not None}
 
 
 def _real_generate_strands(n: int, length: int, seed: int) -> list[Strand]:
@@ -276,9 +282,10 @@ def default_adapt(
 class Components:
     """Everything the loop calls that another agent owns. None = the real implementation."""
 
-    # (data, settings, scorer, decoder, profile, seeds, workers) -> Metrics
+    # (data, settings, scorer, decoder, profile, seeds, workers, *, simulator=, encoded=) -> Metrics
     recovery_trials: Callable | None = None
-    # (data, settings, scorer, decoder, profile, seeds, target, coverages, workers) -> float | None
+    # (data, settings, scorer, decoder, profile, seeds, target, coverages, workers, *, simulator=, encoded=)
+    #   -> float | None
     min_reads_at_target: Callable | None = None
     # (n, length, seed) -> list[Strand]
     generate_strands: Callable | None = None
@@ -489,11 +496,18 @@ def search_settings(
     t0 = time.time()
     trials = 0
 
+    encoded_cache: dict[EncoderSettings, Any] = {}
+
     def run(settings: EncoderSettings, seeds: list[int]) -> Metrics:
+        """Trials on train seeds; each candidate is encoded once and reused (screen, re-check)."""
         nonlocal trials
         assert_train_seeds(seeds)
+        if settings not in encoded_cache:
+            encoded_cache.clear()  # candidates are visited one after another; keep memory flat
+            encoded_cache[settings] = encode(data, settings, scorer)  # ValueError if too strict
         trials += len(seeds)
-        return runner(data, settings, scorer, decoder, profile, seeds, config.workers)
+        return runner(data, settings, scorer, decoder, profile, seeds, config.workers,
+                      **_options(encoded=encoded_cache[settings]))
 
     allowed_misses = math.floor((1 - target) * len(screen_seeds) + 1e-9)
     first = min(len(screen_seeds), max(1, config.first_screen_batch, config.workers or 0))
@@ -533,6 +547,7 @@ def search_settings(
                 profile.name, bpb, len(level), len(passers), len(screen_seeds), time.time() - t0, trials,
             )
             for c in passers[: config.max_rechecks_per_level]:
+                encoded_cache.clear()
                 c.recheck = run(c.settings, list(recheck_seeds))
                 log.info("[%s]   re-check %s: %.3f", profile.name, describe(c.settings), c.recheck.recovery_rate)
                 if _meets(c.recheck, target):
@@ -675,12 +690,16 @@ def _evaluate_heldout(
     profile: SituationProfile,
     config: LoopConfig,
     comps: Components,
+    simulator: Callable | None = None,
 ) -> tuple[Metrics, float | None]:
-    """The one held-out evaluation of a codec: recovery at budget B plus min reads at target."""
+    """The one held-out evaluation of a codec: recovery at budget B plus min reads at target.
+
+    simulator: another channel (Simulator B for the firewall); None = the default simulator."""
     seeds = heldout_seeds(config.eval_trials)
-    metrics = comps.recovery_trials(data, settings, scorer, decoder, profile, seeds, config.workers)
+    opts = _options(simulator=simulator, encoded=encode(data, settings, scorer))
+    metrics = comps.recovery_trials(data, settings, scorer, decoder, profile, seeds, config.workers, **opts)
     min_reads = comps.min_reads_at_target(
-        data, settings, scorer, decoder, profile, seeds, config.target, config.coverages, config.workers
+        data, settings, scorer, decoder, profile, seeds, config.target, config.coverages, config.workers, **opts
     )
     return metrics, min_reads
 
