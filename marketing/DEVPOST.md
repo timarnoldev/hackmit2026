@@ -54,7 +54,7 @@ What we found: [RESULT: one or two sentences on the rule audit verdicts per chan
 ## Challenges we ran into
 
 - **Our first simulator was far too easy.** It matched the average error rates of real reads, yet the baseline decoder scored far higher on simulated reads than on real ones from 4 reads per strand up (see the calibration tables in `docs/ERRORS.md`). Matching averages isn't enough; the structure of the errors matters. Adding per-read quality spread, shared per-position errors and the context table closed the gap to within about 3 points.
-- **Noisy labels.** A strand can fail once by bad luck. Training on single outcomes taught the risk model noise, so we switched to failure rates over 32 simulations.
+- **Noisy labels.** A strand can fail once by bad luck, and training on single outcomes would teach the risk model noise. So every label is a failure rate over 32 simulations.
 - **Moving targets.** Training the decoder and the risk model at the same time gives the risk model stale labels. We alternate and freeze instead.
 - **Not fooling ourselves.** The loop could learn a quirk of our own simulator. That's why Simulator B and the real-read check exist, and why a gain that doesn't survive them gets reported as such.
 - **Biased data.** The Microsoft dataset's references are known not to be uniformly random, so we never learn risky motifs from them.
