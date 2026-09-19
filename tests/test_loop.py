@@ -48,6 +48,7 @@ def tiny_config(**kw) -> LoopConfig:
             gc_rule=(True,),
             risk_quantile=(None, 0.5),
             fallback_redundancy=(1.6,),
+            candidates_per_strand=(8,),
         ),
     )
     return replace(cfg, **kw)
@@ -328,10 +329,11 @@ def test_risk_thresholds_are_quantiles_of_candidates_passing_the_rules():
 
 def test_grid_candidates_turn_rules_off():
     grid = SearchGrid(redundancy=(0.2,), strand_length=(110,), max_homopolymer=(3, None), gc_rule=(True, False),
-                      risk_quantile=(None, 0.5))
+                      risk_quantile=(None, 0.5), candidates_per_strand=(8, 32))
     th = {(110, hp, gc, q): (None if q is None else 0.4) for hp in (3, None) for gc in (True, False) for q in (None, 0.5)}
     cands = grid_candidates(grid, EncoderSettings(), th)
-    assert len(cands) == 8
+    assert len(cands) == 16
+    assert {c.candidates_per_strand for c in cands} == {8, 32}
     assert any(c.max_homopolymer is None and c.gc_min is None and c.risk_threshold == 0.4 for c in cands)
 
 
@@ -398,10 +400,50 @@ def test_iterations_carry_stage_and_matched_density():
     assert [it.stage for it in out.iterations] == ["tier1", "alternation 0", "alternation 1"]
     for it in out.iterations:
         matched = loop.matched_default(EncoderSettings(), it.settings)
-        expected = comps.min_reads_at_target(DATA, matched, None, None, NANOPORE, heldout_seeds(tiny_config().eval_trials),
-                                             1.0, tiny_config().coverages)
+        expected = loop.min_reads_refined(DATA, matched, None, None, NANOPORE, heldout_seeds(tiny_config().eval_trials),
+                                          tiny_config(), comps)
         assert it.default_min_reads_matched == expected
         assert "min reads" not in it.notes.split("matched-density default")[-1]
     loaded = results.load_runs("t")[0]
     assert [it.stage for it in loaded.iterations] == [it.stage for it in out.iterations]
     assert [it.default_min_reads_matched for it in loaded.iterations] == [it.default_min_reads_matched for it in out.iterations]
+
+
+def test_min_reads_refined_tests_half_step_below():
+    calls = []
+
+    def min_reads(data, settings, scorer, decoder, profile, seeds, target, coverages, workers=None, **kw):
+        return 7.0
+
+    def runner(data, settings, scorer, decoder, profile, seeds, workers=None, **kw):
+        calls.append(profile.coverage_mean)
+        return fake_metrics(1.0 if profile.coverage_mean >= threshold else 0.0, len(seeds))
+
+    comps = Components(recovery_trials=runner, min_reads_at_target=min_reads).resolved()
+    cfg = tiny_config(coverages=(4, 6, 7, 8))
+    threshold = 6.5
+    assert loop.min_reads_refined(DATA, EncoderSettings(), None, None, NANOPORE, [1, 2], cfg, comps) == 6.5
+    threshold = 6.9
+    assert loop.min_reads_refined(DATA, EncoderSettings(), None, None, NANOPORE, [1, 2], cfg, comps) == 7.0
+    assert calls == [6.5, 6.5]
+    # Off, or when the half step would reach a grid point below that already failed.
+    assert loop.min_reads_refined(DATA, EncoderSettings(), None, None, NANOPORE, [1, 2],
+                                  replace(cfg, refine_half_step=False), comps) == 7.0
+    calls.clear()
+    assert loop.min_reads_refined(DATA, EncoderSettings(), None, None, NANOPORE, [1, 2],
+                                  replace(cfg, coverages=(6.5, 7)), comps) == 7.0
+    assert calls == []
+
+
+def test_tier1_ignores_candidate_grid_but_tier2_searches_it(monkeypatch):
+    real_search = loop.search_settings
+    seen = []
+
+    def spy(data, profile, scorer, decoder, candidates, *a, **kw):
+        seen.append({c.candidates_per_strand for c in candidates})
+        return real_search(data, profile, scorer, decoder, candidates, *a, **kw)
+
+    monkeypatch.setattr(loop, "search_settings", spy)
+    cfg = tiny_config(grid=replace(tiny_config().grid, redundancy=(1.0,), candidates_per_strand=(8, 32)))
+    run(max_iterations=1, config=cfg)
+    assert seen[0] == {8} and seen[1] == {8, 32}

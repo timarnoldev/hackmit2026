@@ -15,7 +15,7 @@ import dnacodec.simulator as simulator
 from dnacodec.encoder import max_run_length
 from dnacodec.loop import LoopConfig, SearchGrid, run_loop
 from dnacodec.profiles import load_profile
-from dnacodec.seeds import is_heldout
+from dnacodec.seeds import heldout_seeds, is_heldout
 from dnacodec.types import EncoderSettings
 from scripts.run_experiments import (
     CORE,
@@ -40,7 +40,8 @@ def tiny_config() -> LoopConfig:
         curve_coverages=(6,),
         curve_trials=2,
         grid=SearchGrid(redundancy=(0.1, 0.5, 1.0), strand_length=(110,), max_homopolymer=(3, None),
-                        gc_rule=(True,), risk_quantile=(None, 0.5), fallback_redundancy=(1.6,)),
+                        gc_rule=(True,), risk_quantile=(None, 0.5), fallback_redundancy=(1.6,),
+                        candidates_per_strand=(8,)),
     )
 
 
@@ -94,9 +95,22 @@ def test_summary_has_every_piece_of_evidence(finished_run):
     assert pairs == {(c, ch) for c in ("default", *CORE) for ch in CORE}
 
     tests = {(e.situation, e.test) for e in summary.firewall}
-    assert tests == {(s, t) for s in CORE for t in ("sim_a_heldout", "sim_b", "real")}
+    assert tests == {(s, t) for s in CORE for t in ("sim_a_heldout", "sim_b", "real", "tier2_direct")}
     sim_b = [e for e in summary.firewall if e.test == "sim_b"]
     assert all(e.metric == "not_run" and e.note for e in sim_b)  # mock runner / missing simulator_b
+
+    tier2 = [e for e in summary.firewall if e.test == "tier2_direct"]
+    for s in CORE:
+        names = {e.metric for e in tier2 if e.situation == s}
+        for m in ("strand_fail", "recovery"):
+            for part in ("rule", "risk", "diff"):
+                assert {f"{m}_{part}", f"{m}_{part}_ci_low", f"{m}_{part}_ci_high"} <= names
+        for e in tier2:
+            if e.metric.endswith("_diff") and e.situation == s:
+                lo = next(x.value for x in tier2 if x.situation == s and x.note == e.note and x.metric == e.metric + "_ci_low")
+                hi = next(x.value for x in tier2 if x.situation == s and x.note == e.note and x.metric == e.metric + "_ci_high")
+                assert lo - 1e-12 <= e.value <= hi + 1e-12
+    assert any("32 candidates" in e.note for e in tier2)
 
     assert summary.examples
     for ex in summary.examples:
@@ -114,7 +128,10 @@ def test_experiments_only_use_heldout_seeds(finished_run):
     calls = comps.recovery_trials.calls
     assert calls, "crossover must evaluate the away codecs"
     assert all(all(is_heldout(s) for s in seeds) for _, seeds, _ in calls)
-    assert all(len(seeds) == tiny_config().eval_trials for _, seeds, _ in calls)
+    # Full evaluations use all held-out seeds; the tier-2 measurement runs them one trial at a time.
+    assert all(len(seeds) in (tiny_config().eval_trials, 1) for _, seeds, _ in calls)
+    single = [seeds[0] for _, seeds, _ in calls if len(seeds) == 1]
+    assert set(single) == set(heldout_seeds(tiny_config().eval_trials))
 
 
 def test_roc_auc_matches_pairwise_definition():
@@ -189,7 +206,23 @@ def test_matched_verdict():
     from scripts.run_experiments import matched_verdict
 
     cov = (2, 4, 6, 8, 10)
+    assert matched_verdict(8.0, 7.5, cov) == "no measurable benefit"  # half steps map up to the grid
+    assert matched_verdict(8.0, 5.5, cov) == "tuned is better"
     assert matched_verdict(8.0, 6.0, cov) == "tuned is better"
     assert matched_verdict(6.0, 6.0, cov) == "no measurable benefit"
     assert matched_verdict(6.0, 8.0, cov) == "harmful"
     assert matched_verdict(None, 10.0, cov) == "tuned is better"
+
+
+def test_paired_bootstrap():
+    from scripts.run_experiments import paired_bootstrap
+
+    a = np.array([0.10, 0.12, 0.11, 0.09, 0.10] * 20)
+    b = a - 0.02
+    st = paired_bootstrap(a, b)
+    assert st["diff"][0] == pytest.approx(-0.02)
+    assert st["diff"][1] == pytest.approx(-0.02) and st["diff"][2] == pytest.approx(-0.02)  # perfectly paired
+    lo, hi = st["a"][1], st["a"][2]
+    assert lo < a.mean() < hi
+    noisy = paired_bootstrap(np.zeros(50), np.r_[np.ones(5), np.zeros(45)])
+    assert noisy["diff"][0] == pytest.approx(0.1) and noisy["diff"][1] < 0.1 < noisy["diff"][2]

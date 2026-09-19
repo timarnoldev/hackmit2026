@@ -93,6 +93,10 @@ class SearchGrid:
     risk_quantile: tuple[float | None, ...] = (None, 0.9, 0.75, 0.5)
     # Redundancies tried only if nothing in the grid meets the target.
     fallback_redundancy: tuple[float, ...] = (1.3, 1.6, 2.0)
+    # Candidates the scorer chooses from per strand. More candidates = more selection power at
+    # no density cost, only encoding time. The rule scorer doesn't rank, so the tier-1 (rules
+    # only) search always uses the default value.
+    candidates_per_strand: tuple[int, ...] = (8, 32)
 
 
 @dataclass(frozen=True)
@@ -113,6 +117,9 @@ class LoopConfig:
     curve_coverages: tuple[float, ...] = (2, 4, 6, 8, 10, 15, 20)
     curve_trials: int = 50  # held-out trials per coverage-curve point
     stop_when_converged: bool = True  # stop when decoder unchanged and settings repeat
+    # After the coverage grid finds the first passing coverage c, also test c - 0.5 (same seeds)
+    # and report it if it meets the target. Finer Pareto y values near the threshold.
+    refine_half_step: bool = True
     workers: int | None = None
     grid: SearchGrid = field(default_factory=SearchGrid)
     quick: bool = False
@@ -142,6 +149,7 @@ class LoopConfig:
                 gc_rule=(True,),
                 risk_quantile=(None, 0.75),
                 fallback_redundancy=(1.6,),
+                candidates_per_strand=(8, 32),
             ),
             quick=True,
         )
@@ -350,7 +358,7 @@ def describe(s: EncoderSettings) -> str:
     homo = f"hp<={s.max_homopolymer}" if s.max_homopolymer is not None else "hp off"
     gc = f"gc {s.gc_min}-{s.gc_max}" if s.gc_min is not None or s.gc_max is not None else "gc off"
     thr = f"thr {s.risk_threshold:.4g}" if s.risk_threshold is not None else "thr off"
-    return f"len {s.strand_length} red {s.redundancy:g} {homo} {gc} {thr}"
+    return f"len {s.strand_length} red {s.redundancy:g} {homo} {gc} {thr} cand {s.candidates_per_strand}"
 
 
 def _pool(parts: list[Metrics]) -> Metrics:
@@ -422,9 +430,11 @@ def grid_candidates(
                         if q is not None and thresholds.get((length, hp, gc_on, q)) is None:
                             continue
                         threshold = None if q is None else thresholds[(length, hp, gc_on, q)]
-                        s = replace(_rules(base, length, hp, gc_on), redundancy=float(r), risk_threshold=threshold)
-                        if s not in out:
-                            out.append(s)
+                        for k in grid.candidates_per_strand:
+                            s = replace(_rules(base, length, hp, gc_on), redundancy=float(r),
+                                        risk_threshold=threshold, candidates_per_strand=int(k))
+                            if s not in out:
+                                out.append(s)
     return out
 
 
@@ -698,10 +708,35 @@ def _evaluate_heldout(
     seeds = heldout_seeds(config.eval_trials)
     opts = _options(simulator=simulator, encoded=encode(data, settings, scorer))
     metrics = comps.recovery_trials(data, settings, scorer, decoder, profile, seeds, config.workers, **opts)
-    min_reads = comps.min_reads_at_target(
-        data, settings, scorer, decoder, profile, seeds, config.target, config.coverages, config.workers, **opts
-    )
+    min_reads = min_reads_refined(data, settings, scorer, decoder, profile, seeds, config, comps, **opts)
     return metrics, min_reads
+
+
+def min_reads_refined(
+    data: bytes,
+    settings: EncoderSettings,
+    scorer: Scorer | None,
+    decoder: Decoder,
+    profile: SituationProfile,
+    seeds: Sequence[int],
+    config: LoopConfig,
+    comps: Components,
+    **opts: Any,
+) -> float | None:
+    """min_reads_at_target on the coverage grid, then (config.refine_half_step) c - 0.5 on the
+    same seeds. Only reported when c - 0.5 lies above the previous grid point, so the answer is
+    never finer than half a read and never skips a grid point that already failed."""
+    c = comps.min_reads_at_target(data, settings, scorer, decoder, profile, seeds, config.target,
+                                  config.coverages, config.workers, **opts)
+    if c is None or not config.refine_half_step:
+        return c
+    lower = [g for g in sorted(config.coverages) if g < c]
+    half = c - 0.5
+    if half <= 0 or (lower and half <= lower[-1]):
+        return c
+    m = comps.recovery_trials(data, settings, scorer, decoder, replace(profile, coverage_mean=float(half)),
+                              seeds, config.workers, **opts)
+    return half if _meets(m, config.target) else c
 
 
 def matched_default(default_settings: EncoderSettings, chosen: EncoderSettings) -> EncoderSettings:
@@ -793,10 +828,9 @@ def run_loop(
         # PROJECT.md reading metric is "at matched bits per base": the default rules and scorer
         # at the chosen redundancy and strand length, same decoder, same held-out seeds.
         matched = matched_default(default_settings, chosen)
-        matched_reads = comps.min_reads_at_target(
-            data, matched, None, decoder_used, profile, heldout_seeds(config.eval_trials),
-            config.target, config.coverages, config.workers,
-        )
+        matched_reads = min_reads_refined(data, matched, None, decoder_used, profile,
+                                          heldout_seeds(config.eval_trials), config, comps,
+                                          encoded=encode(data, matched))
         kmers = [(str(k), float(r)) for k, r in scorer.top_kmers()] if hasattr(scorer, "top_kmers") else []
         rc = search.chosen_candidate.recheck
         notes = (
@@ -839,7 +873,8 @@ def run_loop(
 
     # Tier 1 (system C): audit rules and tune redundancy with the rule scorer only, B's decoder.
     # Same grid, seeds and decoder as the first alternation's search, minus the risk model.
-    rules_grid = replace(config.grid, risk_quantile=(None,))
+    rules_grid = replace(config.grid, risk_quantile=(None,),
+                         candidates_per_strand=(default_settings.candidates_per_strand,))
     search = search_settings(
         data, profile, None, decoder_b, grid_candidates(rules_grid, default_settings, {}), config,
         comps.recovery_trials, screen_seeds, recheck_seeds,
