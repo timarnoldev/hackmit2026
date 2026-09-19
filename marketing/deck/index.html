@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StrandAudit pitch</title>
+<meta name="description" content="StrandAudit pitch deck, HackMIT 2026. Measure the rule. Keep what pays.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23131B20'/%3E%3Crect x='8' y='26' width='9' height='20' rx='2' fill='%23A3A6FF'/%3E%3Crect x='21' y='26' width='9' height='20' rx='2' fill='%23FF86B0'/%3E%3Crect x='34' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='47' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='8' y='50' width='48' height='3' rx='1.5' fill='%23E6ECEA'/%3E%3Cpath d='M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5' fill='none' stroke='%23E6ECEA' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  /* set theme and motion before first paint, so nothing flashes */
+  (function () {
+    var p = new URLSearchParams(location.search), d = document.documentElement, t = null, m = null;
+    try { t = localStorage.getItem('sa-theme'); m = localStorage.getItem('sa-motion'); } catch (e) {}
+    t = p.get('theme') || t || 'dark';
+    m = p.get('motion') || m;
+    d.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+    var reduce = m ? m === 'off' : (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (reduce) d.classList.add('reduce-motion');
+    if (p.has('embed')) d.classList.add('embed');
+    if (p.has('sample')) d.classList.add('sample');
+  })();
+</script>
+<link rel="stylesheet" href="deck.css">
+</head>
+<body>
+<noscript><p style="padding:40px;font:20px sans-serif">This deck needs JavaScript. Open index.html in Chrome, Edge, Firefox or Safari.</p></noscript>
+
+<div class="viewport" id="viewport">
+<div class="stage" id="stage">
+
+<div class="sample-badge" aria-hidden="true">SAMPLE DATA</div>
+<div class="load-error" aria-hidden="true">results.js did not load. Every result shows as pending.</div>
+
+<!-- ================================================================ 1. Title -->
+<section class="slide no-foot" id="s-title" data-title="Title" data-plan="0-8">
+  <div class="hero">
+    <div class="brandrow enter" style="--d:0">
+      <span data-mark></span>
+      <h1 class="wordmark">StrandAudit</h1>
+    </div>
+    <p class="tagline enter" style="--d:0.15"><span>Measure the rule.</span> Keep what pays.</p>
+    <p class="oneliner enter" style="--d:0.3">We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.</p>
+    <div class="event enter" style="--d:0.45"><b>HackMIT 2026</b><span class="res" data-key="meta.team" data-fmt="text" data-ph="TEAM: names"></span></div>
+  </div>
+  <div class="ribbon" aria-hidden="true"><div class="ribbon-track"></div></div>
+  <aside class="notes">
+    <p>Don't read the slide. Open with the first line.</p>
+    <p>DNA can store data at extreme density, for centuries. But writing and reading it is noisy: letters get swapped, added or dropped, and whole strands disappear.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 2. Problem -->
+<section class="slide" id="s-problem" data-title="The problem" data-plan="8-28"
+  data-labels="Two channels that fail differently|Rulebook stamped onto Nanopore|Rulebook stamped onto Illumina|Bottom line">
+  <p class="kicker">The problem</p>
+  <h2 class="title">Rules chosen once, applied to every channel</h2>
+  <div class="cols">
+    <div class="rulebook card enter" style="--d:0.1">
+      <h3>The rulebook every pipeline copies</h3>
+      <div class="rule"><span class="ex"><span class="seq" data-seq="GGGG" data-static></span><span class="x">&times;</span></span><span class="txt">No run of more than 3 identical letters</span></div>
+      <div class="rule"><span class="ex"><span class="gcbar"><i></i></span><span class="gcbar-lab">GC</span></span><span class="txt">GC content between 40 and 60%</span></div>
+      <div class="rule"><span class="ex mono">+30%</span><span class="txt">Extra strands, on every channel, just in case</span></div>
+    </div>
+    <div class="channels">
+      <div class="chan card frag" data-f="1" id="chan-nano">
+        <h4>Nanopore</h4>
+        <p>Many insertions and deletions, especially in runs of the same letter</p>
+        <span class="seq" data-seq="ATG[-G]GTCA[+A]AAC" data-static></span>
+        <div class="stamp" data-f="2"><span class="big">Same rulebook</span><span class="small">run 3, GC 40 to 60%, +30%</span></div>
+      </div>
+      <div class="chan card frag" data-f="1" id="chan-illu">
+        <h4>Illumina</h4>
+        <p>Few errors, mostly single wrong letters</p>
+        <span class="seq" data-seq="ATGGGTC[A>G]AAC" data-static></span>
+        <div class="stamp" data-f="3"><span class="big">Same rulebook</span><span class="small">run 3, GC 40 to 60%, +30%</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="bottom frag" data-f="4">Each rule costs storage or reads. <span class="muted">Nobody measures whether it pays off.</span></p>
+  <aside class="notes">
+    <p>So every DNA storage pipeline follows a few hand-written rules. Never more than three of the same letter in a row. Keep GC content between 40 and 60%. Add 30% extra strands, just in case.</p>
+    <p><i class="cue"></i> They were chosen once, copied from paper to paper. And they go onto every machine. Nanopore adds and drops letters, especially in runs. Illumina mostly swaps single letters.</p>
+    <p><i class="cue"></i> Same rules on Nanopore. <i class="cue"></i> Same rules on Illumina.</p>
+    <p><i class="cue"></i> Each rule costs you storage or reads. Nobody measures whether they actually pay off.</p>
+    <p class="aside">Key word is "every". About 20 seconds.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 3. Pipeline -->
+<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="28-52"
+  data-labels="Bits become letters|Synthesis writes copies|Sequencing returns noisy reads|Decoder votes a consensus|Checksum marks a wrong strand missing|Fountain code rebuilds the file">
+  <p class="kicker">How DNA storage works</p>
+  <h2 class="title sm">From bits to strands, and back</h2>
+  <div class="canvas">
+    <div class="col">
+      <div class="colhead">Write</div>
+      <div class="step frag" data-f="1">
+        <div class="cap"><span class="stepno">1</span>Bits become letters</div>
+        <div class="bits">01001000 01101001 00100001<small>"Hi!"</small></div>
+        <svg class="arrow-d" viewBox="0 0 28 30" aria-hidden="true"><path d="M14 2v24M5 17l9 9 9-9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="strand-big"><span class="seq strandline" data-seq="CAGACGGCAGAC"></span></div>
+        <div class="map">2 bits per letter: <span class="seq" data-seq="A"></span> 00, <span class="seq" data-seq="C"></span> 01, <span class="seq" data-seq="G"></span> 10, <span class="seq" data-seq="T"></span> 11</div>
+      </div>
+      <div class="step frag" data-f="2">
+        <div class="cap"><span class="stepno">2</span>Synthesis writes many copies</div>
+        <div class="tube">
+          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
+          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
+          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
+          <span class="times">&times; many</span>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="colhead">Read</div>
+      <div class="step frag" data-f="3">
+        <div class="cap"><span class="stepno">3</span>Sequencing returns noisy reads</div>
+        <div class="reads">
+          <div class="scan" aria-hidden="true"></div>
+          <div class="read" style="--r:0"><span class="rl">read 1</span><span class="seq" data-seq="CAGA[C>T]GGCAGAC"></span></div>
+          <div class="read" style="--r:1"><span class="rl">read 2</span><span class="seq" data-seq="CAGACG[-G]CAGAC"></span></div>
+          <div class="read" style="--r:2"><span class="rl">read 3</span><span class="seq" data-seq="CAG[+T]ACGGCAGAC"></span></div>
+          <div class="read" style="--r:3"><span class="rl">read 4</span><span class="seq" data-seq="CAGACGGCA[G>A]AC"></span></div>
+          <div class="read" style="--r:4"><span class="rl">read 5</span><span class="seq" data-seq="C[-A]GACGGC[A>T]GAC"></span></div>
+        </div>
+        <div class="legend"><span><i class="l-sub"></i>wrong letter</span><span><i class="l-ins"></i>extra letter</span><span><i class="l-del"></i>missing letter</span></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="colhead">Recover</div>
+      <div class="step frag" data-f="4">
+        <div class="cap"><span class="stepno">4</span>The decoder votes a consensus</div>
+        <div class="consensus"><span class="seq strandline" data-seq="CAGACGGCAGAC"></span><span class="ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>matches</span></div>
+      </div>
+      <div class="step frag" data-f="5">
+        <div class="cap"><span class="stepno">5</span>A checksum turns a wrong strand into a missing one</div>
+        <div class="pool">
+          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="tile bad"><svg class="cross" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span class="miss">missing</span></span>
+          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </div>
+      </div>
+      <div class="step frag" data-f="6">
+        <div class="cap"><span class="stepno">6</span>The Fountain code rebuilds the file</div>
+        <div class="file"><span class="doc">Hi!</span><span class="say">Any large enough set of strands works. The file comes back <b>exactly</b>, or not at all.</span></div>
+      </div>
+    </div>
+    <svg class="flow-arrow fa1" style="left:506px" viewBox="0 0 44 44" aria-hidden="true"><path d="M6 22h30M26 12l10 10-10 10" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg class="flow-arrow fa2" style="left:1126px" viewBox="0 0 44 44" aria-hidden="true"><path d="M6 22h30M26 12l10 10-10 10" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <aside class="notes">
+    <p>Quick picture of how DNA storage works.</p>
+    <p><i class="cue"></i> Bits become letters, two bits per letter. <i class="cue"></i> Synthesis writes many copies of each strand.</p>
+    <p><i class="cue"></i> Sequencing reads them back noisy: wrong letters, extra letters, missing letters. Every read is different.</p>
+    <p><i class="cue"></i> The decoder takes the cluster of reads for one strand and votes a consensus.</p>
+    <p><i class="cue"></i> If the consensus is still wrong, a checksum catches it and marks the strand as missing.</p>
+    <p><i class="cue"></i> And the Fountain code rebuilds the file from whatever strands are left. It comes back exactly, or not at all.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 4. Where rules come in -->
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="52-65"
+  data-labels="Several candidates per slot|Rules reject some|A scorer keeps one|The knobs we measure">
+  <p class="kicker">Where the rules come in</p>
+  <h2 class="title sm">The encoder picks one of several candidate strands</h2>
+  <div class="layout">
+    <div>
+      <div class="src">One chunk of the file <span class="chip">slot 17</span> encoded with 8 different seeds <span style="font-size:21px">(shortened to 20 letters)</span></div>
+      <div class="cands" id="cands"></div>
+    </div>
+    <div class="side">
+      <div class="box card frag" data-f="3">
+        <h4>A scorer keeps one</h4>
+        <p>By default every candidate that passes the rules is equally good. In tier 2, a risk model ranks them.</p>
+      </div>
+      <div class="knobs frag" data-f="4">
+        <h4>The knobs StrandAudit measures</h4>
+        <ul><li>Which rules are on</li><li>How much redundancy</li><li>How candidates are scored</li></ul>
+        <div class="fix">Same encoder, same decoder. Fixed test: a 20 KB file must come back exactly in all 300 held-out trials.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>So where do the rules come in?</p>
+    <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
+    <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
+    <p><i class="cue"></i> A scorer keeps one. By default, any candidate that passes is as good as any other.</p>
+    <p><i class="cue"></i> We built StrandAudit to measure these knobs. One fixed test: a 20 KB file has to come back exactly in all 300 held-out trials. Same encoder, same decoder. The only things that change are the rules and the redundancy.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 5. Tier 1 -->
+<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="65-92"
+  data-labels="Switch each rule off and measure|Nanopore verdicts|Illumina verdicts|Same rule, different verdict">
+  <p class="kicker">Tier 1 <span class="tag">rule audit</span></p>
+  <h2 class="title">Does this rule pay off on this channel?</h2>
+  <p class="lede">Switch one rule off. Measure the reads per strand needed so the 20 KB file comes back in all 300 held-out trials. Same encoder, same decoder.</p>
+  <div class="table" id="audit-table"></div>
+  <div class="legend" id="audit-legend"></div>
+  <div class="callout frag" data-f="4" id="audit-callout"></div>
+  <aside class="notes">
+    <p>This is tier one, the rule audit.</p>
+    <p><i class="cue"></i> We switch each rule off, one at a time, and measure what it costs and what it buys at that recovery target.</p>
+    <p><i class="cue"></i> On Nanopore, the run-length rule <span class="res" data-say="auditNanopore"></span>.</p>
+    <p><i class="cue"></i> Same rule, on Illumina: it <span class="res" data-say="auditIllumina"></span>.</p>
+    <p><i class="cue"></i> <span class="res" data-say="auditContrast"></span>. That's the point: you only know once you measure it.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 6. Tier 2 -->
+<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="92-112"
+  data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
+  <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
+  <h2 class="title sm">Learn where the decoder fails, then steer around it</h2>
+  <div class="layout">
+    <div>
+      <div class="strandbox" id="t2-strandbox"></div>
+      <div class="risk frag" data-f="4">
+        <div class="model card"><b>Risk model:</b> a small CNN trained on where our decoder actually fails. It predicts each candidate's failure rate on this channel, and the encoder keeps the safest one. Picking among candidates costs no density.</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat card frag" data-f="3"><div class="n">45 to 66<small>%</small></div><div class="d">of the variation in the errors all Nanopore reads share is explained by the local 5-letter context</div></div>
+      <div class="stat card frag" data-f="3" style="transition-delay:0.15s"><div class="n">0.80 to 0.90</div><div class="d">AUC for predicting error hot spots from that context, on held-apart data</div></div>
+      <div class="stat card frag" data-f="3" style="transition-delay:0.3s"><div class="n">2 datasets</div><div class="d">Microsoft and DNAformer Nanopore reads, same context families lead in both</div></div>
+    </div>
+  </div>
+  <p class="foot-note frag fade" data-f="3">Shared errors are the ones more reads can't average away. The hand rules (run length, GC window) don't cover these contexts.</p>
+  <aside class="notes">
+    <p>Tier two goes beyond the hand rules.</p>
+    <p><i class="cue"></i> This strand passes every hand rule. No long runs, GC in the window.</p>
+    <p><i class="cue"></i> But on real Nanopore reads, some short contexts are hot spots. Substitutions around CGGG and CCCG, deletions right after CCCT.</p>
+    <p><i class="cue"></i> We measured it. The errors every read shares, the ones more reads can't fix, are 45 to 66% predictable from the local five-letter context. Hot spots with AUC 0.80 to 0.90. Two independent datasets.</p>
+    <p><i class="cue"></i> So a small CNN learns from where our decoder actually fails, and the encoder keeps the safest candidate. That costs no density at all.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 7. Loop -->
+<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="112-134" data-steps="4"
+  data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
+  <p class="kicker">The loop</p>
+  <h2 class="title sm">Alternate and freeze, then judge on the Pareto plot</h2>
+  <div class="layout">
+    <div class="cycle" id="cycle"></div>
+    <div class="plot" id="pareto"></div>
+  </div>
+  <aside class="notes">
+    <p>It runs as a loop.</p>
+    <p><i class="cue"></i> Adapt the decoder to the channel and freeze it. Label strands by simulating each one 32 times. Train the risk model on those labels. Search the settings. Re-adapt the decoder. Alternate and freeze, so nothing learns from a moving target.</p>
+    <p><i class="cue"></i> Here's the default codec. Down is fewer reads, right is more bits per base.</p>
+    <p><i class="cue"></i> And each round of tuning.</p>
+    <p><i class="cue"></i> Against the default rules at the same bits per base: <span class="res" data-say="pareto"></span>.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 8. Evidence: ablation and crossover -->
+<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="134-152"
+  data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
+  <p class="kicker">Evidence we don't fake</p>
+  <h2 class="title sm">Where the gain comes from, and where it holds</h2>
+  <div class="layout">
+    <div class="ladder-wrap">
+      <h3>Ablation ladder</h3>
+      <p class="sub" id="ablation-sub">Reads per strand needed at the recovery target, lower is better</p>
+      <div class="ladder" id="ladder"></div>
+    </div>
+    <div class="xwrap">
+      <h3>Crossover matrix</h3>
+      <p class="sub">Each tuned codec on its own channel and on the other. Reads per strand needed, lower is better.</p>
+      <div class="xm" id="xm"></div>
+    </div>
+  </div>
+  <p class="takeaway frag" data-f="4"><span class="res" data-say="crossover"></span></p>
+  <aside class="notes">
+    <p>How do we know where a gain comes from?</p>
+    <p><i class="cue"></i> The ablation ladder. The default we compare against is B, which already uses the same decoder.</p>
+    <p><i class="cue"></i> B to C is the rule audit, tier one. C to D is learned selection, tier two. A to B is the decoder, and we don't claim that.</p>
+    <p><i class="cue"></i> And how do we know the codec is tuned, and not just better? We swap them. The Nanopore codec runs on Illumina and the other way round.</p>
+    <p><i class="cue"></i> <span class="res" data-say="crossover"></span>.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 9. Evidence: simulator -->
+<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="152-166"
+  data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
+  <p class="kicker">Evidence we don't fake</p>
+  <h2 class="title sm">No wet lab, so the simulator is checked against real reads</h2>
+  <div class="layout">
+    <div>
+      <div class="calchart" id="calchart"></div>
+      <div class="frag" data-f="2">
+        <table>
+          <thead><tr><th>Reads per strand</th><th>2</th><th>4</th><th>6</th><th>10</th><th>16</th></tr></thead>
+          <tbody>
+            <tr><td>Real, held-out</td><td>4.9%</td><td>39.8%</td><td>66.5%</td><td>84.5%</td><td>90.1%</td></tr>
+            <tr><td class="audit">Simulator A</td><td>3.6%</td><td>40.3%</td><td>63.7%</td><td>83.0%</td><td>90.3%</td></tr>
+            <tr><td>Difference, points</td><td class="diff">&minus;1.3</td><td class="diff">+0.5</td><td class="diff">&minus;2.8</td><td class="diff">&minus;1.5</td><td class="diff">+0.3</td></tr>
+          </tbody>
+        </table>
+        <p class="src">Exact strands, majority vote baseline, Microsoft Nanopore held-out split (1,996 clusters no calibration step touched).</p>
+      </div>
+    </div>
+    <div class="fw" id="firewall"></div>
+  </div>
+  <aside class="notes">
+    <p>We have no wet lab, so we built the evidence to catch us out.</p>
+    <p><i class="cue"></i> Our simulator is calibrated on real Nanopore and Illumina reads. Here it is against real held-out reads: the decoder's accuracy at every read count.</p>
+    <p><i class="cue"></i> Within about 3 points everywhere, and where it's off, it's slightly harder than reality.</p>
+    <p><i class="cue"></i> And every gain has to survive a second, structurally different simulator, and a check on real reads. <span class="res" data-say="firewall"></span></p>
+  </aside>
+</section>
+
+<!-- ================================================================ 10. Results and close -->
+<section class="slide" id="s-results" data-title="Results and close" data-plan="166-180" data-steps="2"
+  data-labels="Headline results|Close: tagline, team, repo">
+  <p class="kicker">Results</p>
+  <h2 class="title sm">What the audit measured</h2>
+  <div class="grid" id="results-grid"></div>
+  <div class="close">
+    <span data-mark></span>
+    <div>
+      <div class="tl"><span>Measure the rule.</span> Keep what pays.</div>
+      <div class="honest">If the hand rules are already right on a channel, that's the answer. Now it's measured.</div>
+      <div class="who">
+        <span class="team"><span class="res" data-key="meta.team" data-fmt="text" data-ph="TEAM: names"></span></span>
+        <span>HackMIT 2026</span>
+        <span class="repo">github.com/timarnoldev/hackmit2026</span>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p><i class="cue"></i> On Nanopore: <span class="res" data-say="headlineNanopore"></span>. On Illumina: <span class="res" data-say="headlineIllumina"></span>. The image at 6 reads per strand: <span class="res" data-say="imageDemo"></span>.</p>
+    <p><i class="cue"></i> And if on some channel the answer is "the hand rules are already right", that's a result too. Now it's measured instead of assumed.</p>
+    <p>StrandAudit. Measure the rule. Keep what pays.</p>
+    <p class="aside">Say the tagline, then stop talking.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ Appendix -->
+<section class="slide appx" id="a-sim" data-appendix data-title="Appendix: the channel simulator">
+  <p class="kicker">Appendix <span class="tag">A1</span></p>
+  <h2 class="title sm">The channel simulator, step by step</h2>
+  <div class="layout two">
+    <div class="box card">
+      <h3>What happens to each strand</h3>
+      <div class="chain">
+        <div class="cs"><span class="stepno">1</span><div><b>Survives at all?</b> <span>Dropout, higher for unbalanced GC and long storage.</span></div></div>
+        <div class="cs"><span class="stepno">2</span><div><b>How many reads?</b> <span>Negative binomial around the read budget, so some strands get very few.</span></div></div>
+        <div class="cs"><span class="stepno">3</span><div><b>Shared errors</b> <span>Drawn once per strand and position, the same for every read. More reads can't average them away.</span></div></div>
+        <div class="cs"><span class="stepno">4</span><div><b>Each read</b> <span>A read quality factor, optional malformed reads, then each base is deleted, preceded by an insertion, substituted, or copied.</span></div></div>
+      </div>
+      <p style="margin-top:18px">About 250,000 reads per second on a laptop. The same seed always gives the same reads.</p>
+    </div>
+    <div>
+      <div class="formula">p(error at i) = base rate
+  &times; run multiplier   <span class="c">deletions grow with run length</span>
+  &times; position ramp    <span class="c">worse toward the end</span>
+  &times; context factor   <span class="c">5 letters centered on i</span>
+  &times; shared factor    <span class="c">per strand and position</span>
+  &times; read quality     <span class="c">per read</span></div>
+      <div class="box card" style="margin-top:22px">
+        <h3>Fit on real train reads</h3>
+        <p><b>nanopore_budget</b>, fit on Microsoft train reads: substitutions 1.52%, insertions 1.89%, deletions 2.20% per base, end of strand 1.2 times the start.</p>
+        <p><b>illumina_standard</b>, fit on DNAformer Illumina train reads. Errors there are about 100 times rarer and show no context effect worth a table.</p>
+        <p><b>Simulator B</b> builds the same channel from different mechanisms (bursty errors, damaged segments, a context table fit on DNAformer) and is never used for optimization.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><p>Backup only. Point at the formula: every factor is fit on real train reads, and the shared factor is why the first simulator was 15 points too easy at 6 reads.</p></aside>
+</section>
+
+<section class="slide appx" id="a-models" data-appendix data-title="Appendix: the two AI models">
+  <p class="kicker">Appendix <span class="tag">A2</span></p>
+  <h2 class="title sm">Exactly two learned models</h2>
+  <div class="layout two">
+    <div class="box card">
+      <h3>Transformer decoder</h3>
+      <dl class="io">
+        <dt>Question</dt><dd>What was the original strand?</dd>
+        <dt>Input</dt><dd>Up to 16 noisy reads of one strand</dd>
+        <dt>Output</dt><dd>One strand of exactly the strand length, the most likely letter per position</dd>
+      </dl>
+      <p>Encoder over each read, then one learned query per output position attends to every read. Base size 9.6M parameters. Pretrained on simulated clusters, fine-tuned on 70% real clusters, then per channel.</p>
+      <p>It never says "not sure". Wrong guesses are caught by the per-strand checksum. Versus the baseline on real held-out data: <span class="res" data-key="qa.transformerVsBaseline" data-fmt="text" data-ph="RESULT: transformer vs majority vote at 2, 4 and 6 reads"></span></p>
+    </div>
+    <div class="box card">
+      <h3>Risk model</h3>
+      <dl class="io">
+        <dt>Question</dt><dd>How likely is this strand to be decoded wrongly on this channel?</dd>
+        <dt>Input</dt><dd>Candidate strands</dd>
+        <dt>Output</dt><dd>One number in [0, 1] per strand: the predicted failure rate</dd>
+      </dl>
+      <p>1D CNN over the letters. Labels: each training strand is simulated 32 times at the channel's read budget and decoded by the frozen decoder. Label = the fraction decoded wrongly.</p>
+      <p>Specific to one channel, one read budget and one decoder. Ranking on real held-out reads: <span class="res" data-key="qa.riskModelRealAuc" data-fmt="text" data-ph="RESULT: real-read AUC of the retrained risk model"></span></p>
+    </div>
+  </div>
+  <aside class="notes"><p>Backup only. Both models plug into shared interfaces, so either can be swapped for the classic alternative: majority vote, or the rule scorer.</p></aside>
+</section>
+
+<section class="slide appx" id="a-gx10" data-appendix data-title="Appendix: the GX10 setup">
+  <p class="kicker">Appendix <span class="tag">A3</span></p>
+  <h2 class="title sm">Everything heavy runs on one ASUS Ascent GX10</h2>
+  <div class="layout two">
+    <div class="box card">
+      <h3>The machine</h3>
+      <ul>
+        <li><b>NVIDIA GB10</b>, ARM64</li>
+        <li><b>128 GB</b> unified memory</li>
+        <li><b>20</b> CPU cores</li>
+      </ul>
+      <p style="margin-top:18px">One script runs the loops, then the experiments and the decoder benchmark, one after the other.</p>
+      <p>The code: about 11,000 lines of Python, about 2,500 of them tests.</p>
+    </div>
+    <div class="box card">
+      <h3>What it runs</h3>
+      <ul>
+        <li><b>Decoder training.</b> Pretrain on simulated clusters, fine-tune on real and simulated, adapt per channel.</li>
+        <li><b>Risk labels.</b> Every training strand simulated 32 times at the read budget and decoded.</li>
+        <li><b>Recovery trials.</b> 300 held-out trials of the 20 KB file per final codec, spread across the 20 cores.</li>
+        <li><b>The loop and the evidence.</b> Rule audit, ablation ladder, crossover matrix, firewall.</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes"><p>Backup for "what did the GX10 do". The GPU trains the decoder and runs decoding in large batches; the CPU cores run encoding, simulation and recovery trials in parallel.</p></aside>
+</section>
+
+<section class="slide appx" id="a-qa1" data-appendix data-title="Appendix: judge questions 1">
+  <p class="kicker">Appendix <span class="tag">A4</span></p>
+  <h2 class="title sm">Questions we expect</h2>
+  <div class="layout qa">
+    <div class="card"><p class="q">You have no wet lab. How do you know it's real?</p><p class="a">We don't synthesize or sequence anything. The simulator matches real held-out reads within about 3 points at every read count. Every gain must survive Simulator B, and the risk model's ranking is checked on real reads: <span class="res" data-key="qa.riskModelRealAuc" data-fmt="text" data-ph="RESULT: real-read AUC"></span></p></div>
+    <div class="card"><p class="q">Isn't this just DNA Fountain?</p><p class="a">The encoder is DNA Fountain style on purpose. We change how it's configured: which rules, how much redundancy, which candidate to keep, per channel. We don't claim a better encoder.</p></div>
+    <div class="card"><p class="q">What if the hand rules are already optimal?</p><p class="a">Then the tool says so, with measurements, and that's useful. The audit is a measurement, not a bet against the rules. <span class="res" data-key="qa.handRulesOptimalOn" data-fmt="text" data-ph="RESULT: channels where the hand rules held, if any"></span></p></div>
+    <div class="card"><p class="q">Isn't the improvement just your transformer?</p><p class="a">No. The default, system B, already uses the same decoder. B to C isolates the rule audit, C to D learned selection. A to B is the decoder, which DNAformer already showed. Both tiers also work with majority vote.</p></div>
+  </div>
+  <aside class="notes"><p>Answer in one or two sentences, then stop.</p></aside>
+</section>
+
+<section class="slide appx" id="a-qa2" data-appendix data-title="Appendix: judge questions 2">
+  <p class="kicker">Appendix <span class="tag">A5</span></p>
+  <h2 class="title sm">Questions we expect</h2>
+  <div class="layout qa">
+    <div class="card"><p class="q">Couldn't you buy accuracy with more redundancy?</p><p class="a">That's what we rule out. Codecs are judged on the Pareto front of bits per base against reads per strand, at a fixed recovery target.</p></div>
+    <div class="card"><p class="q">How is this different from DNAformer or adaptive constrained coding?</p><p class="a">Those optimize the decoder, the constraints or the redundancy on their own. We close the loop: the decoder's failures on a channel decide what the encoder avoids, measured against a fixed target.</p></div>
+    <div class="card"><p class="q">Why not learn the encoder end to end?</p><p class="a">Insertions and deletions are hard to differentiate through, and storage needs every bit back. The Fountain code guarantees exact recovery; learning only picks which candidates to use.</p></div>
+    <div class="card"><p class="q">What has the risk model actually learned?</p><p class="a">The first version rediscovered the run-length rule, and its real-read ranking was weak. So we measured real context errors and put them into the simulator. <span class="res" data-key="qa.riskTopPatterns" data-fmt="text" data-ph="RESULT: top patterns avoided per channel"></span></p></div>
+  </div>
+  <aside class="notes"><p>Answer in one or two sentences, then stop.</p></aside>
+</section>
+
+<section class="slide appx" id="a-qa3" data-appendix data-title="Appendix: judge questions 3">
+  <p class="kicker">Appendix <span class="tag">A6</span></p>
+  <h2 class="title sm">Questions we expect</h2>
+  <div class="layout qa">
+    <div class="card"><p class="q">The Microsoft dataset has known issues. Does that matter?</p><p class="a">Yes, and we handle it. Its references aren't uniformly random, so we use it for calibration and benchmarks, never to learn risky motifs. Simulator B uses a context table fit on DNAformer.</p></div>
+    <div class="card"><p class="q">Is the transformer better than the baseline?</p><p class="a"><span class="res" data-key="qa.transformerVsBaseline" data-fmt="text" data-ph="RESULT: transformer vs majority vote at 2, 4 and 6 reads"></span> The baseline already gets 90.6% exact strands at 16 reads on real held-out data. If the transformer doesn't beat it, everything runs on the baseline and both claims still stand.</p></div>
+    <div class="card"><p class="q">What would a real user do with this?</p><p class="a">Describe their channel as a profile, calibrate it on a sample of their own reads, and let the tool say which rules and how much redundancy to use. Cost figures use placeholder prices.</p></div>
+    <div class="card"><p class="q">What did the GX10 do?</p><p class="a">Decoder training, risk labels (each strand simulated 32 times and decoded), and 300 held-out recovery trials per final codec, spread across its 20 cores. See A3.</p></div>
+  </div>
+  <aside class="notes"><p>Answer in one or two sentences, then stop.</p></aside>
+</section>
+
+</div><!-- /stage -->
+</div><!-- /viewport -->
+
+<div class="progress" id="progress"></div>
+<div class="blackout" id="blackout"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="overlay" id="help" role="dialog" aria-label="Keyboard shortcuts"></div>
+<div id="presenter" aria-label="Presenter view"></div>
+
+<script src="slides.js"></script>
+<script src="deck.js"></script>
+</body>
+</html>
