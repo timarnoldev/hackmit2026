@@ -4,7 +4,7 @@ Read `PROJECT.md` for the idea. This file is the rules you work under.
 
 ## What we are building
 
-Decoder failures tell the encoder what to avoid, separately per channel. For each situation (profile), an alternating loop adapts and freezes the decoder, labels strands by their failure rate over K simulations, trains a risk model on those labels, grid-searches encoder settings with the risk-scored encoder, and re-adapts the decoder. The claim is narrow: at a fixed recovery target, the tailored codec needs fewer reads per strand or carries less redundancy than the default **with the same decoder** (ablation B vs C). PROJECT.md is the source of truth for the objective, the evidence (ablation ladder, crossover matrix, sim-to-real firewall) and the claims.
+A tool that measures whether each DNA coding rule pays off on a given channel, and tunes the codec accordingly (tier 1: rule audit), then learns from decoder failures what to avoid beyond the hand rules (tier 2: learned selection). Decoder failures tell the encoder what to avoid, separately per channel. For each situation (profile), an alternating loop adapts and freezes the decoder, labels strands by their failure rate over K simulations, trains a risk model on those labels, grid-searches encoder settings with the risk-scored encoder, and re-adapts the decoder. The claim is narrow: at a fixed recovery target, the tailored codec needs fewer reads per strand or carries less redundancy than the default **with the same decoder** (ablation B vs C). PROJECT.md is the source of truth for the objective, the evidence (ablation ladder, crossover matrix, sim-to-real firewall) and the claims.
 
 Core situations: `nanopore_budget` and `illumina_standard`. `illumina_archive_100y` is stretch only.
 
@@ -102,9 +102,10 @@ Done (merged). Recovery tolerates losing up to 1 − 1/(1 + redundancy) of stran
 Done when it beats the baseline on the Microsoft held-out split at low coverage and a checkpoint loads through `TransformerDecoder`.
 
 **Agent E, dashboard.** Streamlit app in `dashboard/app.py`, built on `results/mock/` (run `uv run python -m scripts.make_mock_results`). Reads `load_runs()` and `load_summary()`. Views, in priority order:
+1. **Rule audit** (main view, from `summary.rule_audit`): per channel, every rule with its verdict and measured cost and benefit.
 1. **Pareto plot** (main view): bits per base on x, reads per strand needed on y; default point plus one point per alternation, one panel per channel.
 2. Crossover matrix, colored.
-3. Ablation ladder A to D as bars, baseline always visible.
+3. Ablation ladder A to E as bars, baseline always visible.
 4. What the encoder learned: risky patterns per channel side by side, plus accepted and rejected candidate examples.
 5. Per-position error heatmap, accuracy vs coverage, cost per MB labeled as placeholder prices.
 Done when it renders every run in `results/` and shows a MOCK banner for mock data.
@@ -117,5 +118,5 @@ Done when ROC AUC of predicted risk vs actual failure on held-out simulated stra
 
 **Agent G, loop and experiments.** `run_loop()` in `dnacodec/loop.py` plus `scripts/run_loop.py --profile NAME --run-id ID`:
 - Alternate and freeze, per PROJECT.md: adapt decoder and freeze, label, train risk model, grid search (redundancy, strand length, which hard constraints are on, risk threshold) keeping the cheapest setting meeting the target on train seeds, re-adapt decoder. At most three alternations. Save a RunResult after every alternation.
-- `scripts/run_experiments.py`: ablation ladder A to D, crossover matrix, firewall (Simulator B, real risk AUC), candidate examples, saved via `save_summary`.
+- `scripts/run_experiments.py`: rule audit (each rule toggled from the default codec with the same decoder, plus default vs tuned redundancy, verdict per rule and channel, as `RuleAuditEntry`), ablation ladder A to E (see `AblationEntry` docstring: C = audited rules and tuned redundancy with the rule scorer only, D = C plus the learned risk scorer), crossover matrix, firewall (Simulator B, real risk AUC), candidate examples, saved via `save_summary`.
 Done when both core situations run end to end with the baseline decoder, then with the transformer.
