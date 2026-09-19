@@ -29,6 +29,7 @@ from .types import (
 )
 
 BITS_PER_MB = 8e6  # 1 MB = 10^6 bytes
+GATHER_CHUNK_TRIALS = 50  # trials per decode() call for main_process_only decoders
 
 
 def evaluate(
@@ -126,6 +127,8 @@ def recovery_trials(
     profile: SituationProfile,
     seeds: Sequence[int],
     workers: int | None = None,
+    *,
+    gather_chunk_trials: int = GATHER_CHUNK_TRIALS,
 ) -> Metrics:
     """File recovery over independent channel trials. Owner: Agent C.
 
@@ -143,15 +146,18 @@ def recovery_trials(
       pooled count; extra["n_strand_decodes"] holds the pooled count.
     - Pooled strand metrics: every (trial, strand) pair is one row in evaluate().
     - CPU decoders are pickled to the worker processes once and each trial runs fully in a
-      worker. Decoders with main_process_only=True (GPU) stay in this process: all trials are
-      simulated in workers, their clusters concatenated and decoded with ONE decode() call
-      here, then split per trial and recovered in workers. Memory: all trials' clusters are
-      held at once (roughly n_trials * n_strands * coverage reads).
+      worker. Decoders with main_process_only=True (GPU) stay in this process: trials go in
+      chunks of gather_chunk_trials; each chunk is simulated in workers, its clusters
+      concatenated and decoded with one decode() call here, then split per trial and
+      recovered in workers. Memory: one chunk's clusters are held at a time.
+      Results are identical to the per-trial path for any chunk size.
     - Workers use the platform's default multiprocessing start method; with spawn (macOS)
       the calling script needs an `if __name__ == "__main__":` guard.
     """
     encoded = encode(data, settings, scorer)
-    with _TrialRunner(encoded, data, decoder, workers, len(seeds)) as runner:
+    with _TrialRunner(
+        encoded, data, decoder, workers, len(seeds), gather_chunk_trials
+    ) as runner:
         return runner.run(profile, seeds)
 
 
@@ -165,6 +171,8 @@ def min_reads_at_target(
     target: float = 1.0,
     coverages: Sequence[float] = (2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16),
     workers: int | None = None,
+    *,
+    gather_chunk_trials: int = GATHER_CHUNK_TRIALS,
 ) -> float | None:
     """Fewest mean reads per strand at which recovery_rate >= target. Owner: Agent C.
 
@@ -178,9 +186,9 @@ def min_reads_at_target(
     - Per coverage, trials stop as soon as the failures (counted in seed order) make the
       target unreachable, so the answer is identical to running every trial, serial or
       parallel. A coverage that meets the target always ran all len(seeds) trials.
-    - main_process_only decoders: every trial of a coverage is simulated and decoded in one
-      batch, then the same early-exit cut is applied in seed order, so the returned value and
-      Metrics match the per-trial path; the early exit saves no decoding there.
+    - main_process_only decoders: trials are decoded in chunks of gather_chunk_trials and
+      the early-exit check runs in seed order, so no further chunk is decoded once the target
+      is unreachable. The answer matches the per-trial path for any chunk size.
     - coverage_mean is the mean reads per surviving strand (profile semantics); dropouts
       come on top of that.
     """
@@ -190,7 +198,9 @@ def min_reads_at_target(
         raise ValueError("no seeds")
     max_failures = math.floor((1.0 - target) * len(seeds) + 1e-9)
     encoded = encode(data, settings, scorer)
-    with _TrialRunner(encoded, data, decoder, workers, len(seeds)) as runner:
+    with _TrialRunner(
+        encoded, data, decoder, workers, len(seeds), gather_chunk_trials
+    ) as runner:
         for c in sorted(coverages):
             m = runner.run(dataclasses.replace(profile, coverage_mean=float(c)), seeds, max_failures)
             failures = m.n_trials - round(m.recovery_rate * m.n_trials)
@@ -269,8 +279,17 @@ class _TrialRunner:
     """Runs trials for one encoded file, serially or on a process pool kept across calls."""
 
     def __init__(
-        self, encoded: EncodedFile, data: bytes, decoder: Decoder, workers: int | None, n_tasks: int
+        self,
+        encoded: EncodedFile,
+        data: bytes,
+        decoder: Decoder,
+        workers: int | None,
+        n_tasks: int,
+        gather_chunk_trials: int = GATHER_CHUNK_TRIALS,
     ) -> None:
+        if gather_chunk_trials < 1:
+            raise ValueError(f"gather_chunk_trials={gather_chunk_trials} must be >= 1")
+        self.chunk = gather_chunk_trials
         self.encoded = encoded
         self.state = (list(encoded.strands), encoded.meta, bytes(data), decoder)
         self.gather = _is_main_process_only(decoder)
@@ -306,10 +325,16 @@ class _TrialRunner:
                 f.cancel()
 
     def _gathered_results(self, profile: SituationProfile, seeds: Sequence[int]):
-        """main_process_only decoders: simulate every trial in workers, decode all trials'
-        clusters with ONE decode() call here, split per trial, recover in workers.
-        Same per-trial results as the per-trial path for a decoder that is deterministic
-        per cluster. Every trial runs; early exit is applied afterwards by run()."""
+        """main_process_only decoders, lazily per chunk of trials: simulate the chunk in
+        workers, decode its clusters with ONE decode() call here, split per trial, recover
+        in workers. Same per-trial results as the per-trial path for a decoder that is
+        deterministic per cluster. The next chunk is only computed when run() asks for it,
+        so an early exit skips the remaining chunks."""
+        seeds = list(seeds)
+        for start in range(0, len(seeds), self.chunk):
+            yield from self._gather_chunk(profile, seeds[start : start + self.chunk])
+
+    def _gather_chunk(self, profile: SituationProfile, seeds: Sequence[int]) -> list:
         strands, meta, data, decoder = self.state
         if self.pool is None:
             per_trial = [simulate(strands, profile, s) for s in seeds]
