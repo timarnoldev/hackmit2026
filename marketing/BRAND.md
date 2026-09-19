@@ -1,4 +1,4 @@
-# StrandAudit brand
+# Erbgut brand
 
 The identity for our HackMIT 2026 project. The repository is still called **Adaptive DNA Codec**; that name stays valid as the technical descriptor.
 
@@ -8,27 +8,32 @@ The identity for our HackMIT 2026 project. The repository is still called **Adap
 
 ## 1. Name
 
-### Candidates
+**Erbgut**, chosen by the team. German for the genetic material an organism inherits and passes on, literally "inheritance goods". It carries the two things the project is about: DNA, and something valuable that has to survive being handed down.
 
-| Name | Rationale | Watch out for |
-|---|---|---|
-| **StrandAudit** (recommended) | Says exactly what the tool's main output is: an audit, strand rules checked one by one, per channel. "Audit" implies evidence and a verdict, which is our whole tone. Easy to say in a pitch, easy to spell after hearing it once. | A bioinformatics company, Strand Life Sciences, uses "Strand" in its product names. No product called StrandAudit turned up in a web search. |
-| **Adaptive DNA Codec** | The current repo name. Descriptive and safe for a paper or poster. | Sounds like we built a new codec, which invites the wrong question ("does it beat DNA Fountain?"). Our claim is about configuring an existing codec, not replacing it. Also generic, so it's hard to remember. |
-| **Earnbase** | From the thesis: every rule has to earn the bases it costs. Short, ownable, reads as a product. | The meaning isn't obvious without the tagline. No existing product turned up in a web search. |
-| **Ruleproof** | "Is this rule proven on your channel?" Strong verb. | A web search found several existing products named RuleProof (a compliance training service, a rule engine, a store app). Not recommended. |
-| **Pays Off** | Taken straight from the one-liner. Friendly, memorable in a demo ("does it pay off?"). | A common phrase, hard to search for and hard to own. Better as a section title than a name. |
+**Say it:** AIR-b-goot (German "Erb" as in "air" with a rolled r, "gut" as in "good").
 
-**Recommendation: StrandAudit**, with "Adaptive DNA Codec" as the descriptor where a technical reader needs it: *StrandAudit, an adaptive DNA codec tuner.*
+**Descriptor:** the repository is still called *Adaptive DNA Codec*, and that stays valid where a technical reader needs it: *Erbgut, an adaptive DNA codec tuner.*
 
-Why: judges remember the verb. "We audit the rules" is the first thing the demo shows (the rule audit view), and the name primes the right mental model: we check an existing pipeline, we don't claim a new one.
-
-**Trademark note:** we did a quick web search only. We could not verify trademarks or domain availability. Do that before using any name outside the hackathon.
+**For an English-speaking audience,** gloss it on first mention in longer text: "Erbgut, German for the genetic material you inherit." In the pitch, one spoken half-sentence is enough. Don't over-explain it on a slide.
 
 ### Writing the name
 
-- **StrandAudit**, one word, capital S and capital A. Never "Strand Audit", "Strandaudit" or "STRANDAUDIT".
-- In code and URLs: `strandaudit`.
-- First mention in long text: "StrandAudit (Adaptive DNA Codec)" is fine where the repo name matters.
+- **Erbgut**, one word, capital E, lowercase rest. Never "ErbGut", "Erb Gut" or "ERBGUT" except in a wordmark.
+- In code and URLs: `erbgut`.
+- First mention in long text: "Erbgut (Adaptive DNA Codec)" where the repo name matters.
+
+### Other candidates considered
+
+| Name | Why not |
+|---|---|
+| StrandAudit | Descriptive of the main output, but less distinctive, and "Strand" is used in product names by a bioinformatics company |
+| Adaptive DNA Codec | Safe descriptor, but sounds like we built a new codec, which invites the wrong question. Kept as the technical name |
+| Earnbase | From the thesis, every rule earns its bases. Meaning isn't obvious without the tagline |
+| Ruleproof | Several existing products with that name |
+
+**Trademark note:** we did a quick web search only, and "Erbgut" is a common German noun, so it is unlikely to be ownable as a mark. We could not verify trademarks or domains. Check before using the name outside the hackathon.
+
+**The mark still fits:** four bases with a dimension line measuring a run of identical letters. It says "this is being measured", which is what the tool does, whatever the name.
 
 ---
 
@@ -49,7 +54,7 @@ Avoid taglines that assume the outcome, such as "Stop paying for rules you don't
 
 **For** teams designing DNA data storage pipelines,
 **who** choose sequence rules and redundancy by hand and apply them to every sequencing channel,
-**StrandAudit** is a codec tuning tool
+**Erbgut** is a codec tuning tool
 **that** measures, per channel, whether each rule and each extra strand of redundancy actually reduces decoding failure, and learns from decoder failures what else to avoid.
 **Unlike** fixed codecs and one-time decoder training,
 **it** judges every setting against a fixed recovery target, with the same encoder and the same decoder, so any change it recommends is a measured one.
@@ -130,13 +135,13 @@ We built a tool that measures whether a DNA coding rule actually pays off on you
 
 ### 30 seconds
 
-DNA storage pipelines follow hand-written rules: no long runs of the same letter, GC content between 40 and 60%, a fixed amount of redundancy. They're chosen once and applied to every sequencing channel, and nobody measures whether they pay off. StrandAudit does. For a given channel, it switches each rule on and off and measures what it costs and buys at a fixed recovery target, with the same encoder and decoder. Then it learns from where the decoder actually fails what else to avoid. Our simulator is within about 3 points of real Nanopore reads on held-out data, so the measurements mean something.
+DNA storage pipelines follow hand-written rules: no long runs of the same letter, GC content between 40 and 60%, a fixed amount of redundancy. They're chosen once and applied to every sequencing channel, and nobody measures whether they pay off. Erbgut does. For a given channel, it switches each rule on and off and measures what it costs and buys at a fixed recovery target, with the same encoder and decoder. Then it learns from where the decoder actually fails what else to avoid. Our simulator is within about 3 points of real Nanopore reads on held-out data, so the measurements mean something.
 
 ### 2 minutes
 
 DNA can store data at extreme density for centuries, but writing and reading it is noisy. Letters get swapped, added or dropped, and whole strands go missing. To cope, pipelines follow rules: avoid runs of the same letter, keep GC content between 40 and 60%, add a fixed amount of redundancy. Every rule costs density or reads. The rules were chosen once, copied between papers, and applied to Nanopore and Illumina alike, even though those channels fail in very different ways.
 
-StrandAudit treats each rule as a hypothesis. For a channel (sequencing technology, read budget, recovery target), tier 1 audits every rule and the redundancy level: switch it off, measure the reads per strand and bits per base needed to recover a fixed 20 KB file in all 300 held-out trials, and keep only what pays off. Tier 2 goes further. A small CNN learns from real decoder failures which strands are risky, and the Fountain encoder picks the safest of several candidate strands, which costs no density.
+Erbgut treats each rule as a hypothesis. For a channel (sequencing technology, read budget, recovery target), tier 1 audits every rule and the redundancy level: switch it off, measure the reads per strand and bits per base needed to recover a fixed 20 KB file in all 300 held-out trials, and keep only what pays off. Tier 2 goes further. A small CNN learns from real decoder failures which strands are risky, and the Fountain encoder picks the safest of several candidate strands, which costs no density.
 
 We can't run a wet lab at a hackathon, so we built the evidence to be hard to fool. The channel simulator is calibrated on real Nanopore and Illumina reads and lands within about 3 points of real reads at every read count on held-out data. We found that shared Nanopore errors are 45 to 66% predictable from the local 5-letter context, patterns the hand rules don't cover. And every result goes through an ablation ladder, a crossover matrix and a sim-to-real firewall with a structurally different second simulator.
 

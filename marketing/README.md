@@ -1,6 +1,6 @@
 # Marketing
 
-Brand and launch materials for **StrandAudit** (repo name: Adaptive DNA Codec), our HackMIT 2026 project.
+Brand and launch materials for **Erbgut** (repo name: Adaptive DNA Codec), our HackMIT 2026 project.
 
 > We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 

@@ -1,4 +1,4 @@
-/* StrandAudit deck engine. No dependencies, no build step.
+/* Erbgut deck engine. No dependencies, no build step.
  *
  * Modes (query string):
  *   (none)       audience view
@@ -132,7 +132,7 @@
       s.dataset.num = appx ? `A${appNo}` : String(mainNo);
       const foot = document.createElement('div');
       foot.className = 'foot';
-      foot.innerHTML = `${window.SlideHooks.markSVG}<span class="name">StrandAudit</span><span class="line">Every rule earns its bases.</span><span class="num">${label}</span>`;
+      foot.innerHTML = `${window.SlideHooks.markSVG}<span class="name">Erbgut</span><span class="line">Every rule earns its bases.</span><span class="num">${label}</span>`;
       s.appendChild(foot);
       const ov = document.createElement('span');
       ov.className = 'ovnum';
@@ -543,7 +543,7 @@
   let chan = null;
   let seq = 0;
   const seen = new Set();
-  const SYNC_KEY = 'strandaudit-sync';
+  const SYNC_KEY = 'erbgut-sync';
 
   function snapshot() {
     return { i: cur.i, f: cur.f, black };
@@ -552,7 +552,7 @@
   function setupSync() {
     try {
       if ('BroadcastChannel' in window) {
-        chan = new BroadcastChannel('strandaudit-deck');
+        chan = new BroadcastChannel('erbgut-deck');
         chan.onmessage = (e) => receive(e.data, null);
       }
     } catch (e) {
@@ -643,7 +643,7 @@
   function openPresenterWindow() {
     const url = `${location.pathname}?presenter${SAMPLE ? '&sample' : ''}#/${cur.i + 1}/${cur.f}`;
     try {
-      presenterWin = window.open(url, 'strandaudit-presenter', 'popup,width=1480,height=900');
+      presenterWin = window.open(url, 'erbgut-presenter', 'popup,width=1480,height=900');
     } catch (e) {
       presenterWin = null;
     }
@@ -793,7 +793,7 @@
     else document.body.insertBefore(vp, document.body.firstChild);
     fitAll();
     updatePresenter();
-    document.title = on ? 'StrandAudit presenter' : 'StrandAudit pitch';
+    document.title = on ? 'Erbgut presenter' : 'Erbgut pitch';
   }
 
   function postToPreview(msg) {

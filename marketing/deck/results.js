@@ -1,4 +1,4 @@
-/* StrandAudit deck: THE ONE PLACE FOR RESULTS.
+/* Erbgut deck: THE ONE PLACE FOR RESULTS.
  *
  * Every number the deck shows about the final runs comes from this object. Anything left null
  * renders as an amber dashed "[RESULT: ...]" placeholder, so a missing number can never be

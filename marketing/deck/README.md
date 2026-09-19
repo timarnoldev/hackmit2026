@@ -1,4 +1,4 @@
-# StrandAudit pitch deck
+# Erbgut pitch deck
 
 An animated web deck for the 3-minute HackMIT pitch, with a presenter view. Plain HTML, CSS and JS: no build step, no external scripts, fonts bundled, works offline.
 

@@ -1,15 +1,15 @@
-# StrandAudit deck outline
+# Erbgut deck outline
 
 Seven slides, built to support the 3-minute pitch in `PITCH.md`. Most of the time is spent in the live dashboard; the slides frame it and are the fallback if the demo fails.
 
-**Style:** paper background (`#F2F5F4`) or dark paper (`#0F1417`), Instrument Sans for text, JetBrains Mono only for DNA sequences and numeric tables. One idea per slide. Every placeholder uses the Tbd style from `BRAND.md` (amber, dashed outline) so it can't be mistaken for a result. Footer on every slide: the mark, "StrandAudit", slide number.
+**Style:** paper background (`#F2F5F4`) or dark paper (`#0F1417`), Instrument Sans for text, JetBrains Mono only for DNA sequences and numeric tables. One idea per slide. Every placeholder uses the Tbd style from `BRAND.md` (amber, dashed outline) so it can't be mistaken for a result. Footer on every slide: the mark, "Erbgut", slide number.
 
 ---
 
 ## Slide 1: Title
 
 - **Title:** Measure the rule. Keep what pays.
-- **Text:** StrandAudit. We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly. HackMIT 2026. [TEAM: names]
+- **Text:** Erbgut. We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly. HackMIT 2026. [TEAM: names]
 - **Visual:** the hero strand from the landing page, large and in mono: `ACTGAGGGGTCAAGCTTAGCC…` with the dimension line over `GGGG` in audit indigo. Full logo top left.
 - **Speaker notes:** Don't read the slide. Open with the first line of the pitch: "DNA can store data at extreme density for centuries. But writing and reading it is noisy."
 
@@ -24,7 +24,7 @@ Seven slides, built to support the 3-minute pitch in `PITCH.md`. Most of the tim
 - **Visual:** two columns under the rules, Nanopore ("many insertions and deletions, especially in runs") and Illumina ("few errors, mostly single wrong letters"), to show the channels fail differently.
 - **Speaker notes:** Keep it to 20 seconds. The key word is "every": the same rules on channels that fail in completely different ways.
 
-## Slide 3: What StrandAudit does
+## Slide 3: What Erbgut does
 
 - **Title:** Two tiers, one fixed target
 - **Text:**

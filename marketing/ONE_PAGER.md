@@ -1,6 +1,6 @@
-<p><img src="logo.svg" alt="StrandAudit" width="240"></p>
+<p><img src="logo.svg" alt="Erbgut" width="240"></p>
 
-# StrandAudit
+# Erbgut
 
 **Measure the rule. Keep what pays.**
 
@@ -18,7 +18,9 @@ DNA stores data at extreme density for centuries, but writing and reading it is 
 
 Every rule costs density or reads. The rules were chosen once, copied between papers, and applied to every sequencing channel, even though Nanopore and Illumina fail in very different ways. Nobody measures whether they pay off.
 
-## What StrandAudit does
+## What Erbgut does
+
+*Erbgut is German for the genetic material an organism inherits and passes on.*
 
 For one channel (sequencing technology, read budget, recovery target):
 

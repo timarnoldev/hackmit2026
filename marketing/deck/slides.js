@@ -1,4 +1,4 @@
-/* StrandAudit deck: generated and data-driven slide content.
+/* Erbgut deck: generated and data-driven slide content.
  *
  * Everything that depends on results reads window.RESULTS (results.js, or results.sample.js
  * with ?sample). A missing value (null) always renders as an amber dashed placeholder,

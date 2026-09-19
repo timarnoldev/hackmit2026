@@ -1,4 +1,4 @@
-# StrandAudit pitch
+# Erbgut pitch
 
 Follows the demo script in `PROJECT.md`: problem, rule audit, the loop on the Pareto plot, crossover matrix, image round trip.
 
@@ -20,7 +20,7 @@ Follows the demo script in `PROJECT.md`: problem, rule audit, the loop on the Pa
 
 ### 0:25 to 0:40 | What we built
 
-> We built StrandAudit. It measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
+> We built Erbgut, German for the genetic material you inherit. It measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 >
 > One fixed test: a 20 KB file has to come back exactly in all 300 held-out trials. Same encoder, same decoder. The only things that change are the rules and the redundancy.
 
@@ -74,7 +74,7 @@ Follows the demo script in `PROJECT.md`: problem, rule audit, the loop on the Pa
 >
 > And if the answer on some channel is "the hand rules are already right", that's a result too. Now it's measured instead of assumed.
 >
-> StrandAudit. Measure the rule. Keep what pays.
+> Erbgut. Measure the rule. Keep what pays.
 
 ---
 
@@ -82,7 +82,7 @@ Follows the demo script in `PROJECT.md`: problem, rule audit, the loop on the Pa
 
 > DNA storage pipelines follow hand-written rules: no more than three of the same letter in a row, GC content between 40 and 60%, 30% extra strands. Each rule costs storage or reads, and they're applied to every sequencing machine. Nobody measures whether they pay off.
 >
-> StrandAudit does. For a given channel, it switches each rule off and measures, with the same encoder and the same decoder, what it takes to recover a 20 KB file in all 300 held-out trials. *(Show the rule audit.)* On Nanopore, [RESULT: one-line verdict]. On Illumina, [RESULT: one-line verdict].
+> Erbgut does. For a given channel, it switches each rule off and measures, with the same encoder and the same decoder, what it takes to recover a 20 KB file in all 300 held-out trials. *(Show the rule audit.)* On Nanopore, [RESULT: one-line verdict]. On Illumina, [RESULT: one-line verdict].
 >
 > Then it learns from where the decoder fails what else to avoid. On real Nanopore reads, shared errors are 45 to 66% predictable from the five-letter context, which no hand rule covers. *(Show the Pareto plot.)* [RESULT: where the tuned codec lands vs the default].
 >

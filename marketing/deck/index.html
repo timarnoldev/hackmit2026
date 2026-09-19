@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StrandAudit pitch</title>
-<meta name="description" content="StrandAudit pitch deck, HackMIT 2026. Measure the rule. Keep what pays.">
+<title>Erbgut pitch</title>
+<meta name="description" content="Erbgut pitch deck, HackMIT 2026. Measure the rule. Keep what pays.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23131B20'/%3E%3Crect x='8' y='26' width='9' height='20' rx='2' fill='%23A3A6FF'/%3E%3Crect x='21' y='26' width='9' height='20' rx='2' fill='%23FF86B0'/%3E%3Crect x='34' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='47' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='8' y='50' width='48' height='3' rx='1.5' fill='%23E6ECEA'/%3E%3Cpath d='M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5' fill='none' stroke='%23E6ECEA' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <script>
@@ -37,15 +37,16 @@
   <div class="hero">
     <div class="brandrow enter" style="--d:0">
       <span data-mark></span>
-      <h1 class="wordmark">StrandAudit</h1>
+      <h1 class="wordmark">Erbgut</h1>
     </div>
+    <p class="gloss enter" style="--d:0.1">German for the genetic material you inherit</p>
     <p class="tagline enter" style="--d:0.15"><span>Measure the rule.</span> Keep what pays.</p>
     <p class="oneliner enter" style="--d:0.3">We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.</p>
     <div class="event enter" style="--d:0.45"><b>HackMIT 2026</b><span class="res" data-key="meta.team" data-fmt="text" data-ph="TEAM: names"></span></div>
   </div>
   <div class="ribbon" aria-hidden="true"><div class="ribbon-track"></div></div>
   <aside class="notes">
-    <p>Don't read the slide. Open with the first line.</p>
+    <p>Don't read the slide. Open with the first line. If you want, one half-sentence on the name: Erbgut is German for the genetic material you inherit.</p>
     <p>DNA can store data at extreme density, for centuries. But writing and reading it is noisy: letters get swapped, added or dropped, and whole strands disappear.</p>
   </aside>
 </section>
@@ -177,7 +178,7 @@
         <p>By default every candidate that passes the rules is equally good. In tier 2, a risk model ranks them.</p>
       </div>
       <div class="knobs frag" data-f="4">
-        <h4>The knobs StrandAudit measures</h4>
+        <h4>The knobs Erbgut measures</h4>
         <ul><li>Which rules are on</li><li>How much redundancy</li><li>How candidates are scored</li></ul>
         <div class="fix">Same encoder, same decoder. Fixed test: a 20 KB file must come back exactly in all 300 held-out trials.</div>
       </div>
@@ -188,7 +189,7 @@
     <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
     <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
     <p><i class="cue"></i> A scorer keeps one. By default, any candidate that passes is as good as any other.</p>
-    <p><i class="cue"></i> We built StrandAudit to measure these knobs. One fixed test: a 20 KB file has to come back exactly in all 300 held-out trials. Same encoder, same decoder. The only things that change are the rules and the redundancy.</p>
+    <p><i class="cue"></i> We built Erbgut to measure these knobs. One fixed test: a 20 KB file has to come back exactly in all 300 held-out trials. Same encoder, same decoder. The only things that change are the rules and the redundancy.</p>
   </aside>
 </section>
 
@@ -334,7 +335,7 @@
   <aside class="notes">
     <p><i class="cue"></i> On Nanopore: <span class="res" data-say="headlineNanopore"></span>. On Illumina: <span class="res" data-say="headlineIllumina"></span>. The image at 6 reads per strand: <span class="res" data-say="imageDemo"></span>.</p>
     <p><i class="cue"></i> And if on some channel the answer is "the hand rules are already right", that's a result too. Now it's measured instead of assumed.</p>
-    <p>StrandAudit. Measure the rule. Keep what pays.</p>
+    <p>Erbgut. Measure the rule. Keep what pays.</p>
     <p class="aside">Say the tagline, then stop talking.</p>
   </aside>
 </section>

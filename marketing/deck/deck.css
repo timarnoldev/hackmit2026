@@ -1,4 +1,4 @@
-/* StrandAudit pitch deck. Plain CSS, no build step.
+/* Erbgut pitch deck. Plain CSS, no build step.
    Stage is 1920 x 1080 logical pixels, scaled to fit the window by deck.js. */
 
 @font-face {
@@ -1216,3 +1216,5 @@ html[data-theme="light"] .p-notes .val { color: #0B7465; }
 html[data-theme="light"] .p-notes .cue { background: #3A3FC2; color: #fff; }
 html[data-theme="light"] .p-notes .cue.next { background: #F4C45A; color: #131B20; }
 .p-notes .aside { color: #9AA9AE; font-size: 0.8em; }
+
+.hero .gloss { margin: 0.1em 0 0; font-size: 0.5em; letter-spacing: 0.02em; color: var(--muted); }

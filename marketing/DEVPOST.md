@@ -1,6 +1,6 @@
-# Devpost submission: StrandAudit
+# Devpost submission: Erbgut
 
-**Project name:** StrandAudit
+**Project name:** Erbgut (German for the genetic material you inherit)
 
 **Tagline (Devpost "elevator pitch", max 200 characters):**
 We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
@@ -21,7 +21,7 @@ We wanted to answer a simple engineering question that no tool answers today: *g
 
 ## What it does
 
-StrandAudit tunes a DNA storage codec for one channel (sequencing technology, read budget, recovery target), in two tiers.
+Erbgut tunes a DNA storage codec for one channel (sequencing technology, read budget, recovery target), in two tiers.
 
 **Tier 1, rule audit.** It switches each hand rule off, one at a time, and measures what it costs and what it buys. It tunes the redundancy the same way. Every verdict comes from recovery trials on held-out seeds: a fixed 20 KB file has to come back exactly in all 300 trials, and we count the reads per strand and bits per base it took. The encoder and decoder stay the same throughout.
 
@@ -75,7 +75,7 @@ What we found: [RESULT: one or two sentences on the rule audit verdicts per chan
 - Being narrow about claims makes a project stronger. "Same encoder, same decoder, fixed target" is a sentence judges and researchers both trust.
 - With coding agents, writing code gets fast. The bottlenecks move to GPU time, integration and checking every number.
 
-## What's next for StrandAudit
+## What's next for Erbgut
 
 - Run the audit on more channels and read budgets, including long-term archival storage, where most loss is whole strands.
 - A conditional risk model that takes the channel description as input, so it can handle operating points it never trained on.

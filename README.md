@@ -252,7 +252,7 @@ Results land in `results/<run_id>/` and show up in the dashboard. `scripts/gx10_
 ## Pitch and marketing
 
 - `marketing/deck/`: the animated web pitch deck with presenter mode (serve it, press `P`)
-- `marketing/`: brand identity (StrandAudit), logo, one-pager, pitch script, deck outline, Devpost text, social posts, landing page
+- `marketing/`: brand identity (Erbgut), logo, one-pager, pitch script, deck outline, Devpost text, social posts, landing page
 
 Result placeholders are marked `[RESULT: ...]` until the final runs are in.
 

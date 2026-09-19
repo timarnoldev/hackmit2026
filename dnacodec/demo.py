@@ -65,7 +65,7 @@ STATUS_TEXT = {
     SLIPPED: "wrong, passed the checksum",
 }
 
-# StrandAudit palette (marketing/BRAND.md): G gain teal, C cost magenta, T amber, A audit indigo.
+# Erbgut palette (marketing/BRAND.md): G gain teal, C cost magenta, T amber, A audit indigo.
 BRAND = {
     "audit": "#3A3FC2",
     "cost": "#B02A63",
@@ -473,7 +473,7 @@ def _rgb(hex_color: str) -> np.ndarray:
 
 
 def demo_image_png(size: int = 64) -> bytes:
-    """The default demo image, drawn in code: the StrandAudit mark (bars A, C, G, G on a strand,
+    """The default demo image, drawn in code: the Erbgut mark (bars A, C, G, G on a strand,
     a dimension line over the run of two G bars) on paper with a light grain. The grain is
     fixed (not a channel seed) and gives the file a realistic size of a few KB."""
     s = size / 64
@@ -500,7 +500,7 @@ def demo_image_png(size: int = 64) -> bytes:
 DEFAULT_MESSAGE = (
     "Hello from HackMIT 2026. This message was written into DNA strands, read back through a "
     "simulated Nanopore sequencer with only a few noisy reads per strand, and decoded again. "
-    "StrandAudit measures whether each DNA coding rule, and each extra strand of redundancy, "
+    "Erbgut measures whether each DNA coding rule, and each extra strand of redundancy, "
     "pays off on your channel, and tunes the codec to keep only what pays. "
     "Measure the rule. Keep what pays."
 )

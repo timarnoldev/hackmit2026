@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Serve the StrandAudit deck on http://localhost so the presenter window always syncs.
+# Serve the Erbgut deck on http://localhost so the presenter window always syncs.
 # Usage: ./serve.sh [port]     (default: the first free port from 8000 up)
 # Needs only python3. Works offline.
 set -euo pipefail
@@ -31,7 +31,7 @@ fi
 
 url="http://localhost:${port}/"
 echo
-echo "  StrandAudit deck:   ${url}"
+echo "  Erbgut deck:   ${url}"
 echo "  With sample data:   ${url}?sample"
 echo "  Presenter window:   press P in the deck (or open ${url}?presenter)"
 echo "  Keys:               press ? in the deck"

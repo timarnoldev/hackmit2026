@@ -1,4 +1,4 @@
-# StrandAudit social posts
+# Erbgut social posts
 
 Replace every `[RESULT: ...]` before posting, or cut that line. Never post a placeholder and never round a result up. Each result line has two variants; use the one that matches what the runs show.
 
@@ -13,7 +13,7 @@ DNA storage pipelines follow hand-written rules: no more than 3 of the same lett
 
 They're applied to every sequencing machine. Nobody measures whether they pay off.
 
-At #HackMIT we built StrandAudit to measure it. A thread:
+At #HackMIT we built Erbgut to measure it. A thread:
 
 **2/**
 The idea: treat every rule as a hypothesis.
@@ -57,7 +57,7 @@ Every DNA data storage pipeline follows a few hand-written rules. Never more tha
 
 Each rule costs storage density or sequencing reads. They were chosen once, copied between papers, and are applied to every sequencing channel, even though Nanopore and Illumina fail in very different ways.
 
-At HackMIT 2026 we built StrandAudit, a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
+At HackMIT 2026 we built Erbgut, a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 
 How it works:
 1. Rule audit. For a given channel and read budget, it switches each rule off and measures the reads per strand and bits per base needed to recover a fixed 20 KB file in all 300 held-out trials. Same encoder, same decoder.
@@ -86,8 +86,8 @@ Target: 75 seconds at a calm pace, roughly 170 words. Screen directions in itali
 |---|---|---|
 | 0:00 to 0:08 | *Logo on paper background, then the strand with the dimension line drawing over GGGG.* | DNA can store data for centuries. But every DNA storage pipeline follows the same hand-written rules. |
 | 0:08 to 0:18 | *The three rules appear one by one.* | No more than three of the same letter in a row. GC content between 40 and 60%. Thirty percent extra strands. Applied to every sequencing machine, and never measured. |
-| 0:18 to 0:26 | *Title card: StrandAudit. Measure the rule. Keep what pays.* | StrandAudit measures whether each rule actually pays off on your channel, and tunes the codec accordingly. |
+| 0:18 to 0:26 | *Title card: Erbgut. Measure the rule. Keep what pays.* | Erbgut measures whether each rule actually pays off on your channel, and tunes the codec accordingly. |
 | 0:26 to 0:40 | *Dashboard, rule audit view, Nanopore, then Illumina.* | We switch each rule off and measure what it takes to recover a 20 KB file in all 300 held-out trials. Same encoder, same decoder. On Nanopore: [RESULT: one clause]. On Illumina: [RESULT: one clause]. |
 | 0:40 to 0:52 | *Pareto plot, points moving from the default toward the front.* | Then it learns from where the decoder fails. On real Nanopore reads, the errors all copies share are 45 to 66% predictable from the local five-letter context, and no hand rule covers that. [RESULT: where the tuned codec lands]. |
 | 0:52 to 1:03 | *Image round trip, default and tuned side by side at 6 reads per strand.* | An image, through DNA, at six reads per strand. [RESULT: default outcome, tuned outcome]. |
-| 1:03 to 1:15 | *Calibration table, then logo and repo link.* | No wet lab, so our simulator is calibrated on real reads, within about 3 points on held-out data, and every gain must survive a second simulator. StrandAudit. Measure the rule. Keep what pays. |
+| 1:03 to 1:15 | *Calibration table, then logo and repo link.* | No wet lab, so our simulator is calibrated on real reads, within about 3 points on held-out data, and every gain must survive a second simulator. Erbgut. Measure the rule. Keep what pays. |

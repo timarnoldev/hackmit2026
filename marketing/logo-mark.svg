@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="t">
-  <title id="t">StrandAudit mark: a strand of four bases with a dimension line measuring a run of two identical bases</title>
+  <title id="t">Erbgut mark: a strand of four bases with a dimension line measuring a run of two identical bases</title>
   <rect width="64" height="64" rx="14" fill="#131B20"/>
   <!-- bases A, C, G, G standing on the strand -->
   <rect x="8" y="26" width="9" height="20" rx="2" fill="#A3A6FF"/>
