@@ -2,8 +2,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-data/
-checkpoints/
+/data
+/checkpoints
 results/*
 !results/.gitkeep
 .DS_Store
