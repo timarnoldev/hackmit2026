@@ -24,6 +24,7 @@ import atexit
 import math
 import multiprocessing as mp
 import os
+import sys
 import weakref
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from dataclasses import asdict, dataclass
@@ -291,15 +292,17 @@ DEFAULT_WORKERS = _default_workers()
 
 
 def _default_start_method() -> str:
-    """forkserver where available, else spawn; override with POLISH_START_METHOD.
+    """fork on Linux, spawn elsewhere; override with POLISH_START_METHOD.
 
-    Plain fork is the cheap option but this process is multi threaded (torch) and has a CUDA
-    context, and forking that can deadlock the child - exactly the hang we must not risk in a
-    job that runs for hours. forkserver forks the workers from a small, single threaded server
-    process instead, and with the preload below that server has this module (and torch)
-    imported once, so a worker starts about as fast as with fork and never touches CUDA.
-    spawn (macOS, Windows) re-imports this module in every worker: a few seconds once per
-    pool, not once per decode(), because the pool is kept alive.
+    fork is what dnacodec.evaluate's own pool already uses on Linux, from this very process,
+    so the polisher's pool adds no new kind of risk. The workers only run numpy and rapidfuzz,
+    never CUDA, which is what makes forking a process with a GPU context safe here (torch's
+    own DataLoader forks the same way), and they start instantly with torch already imported.
+    forkserver and spawn also work (POLISH_START_METHOD=forkserver), but they re-import the
+    caller's __main__ in every worker, which needs an `if __name__ == "__main__"` guard and
+    fails outright for a script piped into python.
+    On macOS forking a process that has loaded torch is unreliable, so spawn is used there: it
+    costs a few seconds once per pool, not once per decode(), because the pool is kept alive.
     """
     available = mp.get_all_start_methods()
     override = os.environ.get("POLISH_START_METHOD")
@@ -307,8 +310,8 @@ def _default_start_method() -> str:
         if override not in available:
             raise ValueError(f"start method {override!r} is not one of {available}")
         return override
-    if "forkserver" in available:
-        return "forkserver"
+    if "fork" in available and not sys.platform.startswith("darwin"):
+        return "fork"
     return "spawn" if "spawn" in available else available[0]
 
 
