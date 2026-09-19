@@ -44,7 +44,9 @@ So the headline is about **reads per strand and redundancy**. We will not claim 
 
 For each situation with read budget B:
 
-- **Recovery target:** the file is recovered exactly in all 300 held-out trials (95% upper bound on the failure rate is about 1%).
+- **Test file:** a fixed 20 KB file of random bytes (compressed data looks random), generated from a fixed seed in `dnacodec/testfile.py`, with a test that fails if it ever changes. That's roughly 1,000 to 1,300 strands depending on settings. Recovery probability depends strongly on file size, so the size never changes between codecs. The demo image is separate and only used for the demo.
+- **Recovery target:** the file is recovered exactly in all 300 held-out trials (95% upper bound on the failure rate is about 1%). One trial = one independent pass through the channel with its own held-out seed.
+- **Trial budget:** the settings search uses 50 trials per candidate setting on train seeds. The full 300 held-out trials are run only once per final codec. Candidates that pass all 50 search trials are re-checked with 300 train-seed trials before being chosen, so a lucky setting can't slip through.
 - **Primary metric, reading:** the minimum mean reads per strand at which the codec meets the recovery target, at matched bits per base.
 - **Primary metric, writing:** the maximum bits per base at which the codec meets the recovery target, at coverage B.
 - **Summary:** the Pareto front of (bits per base, reads per strand) at the recovery target. A codec is better only if it moves this front, not if it buys accuracy with extra redundancy.

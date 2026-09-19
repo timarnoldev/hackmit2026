@@ -86,3 +86,14 @@ def test_dnaformer_dataset():
     assert len(clusters) > 1000
     assert all(set(c.reference) <= set("ACGT") for c in clusters)
     assert sum(len(c.reads) for c in clusters) > len(clusters)
+
+
+def test_test_file_is_fixed():
+    import hashlib
+
+    from dnacodec.testfile import test_file
+
+    data = test_file()
+    assert len(data) == 20 * 1024
+    assert data == test_file()
+    assert hashlib.sha256(data).hexdigest()[:16] == "575e0ef9a36dfce0"  # must never change

@@ -116,7 +116,7 @@ A fully learned encoder (an autoencoder trained through the channel) sounds appe
 
 Adaptive constrained coding, learned decoders and end-to-end learned codes all exist, but each optimizes the rules, the redundancy or the decoder in isolation. Our claim is narrow: **decoder failures become the training signal for encoder candidate selection**, and the whole codec is optimized for one explicit operating point (channel, read budget, recovery target). We don't claim a better decoder than DNAformer, and the encoder is not a neural network.
 
-**Objective, fixed before any run:** the file must be recovered exactly in all 300 held-out trials. At that target we measure the fewest reads per strand needed and the most bits per base achievable, and judge codecs on the Pareto front of the two. The default we compare against always uses the same decoder.
+**Objective, fixed before any run:** a fixed 20 KB test file must be recovered exactly in all 300 held-out trials. At that target we measure the fewest reads per strand needed and the most bits per base achievable, and judge codecs on the Pareto front of the two. The default we compare against always uses the same decoder.
 
 **Evidence:** an ablation ladder (fixed codec with baseline decoder, fixed codec with transformer, learned scorer with the same frozen transformer, full loop), a crossover matrix (each tailored codec on its own and the other channel), and a sim-to-real firewall (a structurally different Simulator B, plus the risk model's ranking on real reads). See [PROJECT.md](PROJECT.md).
 
