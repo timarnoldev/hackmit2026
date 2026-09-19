@@ -424,7 +424,7 @@
           <h3>Measured</h3>
           <ul class="facts">
             <li><div class="n">within about 3 points</div><div class="d">Simulator vs real Nanopore reads, baseline decoder accuracy at every read count from 2 to 16, on held-out Microsoft data. Where it deviates, it's slightly harder.</div></li>
-            <li><div class="n">30 to 66%</div><div class="d">Share of the shared Nanopore errors explained by the local 5-letter context, on held-apart data, in two independent datasets.</div></li>
+            <li><div class="n">45 to 66%</div><div class="d">Share of the shared Nanopore errors explained by the local 5-letter context, on held-apart data, in two independent datasets.</div></li>
             <li><div class="n">AUC 0.80 to 0.90</div><div class="d">The same 5-letter context predicting error hot spots on real Nanopore reads.</div></li>
             <li><div class="n">90.6%</div><div class="d">Exact strands for the majority vote baseline at 16 reads on real held-out Nanopore data. The bar every model result is compared against.</div></li>
           </ul>
@@ -466,7 +466,7 @@
         <dt>Models</dt><dd>Transformer decoder for trace reconstruction, 1D CNN risk model</dd>
         <dt>Classic parts</dt><dd>Fountain (LT) encoder with a CRC per strand, calibrated channel simulator, settings grid search</dd>
         <dt>Interface</dt><dd>Streamlit dashboard: rule audit, Pareto plot, crossover matrix, ablation ladder</dd>
-        <dt>Code</dt><dd>About 10,900 lines of Python, about 2,400 of them tests</dd>
+        <dt>Code</dt><dd>About 11,000 lines of Python, about 2,500 of them tests</dd>
         <dt>Test</dt><dd>Fixed 20 KB file, 300 held-out trials per evaluation</dd>
       </dl>
     </div>

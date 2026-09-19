@@ -53,7 +53,7 @@ Seven slides, built to support the 3-minute pitch in `PITCH.md`. Most of the tim
 - **Title:** Tuned for this channel, not just better
 - **Text:** left: "Down is fewer reads. Right is more bits per base." Right: "Each tuned codec on its own channel and on the other."
 - **Visual:** left half, the Pareto plot for Nanopore at a tight budget, default point plus one point per tuning round (from the dashboard). Right half, the 3 by 2 crossover matrix, colored, with [RESULT] cells until the runs finish.
-- **Speaker notes:** Pareto first: [RESULT: default vs tuned reads per strand at matched density]. Then the crossover: [RESULT: wins at home and not away, or holds on both]. Mention the 30 to 66% context predictability here if tier 2 moved the point.
+- **Speaker notes:** Pareto first: [RESULT: default vs tuned reads per strand at matched density]. Then the crossover: [RESULT: wins at home and not away, or holds on both]. Mention the 45 to 66% context predictability here if tier 2 moved the point.
 
 ## Slide 6: See it: the image round trip
 
@@ -67,12 +67,12 @@ Seven slides, built to support the 3-minute pitch in `PITCH.md`. Most of the tim
 - **Title:** Built so we can't fool ourselves
 - **Text:**
   - Simulator within about 3 points of real Nanopore reads at every read count, held-out data
-  - Shared Nanopore errors 30 to 66% predictable from the 5-letter context, hot-spot AUC 0.80 to 0.90, two independent datasets
+  - Shared Nanopore errors 45 to 66% predictable from the 5-letter context, hot-spot AUC 0.80 to 0.90, two independent datasets
   - Ablation ladder A to E, crossover matrix, sim-to-real firewall with a second simulator
   - No wet lab. No claim to beat DNA Fountain or DNAformer.
   - Closing line: "If the hand rules are right, now it's measured. Measure the rule. Keep what pays."
 - **Visual:** the calibration table (real vs simulated exact strands at 2, 4, 6, 10, 16 reads on the held-out split, from `docs/ERRORS.md`), plus a small ladder graphic A B C D E with "B to C: tier 1" and "C to D: tier 2" marked.
-- **Speaker notes:** This is the slide judges photograph. End on the tagline and stop talking. Back pocket: GX10 (NVIDIA GB10), about 10,900 lines of Python with about 2,400 lines of tests.
+- **Speaker notes:** This is the slide judges photograph. End on the tagline and stop talking. Back pocket: GX10 (NVIDIA GB10), about 11,000 lines of Python, about 2,500 of them tests.
 
 ---
 

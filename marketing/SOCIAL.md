@@ -23,7 +23,7 @@ For one channel (sequencing tech, read budget), switch the rule off and measure 
 **3/**
 Tier 2 goes beyond the hand rules.
 
-On real Nanopore reads, the errors every read shares are 30 to 66% predictable from the local 5-letter context, in two independent datasets. The standard rules don't cover those contexts. A small CNN learns them from where our decoder fails.
+On real Nanopore reads, the errors every read shares are 45 to 66% predictable from the local 5-letter context, in two independent datasets. The standard rules don't cover those contexts. A small CNN learns them from where our decoder fails.
 
 **4/**
 The encoder writes the same data as several candidate strands and keeps the safest one.
@@ -63,11 +63,11 @@ How it works:
 1. Rule audit. For a given channel and read budget, it switches each rule off and measures the reads per strand and bits per base needed to recover a fixed 20 KB file in all 300 held-out trials. Same encoder, same decoder.
 2. Learned selection. A small CNN learns from real decoder failures which strands are risky, and the Fountain encoder keeps the safest of several candidates, at no cost in density.
 
-We have no wet lab, so the numbers had to be earned. Our channel simulator is calibrated on real Nanopore and Illumina reads and lands within about 3 points of real reads on held-out data. We also found that shared Nanopore errors are 30 to 66% predictable from the local 5-letter context, patterns the standard rules don't cover. Every gain has to survive a second, structurally different simulator and a check on real reads.
+We have no wet lab, so the numbers had to be earned. Our channel simulator is calibrated on real Nanopore and Illumina reads and lands within about 3 points of real reads on held-out data. We also found that shared Nanopore errors are 45 to 66% predictable from the local 5-letter context, patterns the standard rules don't cover. Every gain has to survive a second, structurally different simulator and a check on real reads.
 
 What we found: [RESULT: two sentences on the rule audit and the tuned codec vs the default, or "on Nanopore the hand rules held up, on Illumina ..."].
 
-Everything runs on an ASUS Ascent GX10 (NVIDIA GB10). About 10,900 lines of Python, about 2,400 of them tests, much of it written with coding agents working in parallel while we owned the interfaces and checked every number.
+Everything runs on an ASUS Ascent GX10 (NVIDIA GB10). About 11,000 lines of Python, about 2,500 of them tests, much of it written with coding agents working in parallel while we owned the interfaces and checked every number.
 
 Thanks to the teams who published the Microsoft clustered Nanopore reads and the DNAformer datasets. Real reads made this possible.
 
@@ -88,6 +88,6 @@ Target: 75 seconds at a calm pace, roughly 170 words. Screen directions in itali
 | 0:08 to 0:18 | *The three rules appear one by one.* | No more than three of the same letter in a row. GC content between 40 and 60%. Thirty percent extra strands. Applied to every sequencing machine, and never measured. |
 | 0:18 to 0:26 | *Title card: StrandAudit. Measure the rule. Keep what pays.* | StrandAudit measures whether each rule actually pays off on your channel, and tunes the codec accordingly. |
 | 0:26 to 0:40 | *Dashboard, rule audit view, Nanopore, then Illumina.* | We switch each rule off and measure what it takes to recover a 20 KB file in all 300 held-out trials. Same encoder, same decoder. On Nanopore: [RESULT: one clause]. On Illumina: [RESULT: one clause]. |
-| 0:40 to 0:52 | *Pareto plot, points moving from the default toward the front.* | Then it learns from where the decoder fails. On real Nanopore reads, the errors all copies share are 30 to 66% predictable from the local five-letter context, and no hand rule covers that. [RESULT: where the tuned codec lands]. |
+| 0:40 to 0:52 | *Pareto plot, points moving from the default toward the front.* | Then it learns from where the decoder fails. On real Nanopore reads, the errors all copies share are 45 to 66% predictable from the local five-letter context, and no hand rule covers that. [RESULT: where the tuned codec lands]. |
 | 0:52 to 1:03 | *Image round trip, default and tuned side by side at 6 reads per strand.* | An image, through DNA, at six reads per strand. [RESULT: default outcome, tuned outcome]. |
 | 1:03 to 1:15 | *Calibration table, then logo and repo link.* | No wet lab, so our simulator is calibrated on real reads, within about 3 points on held-out data, and every gain must survive a second simulator. StrandAudit. Measure the rule. Keep what pays. |

@@ -81,10 +81,10 @@ Saying this up front is part of the brand. It makes every other claim more belie
 | **Coding rules are folklore. We measure them.** | The rule audit switches each rule on and off per channel and reports what it costs and what it buys, from held-out recovery trials. |
 | **The comparison is fair.** | Same encoder, same decoder. The default we compare against always uses the same decoder (ablation step B). Fixed 20 KB test file, 300 held-out trials, objective fixed before any run. |
 | **The simulator is honest.** | Within about 3 points of real Nanopore reads at every read count on held-out Microsoft data, and where it deviates it's slightly harder. |
-| **There is something to learn beyond the hand rules.** | On real Nanopore reads, errors shared by all reads are 30 to 66% predictable from the local 5-letter context (held-apart data, two independent datasets), with hot-spot AUC 0.80 to 0.90. The hand rules don't cover these contexts. |
+| **There is something to learn beyond the hand rules.** | On real Nanopore reads, errors shared by all reads are 45 to 66% predictable from the local 5-letter context (held-apart data, two independent datasets), with hot-spot AUC 0.80 to 0.90. The hand rules don't cover these contexts. |
 | **We guard against fooling ourselves.** | Sim-to-real firewall: a structurally different Simulator B, and the risk model's ranking checked on real held-out reads. Gains that don't survive are reported as such. |
 | **Any outcome is a useful answer.** | If the hand rules are already near optimal on a channel, the tool shows that with measurements. |
-| **It's real engineering.** | About 10,900 lines of Python with about 2,400 lines of tests. Baseline decoder at 90.6% exact strands with 16 reads on real held-out data. Runs on an ASUS Ascent GX10 (NVIDIA GB10). |
+| **It's real engineering.** | About 11,000 lines of Python, about 2,500 of them tests. Baseline decoder at 90.6% exact strands with 16 reads on real held-out data. Runs on an ASUS Ascent GX10 (NVIDIA GB10). |
 
 Results that don't exist yet are always written as placeholders, for example **[RESULT: reads per strand saved on Nanopore at matched density]**. See section 8.
 
@@ -138,7 +138,7 @@ DNA can store data at extreme density for centuries, but writing and reading it 
 
 StrandAudit treats each rule as a hypothesis. For a channel (sequencing technology, read budget, recovery target), tier 1 audits every rule and the redundancy level: switch it off, measure the reads per strand and bits per base needed to recover a fixed 20 KB file in all 300 held-out trials, and keep only what pays off. Tier 2 goes further. A small CNN learns from real decoder failures which strands are risky, and the Fountain encoder picks the safest of several candidate strands, which costs no density.
 
-We can't run a wet lab at a hackathon, so we built the evidence to be hard to fool. The channel simulator is calibrated on real Nanopore and Illumina reads and lands within about 3 points of real reads at every read count on held-out data. We found that shared Nanopore errors are 30 to 66% predictable from the local 5-letter context, patterns the hand rules don't cover. And every result goes through an ablation ladder, a crossover matrix and a sim-to-real firewall with a structurally different second simulator.
+We can't run a wet lab at a hackathon, so we built the evidence to be hard to fool. The channel simulator is calibrated on real Nanopore and Illumina reads and lands within about 3 points of real reads at every read count on held-out data. We found that shared Nanopore errors are 45 to 66% predictable from the local 5-letter context, patterns the hand rules don't cover. And every result goes through an ablation ladder, a crossover matrix and a sim-to-real firewall with a structurally different second simulator.
 
 The outcome is a measured answer per channel: [RESULT: headline rule audit verdict per channel]. If the hand rules turn out to be near optimal on a channel, that's the answer, and now it's measured instead of assumed.
 

@@ -44,7 +44,7 @@ Follows the demo script in `PROJECT.md`: problem, rule audit, the loop on the Pa
 
 > Tier two goes beyond the hand rules. A small CNN learns from where our decoder actually fails, and the encoder picks the safest of several candidate strands. That costs no density at all.
 >
-> We know there is something to learn: on real Nanopore reads, the errors every read shares are 30 to 66% predictable from the local five-letter context. The hand rules don't cover those contexts.
+> We know there is something to learn: on real Nanopore reads, the errors every read shares are 45 to 66% predictable from the local five-letter context. The hand rules don't cover those contexts.
 >
 > Here's the default codec, and here's each round of tuning. Down is fewer reads, right is more bits per base. [RESULT: where the tuned codec lands, e.g. "we reach the target with N instead of M reads per strand at the same density" or "the audit alone gets us here, and learned selection adds nothing measurable on this channel"].
 
@@ -84,7 +84,7 @@ Follows the demo script in `PROJECT.md`: problem, rule audit, the loop on the Pa
 >
 > StrandAudit does. For a given channel, it switches each rule off and measures, with the same encoder and the same decoder, what it takes to recover a 20 KB file in all 300 held-out trials. *(Show the rule audit.)* On Nanopore, [RESULT: one-line verdict]. On Illumina, [RESULT: one-line verdict].
 >
-> Then it learns from where the decoder fails what else to avoid. On real Nanopore reads, shared errors are 30 to 66% predictable from the five-letter context, which no hand rule covers. *(Show the Pareto plot.)* [RESULT: where the tuned codec lands vs the default].
+> Then it learns from where the decoder fails what else to avoid. On real Nanopore reads, shared errors are 45 to 66% predictable from the five-letter context, which no hand rule covers. *(Show the Pareto plot.)* [RESULT: where the tuned codec lands vs the default].
 >
 > No wet lab, so our simulator is calibrated on real reads, within about 3 points on held-out data, and every gain must survive a second simulator. If the hand rules turn out to be right, that's measured now too. Measure the rule. Keep what pays.
 

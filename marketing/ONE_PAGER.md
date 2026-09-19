@@ -34,7 +34,7 @@ Same encoder, same decoder throughout. Only the rules, the redundancy and the ch
 
 - **Fixed objective, set before any run:** a fixed 20 KB file must come back exactly in all 300 held-out trials. Codecs are judged on the Pareto front of bits per base against reads per strand.
 - **Calibrated simulator:** within about 3 points of real Nanopore reads at every read count, on held-out Microsoft data that no calibration step touched.
-- **Something real to learn:** errors shared by all reads of a strand are 30 to 66% predictable from the local 5-letter context on real Nanopore reads (held-apart data, two independent datasets), with hot-spot AUC 0.80 to 0.90. The hand rules don't cover these contexts.
+- **Something real to learn:** errors shared by all reads of a strand are 45 to 66% predictable from the local 5-letter context on real Nanopore reads (held-apart data, two independent datasets), with hot-spot AUC 0.80 to 0.90. The hand rules don't cover these contexts.
 - **Evidence designed to catch us out:** ablation ladder A to E, crossover matrix (each tuned codec on its own and the other channel), and a sim-to-real firewall with a structurally different Simulator B plus checks on real held-out reads.
 
 ## Results
@@ -58,7 +58,7 @@ If the audit finds that the hand rules are already near optimal on a channel, th
 - **Transformer decoder** reconstructing a strand from up to 16 noisy reads, with a majority vote baseline always reported next to it (baseline: 90.6% exact strands at 16 reads on real held-out data)
 - **1D CNN risk model** trained on failure rates over 32 simulations per strand
 - **Streamlit dashboard:** rule audit, Pareto plot, crossover matrix, ablation ladder
-- About 10,900 lines of Python with about 2,400 lines of tests, running on an ASUS Ascent GX10 (NVIDIA GB10)
+- About 11,000 lines of Python, about 2,500 of them tests, running on an ASUS Ascent GX10 (NVIDIA GB10)
 
 ## What we don't claim
 

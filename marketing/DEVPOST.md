@@ -35,7 +35,7 @@ What we found: [RESULT: one or two sentences on the rule audit verdicts per chan
 
 **Channel simulator.** We can't run a wet lab at a hackathon, so the simulator plays the lab. It models substitutions, insertions, deletions, run-length effects, a position ramp, per-read quality, shared per-position errors, dropouts and uneven coverage. We calibrated it on real reads: the Microsoft clustered Nanopore reads dataset and the DNAformer Nanopore and Illumina reads from Technion. The acceptance test was that our baseline decoder must score about the same on simulated reads as on real ones. On the Microsoft held-out split, which no calibration step touched, it lands within about 3 points at every read count from 2 to 16, and where it's off it's slightly harder.
 
-**Context errors from real reads.** We found that on real Nanopore reads, errors shared by all reads of a strand (the ones more reads can't average away) are 30 to 66% predictable from the local 5-letter context, on held-apart data, with the same context families leading in two independent datasets and hot-spot AUC 0.80 to 0.90. We fit a per 5-letter context error table and put it into the simulator, so the risk model has something real to learn.
+**Context errors from real reads.** We found that on real Nanopore reads, errors shared by all reads of a strand (the ones more reads can't average away) are 45 to 66% predictable from the local 5-letter context, on held-apart data, with the same context families leading in two independent datasets and hot-spot AUC 0.80 to 0.90. We fit a per 5-letter context error table and put it into the simulator, so the risk model has something real to learn.
 
 **Encoder.** A DNA Fountain style LT code with a robust soliton distribution, several candidate seeds per strand, configurable hard rules and a pluggable scorer. A CRC-16 in every strand turns a wrongly decoded strand into a missing one, so a confident mistake can't corrupt the file.
 
@@ -49,7 +49,7 @@ What we found: [RESULT: one or two sentences on the rule audit verdicts per chan
 
 **Compute.** All GPU training and the CPU heavy recovery trials run on an ASUS Ascent GX10 with an NVIDIA GB10 and 128 GB of unified memory.
 
-**Process.** Much of the code was written by coding agents working in parallel on separate branches. We owned the shared interfaces, the held-out data rules, the verification of every number and the story. The result is about 10,900 lines of Python with about 2,400 lines of tests.
+**Process.** Much of the code was written by coding agents working in parallel on separate branches. We owned the shared interfaces, the held-out data rules, the verification of every number and the story. The result is about 11,000 lines of Python, about 2,500 of them tests.
 
 ## Challenges we ran into
 
@@ -63,7 +63,7 @@ What we found: [RESULT: one or two sentences on the rule audit verdicts per chan
 ## Accomplishments that we're proud of
 
 - A simulator that matches real Nanopore reads within about 3 points at every read count on held-out data, checked on data no fit touched.
-- Finding that shared Nanopore errors are 30 to 66% predictable from the 5-letter context in two independent datasets, patterns the standard rules don't cover.
+- Finding that shared Nanopore errors are 45 to 66% predictable from the 5-letter context in two independent datasets, patterns the standard rules don't cover.
 - An evidence design written down before the first run, with a fixed objective, so no one could pick a metric after seeing results.
 - A clean separation of claims: the ablation ladder shows exactly where any gain comes from.
 - [RESULT: the headline result we're proudest of, once it holds under the firewall].
