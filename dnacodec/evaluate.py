@@ -134,6 +134,7 @@ def recovery_trials(
     gather_chunk_trials: int = GATHER_CHUNK_TRIALS,
     simulator: Simulator | None = None,
     encoded: EncodedFile | None = None,
+    per_trial: bool = False,
 ) -> Metrics:
     """File recovery over independent channel trials. Owner: Agent C.
 
@@ -162,6 +163,13 @@ def recovery_trials(
     - encoded (keyword): a file already encoded from data with settings. Encoding is then
       skipped and scorer is ignored. Raises ValueError if encoded.meta.settings != settings
       or encoded.meta.n_bytes != len(data).
+    - per_trial (keyword): also store per-trial results in extra, as lists in seed order
+      (extra is typed dict[str, float]; these two entries are lists of floats instead):
+        extra["trial_strand_accuracy"]: evaluate() on each trial alone, so
+          mean(trial_strand_accuracy) == strand_accuracy up to float rounding;
+        extra["trial_recovered"]: 1.0 if the trial recovered the file exactly, else 0.0, so
+          mean(trial_recovered) == recovery_rate.
+      No other field changes. recovery_trials never exits early, with or without per_trial.
     - Workers use the platform's default multiprocessing start method; with spawn (macOS)
       the calling script needs an `if __name__ == "__main__":` guard.
     """
@@ -169,7 +177,7 @@ def recovery_trials(
     with _TrialRunner(
         encoded, data, decoder, workers, len(seeds), gather_chunk_trials, simulator
     ) as runner:
-        return runner.run(profile, seeds)
+        return runner.run(profile, seeds, per_trial=per_trial)
 
 
 def min_reads_at_target(
@@ -414,12 +422,21 @@ class _TrialRunner:
                 f.cancel()  # no-op for finished or running tasks
 
     def run(
-        self, profile: SituationProfile, seeds: Sequence[int], max_failures: int | None = None
+        self,
+        profile: SituationProfile,
+        seeds: Sequence[int],
+        max_failures: int | None = None,
+        per_trial: bool = False,
     ) -> Metrics:
         """All trials, or (with max_failures) stop at the first trial in seed order that
-        makes failures exceed max_failures. Deterministic either way."""
+        makes failures exceed max_failures. Deterministic either way.
+        per_trial adds per-trial lists to extra and disables early exit."""
         if len(seeds) == 0:
             raise ValueError("no seeds")
+        if per_trial:
+            max_failures = None
+        trial_accuracy: list[float] = []
+        trial_recovered: list[float] = []
         strands = self.state[0]
         decoded_all: list[Strand | None] = []
         clusters_all: list[Cluster] = []  # size stand-ins: evaluate() only uses len(cluster)
@@ -433,6 +450,10 @@ class _TrialRunner:
                 n_recovered += recovered
                 decoded_all.extend(decoded)
                 clusters_all.extend([""] * k for k in sizes)
+                if per_trial:
+                    one = evaluate(strands, decoded, [[""] * k for k in sizes])
+                    trial_accuracy.append(one.strand_accuracy)
+                    trial_recovered.append(1.0 if recovered else 0.0)
                 if max_failures is not None and n_run - n_recovered > max_failures:
                     early_exit = n_run < len(seeds)
                     break
@@ -451,6 +472,9 @@ class _TrialRunner:
         if early_exit:
             extra["early_exit"] = 1.0
             extra["n_trials_requested"] = float(len(seeds))
+        if per_trial:
+            extra["trial_strand_accuracy"] = trial_accuracy  # type: ignore[assignment]
+            extra["trial_recovered"] = trial_recovered  # type: ignore[assignment]
         return dataclasses.replace(
             pooled,
             n_strands=len(strands),
