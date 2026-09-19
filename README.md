@@ -116,7 +116,7 @@ A fully learned encoder (an autoencoder trained through the channel) sounds appe
 
 Adaptive constrained coding, learned decoders and end-to-end learned codes all exist, but each optimizes the rules, the redundancy or the decoder in isolation. Our claim is narrow: **decoder failures become the training signal for encoder candidate selection**, and the whole codec is optimized for one explicit operating point (channel, read budget, recovery target). We don't claim a better decoder than DNAformer, and the encoder is not a neural network.
 
-**Objective, fixed before any run:** the file must be recovered exactly in all 300 held-out trials. At that target we measure the fewest reads per strand needed and the most bits per base achievable, and judge codecs on the Pareto front of the two. The default we compare against always uses the same decoder.
+**Objective, fixed before any run:** a fixed 20 KB test file must be recovered exactly in all 300 held-out trials. At that target we measure the fewest reads per strand needed and the most bits per base achievable, and judge codecs on the Pareto front of the two. The default we compare against always uses the same decoder.
 
 **Evidence:** an ablation ladder (fixed codec with baseline decoder, fixed codec with transformer, learned scorer with the same frozen transformer, full loop), a crossover matrix (each tailored codec on its own and the other channel), and a sim-to-real firewall (a structurally different Simulator B, plus the risk model's ranking on real reads). See [PROJECT.md](PROJECT.md).
 
@@ -128,12 +128,12 @@ Adaptive constrained coding, learned decoders and end-to-end learned codes all e
 | Real data loaders (Microsoft, DNAformer) with fixed held-out split | ✅ Done |
 | Mock results for dashboard development | ✅ Done |
 | Channel simulator | ✅ v1 done, Nanopore calibrated; realism fixes, Illumina calibration, Simulator B in progress |
-| Fountain encoder | 🚧 In progress |
+| Fountain encoder (LT, CRC-16 per strand, risk threshold) | ✅ Done |
 | Baseline decoder and evaluation | ✅ Done |
 | Transformer decoder | 🚧 In progress |
-| Dashboard | 🚧 In progress |
-| Risk model | ⏳ Next |
-| Adaptive loop | ⏳ Next |
+| Dashboard (Pareto, crossover, ablation, learned patterns) | ✅ Done on mock data |
+| Risk model | 🚧 In progress |
+| Alternating loop and evidence experiments | 🚧 In progress |
 
 Anything under `results/mock/` is fake data for building the dashboard and is flagged as such.
 
@@ -183,7 +183,15 @@ Evaluate the baseline decoder on the real held-out split:
 uv run python scripts/eval_real.py
 ```
 
-Commands for training, running the loop, and launching the dashboard will be added here as those components land.
+Launch the dashboard (shows mock data until real runs exist, with a MOCK banner):
+
+```bash
+uv sync --extra dashboard
+uv run python -m scripts.make_mock_results
+uv run streamlit run dashboard/app.py
+```
+
+Commands for training and running the loop will be added here as those components land.
 
 ## Repository layout
 

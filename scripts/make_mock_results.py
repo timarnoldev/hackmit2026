@@ -7,10 +7,13 @@ crossover matrix, firewall tests, and candidate examples.
 
 from __future__ import annotations
 
+import shutil
+
 import numpy as np
 
 from dnacodec.profiles import load_profile
 from dnacodec.results import (
+    RESULTS_DIR,
     AblationEntry,
     CandidateExample,
     CoveragePoint,
@@ -29,6 +32,7 @@ N_TRIALS = 300
 
 
 def fake_metrics(rng: np.random.Generator, accuracy: float, bits: float, reads: float) -> Metrics:
+    accuracy = min(accuracy, 0.995)
     length = 110
     ramp = np.linspace(1.0, 2.0, length)
     recovery = float(np.clip((accuracy - 0.6) / 0.35, 0, 1))
@@ -49,6 +53,7 @@ def fake_metrics(rng: np.random.Generator, accuracy: float, bits: float, reads: 
 
 
 def main() -> None:
+    shutil.rmtree(RESULTS_DIR / "mock", ignore_errors=True)  # stale files from older formats break loading
     rng = np.random.default_rng(0)
     default = EncoderSettings()
     for name in CORE:

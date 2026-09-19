@@ -12,7 +12,7 @@ from rapidfuzz.distance import Levenshtein
 
 from .encoder import payload_bits_per_base
 from .profiles import SituationProfile
-from .types import Cluster, FileMeta, Metrics, Strand
+from .types import Cluster, Decoder, EncoderSettings, FileMeta, Metrics, Scorer, Strand
 
 BITS_PER_MB = 8e6  # 1 MB = 10^6 bytes
 
@@ -111,3 +111,46 @@ def evaluate(
         read_cost_usd_per_mb=read_cost,
         extra={"decoded_fraction": n_decoded / n},
     )
+
+
+def recovery_trials(
+    data: bytes,
+    settings: EncoderSettings,
+    scorer: Scorer | None,
+    decoder: Decoder,
+    profile: SituationProfile,
+    seeds: Sequence[int],
+    workers: int | None = None,
+) -> Metrics:
+    """File recovery over independent channel trials. Owner: Agent C.
+
+    Encode data once with settings and scorer (encoding is deterministic). Then for each seed:
+    simulate(strands, profile, seed), decoder.decode, encoder.recover, compare to data exactly.
+    Returns Metrics with recovery_rate = fraction of trials recovered, n_trials = len(seeds),
+    file_recovered = (recovery_rate == 1.0), strand metrics pooled over all trials via evaluate(),
+    bits_per_base and costs from the encoded file.
+
+    Trials run in parallel across CPU cores (workers=None uses all cores); results must be
+    identical to a serial run. The caller decides train vs held-out seeds.
+    """
+    raise NotImplementedError("Agent C")
+
+
+def min_reads_at_target(
+    data: bytes,
+    settings: EncoderSettings,
+    scorer: Scorer | None,
+    decoder: Decoder,
+    profile: SituationProfile,
+    seeds: Sequence[int],
+    target: float = 1.0,
+    coverages: Sequence[float] = (2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16),
+    workers: int | None = None,
+) -> float | None:
+    """Fewest mean reads per strand at which recovery_rate >= target. Owner: Agent C.
+
+    Evaluates recovery_trials with dataclasses.replace(profile, coverage_mean=c) for c in
+    ascending coverages and returns the first c meeting the target (may stop early, and may
+    bisect between grid points). Returns None if no coverage meets it.
+    """
+    raise NotImplementedError("Agent C")
