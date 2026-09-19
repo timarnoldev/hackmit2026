@@ -438,3 +438,51 @@ def test_pre_encoded_file_must_match():
             DATA[:500], SETTINGS, None, FirstReadDecoder(), _clean(), _seeds(1), workers=1,
             encoded=encoded,
         )
+
+
+# ---- per_trial= ---------------------------------------------------------------------
+
+def test_per_trial_aggregates_to_pooled_and_is_path_independent():
+    profile = dataclasses.replace(load_profile("nanopore_budget"), coverage_mean=7.0)
+    settings = dataclasses.replace(SETTINGS, redundancy=1.0)
+    seeds = _seeds(6)
+    args = (DATA, settings, None, MajorityVoteDecoder(), profile, seeds)
+    plain = recovery_trials(*args, workers=1)
+    m = recovery_trials(*args, workers=1, per_trial=True)
+
+    acc, rec = m.extra["trial_strand_accuracy"], m.extra["trial_recovered"]
+    assert len(acc) == len(rec) == len(seeds)
+    assert set(rec) <= {0.0, 1.0}
+    assert 0.0 < m.recovery_rate < 1.0, "want mixed outcomes for a meaningful test"
+    # aggregates exactly (in counts) to the pooled metrics
+    n = m.n_strands
+    assert sum(round(a * n) for a in acc) == round(m.strand_accuracy * n * len(seeds))
+    assert sum(rec) / len(seeds) == m.recovery_rate
+    assert sum(acc) / len(acc) == pytest.approx(m.strand_accuracy, abs=1e-12)
+    # nothing else changes
+    without = dict(dataclasses.asdict(m))
+    extra = dict(without.pop("extra"))
+    del extra["trial_strand_accuracy"], extra["trial_recovered"]
+    plain_d = dataclasses.asdict(plain)
+    assert extra == plain_d.pop("extra")
+    assert without == plain_d
+
+    # identical on the parallel and the chunked gather paths
+    parallel = recovery_trials(*args, workers=3, per_trial=True)
+    assert dataclasses.asdict(parallel) == dataclasses.asdict(m)
+    for workers, chunk in ((1, 4), (2, 1)):
+        dec = GatherBaseline()
+        g = recovery_trials(
+            DATA, settings, None, dec, profile, seeds, workers=workers, per_trial=True,
+            gather_chunk_trials=chunk,
+        )
+        assert dataclasses.asdict(g) == dataclasses.asdict(m), (workers, chunk)
+
+
+def test_per_trial_disables_early_exit():
+    encoded = encode(DATA, SETTINGS)
+    profile = load_profile("nanopore_budget")  # every trial fails here
+    with _TrialRunner(encoded, DATA, MajorityVoteDecoder(), 1, 5) as runner:
+        m = runner.run(profile, _seeds(5), max_failures=0, per_trial=True)
+    assert m.n_trials == 5 and "early_exit" not in m.extra
+    assert m.extra["trial_recovered"] == [0.0] * 5
