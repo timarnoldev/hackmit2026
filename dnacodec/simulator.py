@@ -7,20 +7,46 @@ Error model, per reference base of each read (independently):
     - insertion with probability p_ins[i]: a uniform random base is emitted, then the base
     - substitution with probability p_sub[i]: one of the other three bases is emitted
     - otherwise the base is emitted unchanged
-where p_x[i] = x_rate * homopolymer_factor ** (run_length(i) - 1) * ramp(i), and ramp goes
-linearly from 1 at the first base to end_factor at the last base. The three probabilities
-are jointly capped at MAX_EVENT_PROB per base.
+where p_x[i] = x_rate * homopolymer_factor ** (run_length(i) - 1) * ramp(i) * q, ramp goes
+linearly from 1 at the first base to end_factor at the last base, and q is the read's
+quality multiplier. The three probabilities are jointly capped at MAX_EVENT_PROB per base.
+
+Realism extensions (profile defaults switch them off and reproduce the model above):
+    - homopolymer_run_factors: when set, replaces homopolymer_factor. The deletion
+      probability of a base in a run of length r is multiplied by factors[min(r, n) - 1];
+      substitutions and insertions get no run effect. On real Nanopore reads (Microsoft
+      train split) the run effect is almost purely deletions: per-base deletions rise 8x
+      from runs of 1 to runs of 6, substitutions only 1.4x, insertions fall.
+    - read_quality_spread: q ~ lognormal with mean 1 and this sigma, one draw per read.
+    - position_rate_spread: a lognormal multiplier with mean 1 and this sigma, drawn once
+      per (strand, position) and shared by all reads of that strand (sequence-context hot
+      spots). This is what makes some errors systematic within a cluster, so that more
+      reads don't help: real Nanopore clusters fail ~11% of the time even at full coverage.
+    - malformed_read_rate: this fraction of reads is generated from a different, random
+      strand of the same batch (a clustering error), then goes through the same channel.
+      Needs at least two strands in the batch.
+    - context_table: file (relative to profiles/, kept in profiles/context/ because every
+      profiles/*.json is a profile; or an absolute path) with one multiplier per
+      centered k-mer and error type, {"k": 5, "sub": [...], "ins": [...], "del": [...]}.
+      Index = the k-mer read as a base-4 number (A=0, C=1, G=2, T=3, first base most
+      significant). Bases closer than k//2 to a strand end get multiplier 1. On real
+      Nanopore reads the centered 5-mer explains ~40% of the between-position variance
+      of sub and del rates (held-apart train clusters), so this is sequence-dependent
+      and learnable, unlike position_rate_spread which covers the rest.
 
 Everything is vectorized over all reads of a batch with numpy.
 """
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
 
-from .profiles import SituationProfile
+from .profiles import PROFILES_DIR, SituationProfile
 from .types import Cluster, Strand
 
 MAX_EVENT_PROB = 0.5  # cap on p_sub + p_ins + p_del at a single base
@@ -64,29 +90,93 @@ def gc_content(codes: np.ndarray, lengths: np.ndarray) -> np.ndarray:
     return gc / np.maximum(lengths, 1)
 
 
-def error_multipliers(codes: np.ndarray, lengths: np.ndarray, profile: SituationProfile) -> np.ndarray:
-    """(S, L) per-base error multiplier from homopolymer runs and the position ramp."""
+def error_multipliers(
+    codes: np.ndarray, lengths: np.ndarray, profile: SituationProfile
+) -> tuple[np.ndarray, np.ndarray]:
+    """(S, L) per-base multipliers: (for deletions, for substitutions and insertions).
+
+    Both include the position ramp and are 0 on padding. The homopolymer effect goes into
+    both with homopolymer_factor, and only into deletions with homopolymer_run_factors.
+    """
     width = codes.shape[1]
     pos = np.arange(width)[None, :]
     frac = pos / np.maximum(lengths[:, None] - 1, 1)
     ramp = 1.0 + (profile.end_factor - 1.0) * frac
-    hp = profile.homopolymer_factor ** (run_lengths(codes) - 1).astype(np.float64)
-    mult = ramp * hp
-    mult[pos >= lengths[:, None]] = 0.0
-    return mult
+    ramp[pos >= lengths[:, None]] = 0.0
+    runs = run_lengths(codes)
+    if profile.homopolymer_run_factors:
+        factors = np.asarray(profile.homopolymer_run_factors, dtype=np.float64)
+        hp = factors[np.minimum(runs, len(factors)) - 1]
+        return ramp * hp, ramp
+    mult = ramp * profile.homopolymer_factor ** (runs - 1).astype(np.float64)
+    return mult, mult
+
+
+def cap_probabilities(
+    p_del: np.ndarray, p_ins: np.ndarray, p_sub: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    total = p_del + p_ins + p_sub
+    scale = np.where(total > MAX_EVENT_PROB, MAX_EVENT_PROB / np.maximum(total, 1e-12), 1.0)
+    return p_del * scale, p_ins * scale, p_sub * scale
+
+
+def kmer_ids(codes: np.ndarray, k: int) -> np.ndarray:
+    """(S, L) id of the k-mer centered on each base, -1 where it doesn't fit in the strand."""
+    s, width = codes.shape
+    h = k // 2
+    ids = np.full((s, width), -1, dtype=np.int64)
+    if width < k:
+        return ids
+    val = np.zeros((s, width - 2 * h), dtype=np.int64)
+    bad = np.zeros((s, width - 2 * h), dtype=bool)
+    for j in range(k):
+        window = codes[:, j : j + width - 2 * h]
+        bad |= window == _PAD
+        val = val * 4 + np.minimum(window, 3)
+    ids[:, h : width - h] = np.where(bad, -1, val)
+    return ids
+
+
+@lru_cache(maxsize=16)
+def _read_context_table(path: str, mtime_ns: int) -> tuple[int, np.ndarray]:
+    data = json.loads(Path(path).read_text())
+    k = int(data["k"])
+    table = np.array([data["sub"], data["ins"], data["del"]], dtype=np.float64)
+    if table.shape != (3, 4**k) or (table < 0).any():
+        raise ValueError(f"context table {path}: need 3 x {4**k} non-negative multipliers")
+    return k, table
+
+
+def load_context_table(name: str) -> tuple[int, np.ndarray]:
+    """(k, table of shape (3, 4**k) for sub, ins, del). Relative names live in profiles/."""
+    path = Path(name)
+    if not path.is_absolute():
+        path = PROFILES_DIR / path
+    return _read_context_table(str(path), path.stat().st_mtime_ns)
+
+
+def context_multipliers(codes: np.ndarray, profile: SituationProfile) -> np.ndarray | None:
+    """(3, S, L) multipliers for sub, ins, del from the profile's context table, or None."""
+    name = profile.context_table
+    if not name:
+        return None
+    k, table = load_context_table(name)
+    ids = kmer_ids(codes, k)
+    inside = ids >= 0
+    safe = np.where(inside, ids, 0)
+    return np.where(inside[None], table[:, safe], 1.0)
 
 
 def base_probabilities(
     codes: np.ndarray, lengths: np.ndarray, profile: SituationProfile
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Per strand and base: (p_del, p_ins, p_sub), each (S, L), jointly capped."""
-    mult = error_multipliers(codes, lengths, profile)
-    p_del = profile.del_rate * mult
-    p_ins = profile.ins_rate * mult
-    p_sub = profile.sub_rate * mult
-    total = p_del + p_ins + p_sub
-    scale = np.where(total > MAX_EVENT_PROB, MAX_EVENT_PROB / np.maximum(total, 1e-12), 1.0)
-    return p_del * scale, p_ins * scale, p_sub * scale
+    """Per strand and base for a read of average quality: (p_del, p_ins, p_sub), (S, L) each."""
+    del_mult, mult = error_multipliers(codes, lengths, profile)
+    p_del, p_ins, p_sub = profile.del_rate * del_mult, profile.ins_rate * mult, profile.sub_rate * mult
+    ctx = context_multipliers(codes, profile)
+    if ctx is not None:
+        p_sub, p_ins, p_del = p_sub * ctx[0], p_ins * ctx[1], p_del * ctx[2]
+    return p_del, p_ins, p_sub
 
 
 def dropout_probabilities(codes: np.ndarray, lengths: np.ndarray, profile: SituationProfile) -> np.ndarray:
@@ -143,6 +233,9 @@ def simulate(strands: Sequence[Strand], profile: SituationProfile, seed: int) ->
     - coverage: negative binomial with coverage_mean and coverage_dispersion
     - per read: substitutions, insertions, deletions at the profile rates, scaled up in
       homopolymer runs (homopolymer_factor) and toward the strand end (end_factor)
+    - optional realism fields: homopolymer_run_factors, read_quality_spread,
+      position_rate_spread,
+      malformed_read_rate (see the module docstring)
 
     Deterministic for a given seed. Uses numpy.random.default_rng(seed).
     """
@@ -157,11 +250,29 @@ def simulate(strands: Sequence[Strand], profile: SituationProfile, seed: int) ->
     counts = np.where(survive, counts, 0)
 
     p_del, p_ins, p_sub = base_probabilities(codes, lengths, profile)
-    owner = np.repeat(np.arange(n), counts)
+    source = np.repeat(np.arange(n), counts)  # which strand each read is generated from
+    n_reads = len(source)
+    if profile.malformed_read_rate > 0 and n > 1:
+        bad = rng.random(n_reads) < profile.malformed_read_rate
+        # a uniformly random strand other than the read's own cluster
+        other = (source[bad] + rng.integers(1, n, size=int(bad.sum()))) % n
+        source[bad] = other
+    sigma = profile.read_quality_spread
+    quality = rng.lognormal(-0.5 * sigma**2, sigma, size=n_reads) if sigma > 0 else None
+    hot = profile.position_rate_spread
+    if hot > 0:
+        spots = rng.lognormal(-0.5 * hot**2, hot, size=p_del.shape)
+        p_del, p_ins, p_sub = p_del * spots, p_ins * spots, p_sub * spots
+
     reads: list[str] = []
-    for start in range(0, len(owner), READ_CHUNK):
-        idx = owner[start : start + READ_CHUNK]
-        reads.extend(_mutate(rng, codes[idx], p_del[idx], p_ins[idx], p_sub[idx]))
+    for start in range(0, n_reads, READ_CHUNK):
+        idx = source[start : start + READ_CHUNK]
+        pd, pi, ps = p_del[idx], p_ins[idx], p_sub[idx]
+        if quality is not None:
+            q = quality[start : start + READ_CHUNK, None]
+            pd, pi, ps = pd * q, pi * q, ps * q
+        pd, pi, ps = cap_probabilities(pd, pi, ps)
+        reads.extend(_mutate(rng, codes[idx], pd, pi, ps))
 
     clusters: list[Cluster] = []
     pos = 0

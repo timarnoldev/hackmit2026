@@ -2,11 +2,11 @@
   "name": "nanopore_budget",
   "description": "Portable Nanopore reading on a tight budget, short-term storage",
   "technology": "nanopore",
-  "sub_rate": 0.01303,
-  "ins_rate": 0.01561,
-  "del_rate": 0.01783,
-  "homopolymer_factor": 1.222,
-  "end_factor": 1.218,
+  "sub_rate": 0.01522,
+  "ins_rate": 0.01894,
+  "del_rate": 0.02198,
+  "homopolymer_factor": 1.184,
+  "end_factor": 1.205,
   "dropout_rate": 0.02,
   "gc_dropout_factor": 0.05,
   "coverage_mean": 6.0,
@@ -15,5 +15,18 @@
   "decay_per_year": 0.001,
   "synthesis_usd_per_base": 0.0001,
   "sequencing_usd_per_read": 1e-05,
-  "calibrated_from": "microsoft_nanopore (train split)"
+  "calibrated_from": "microsoft_nanopore (train split)",
+  "homopolymer_run_factors": [
+    1.0,
+    1.0,
+    1.0,
+    1.053,
+    2.278,
+    5.02,
+    6.66
+  ],
+  "read_quality_spread": 0.5,
+  "malformed_read_rate": 0.0,
+  "position_rate_spread": 0.8,
+  "context_table": "context/nanopore_budget.json"
 }
