@@ -49,12 +49,17 @@ from dnacodec.simulator import kmer_ids, load_context_table, run_lengths, sample
 OUTLIER_FRACTION = 0.3
 MAX_RUN = 7  # run lengths >= MAX_RUN share the last homopolymer bucket
 MIN_RUN_EVENTS = 30  # fewer real deletions than this in a run bucket: too noisy to fit
-SIM_READS_PER_REF = 12
+SIM_READS_PER_REF = 12  # minimum simulated reads per reference when fitting error stats
+SIM_MAX_READS_PER_REF = 60
+SIM_TARGET_EVENTS = 150_000
 CONTEXT_K = 5  # centered k-mer for the context table
 CONTEXT_PRIOR = 2000.0  # pseudo base-reads at the global rate when estimating k-mer rates
 HOT_THRESHOLD = 0.2  # a (strand, position) is a hot spot if this share of reads errs there
 HOT_MIN_READS = 10
 FIT_ITERATIONS = 5
+CONTEXT_FIT_ITERATIONS = 8
+CONTEXT_RUN_MIN = 4  # with a context table, run factors only for runs >= this (the 5-mer sees shorter ones)
+CONTEXT_DAMPING = 0.5  # exponent on multiplicative updates of the table and run factors
 BUDGETS = [2, 4, 6, 10, 16]  # reads per cluster for the accuracy curve (as in eval_real.py)
 READ_GRID = [0.0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0]
 POS_GRID = [0.0, 0.6, 0.8, 1.0, 1.1, 1.2, 1.3, 1.4, 1.6]
@@ -75,6 +80,7 @@ _TABLE_COUNTER = itertools.count()
 
 def write_context_table(table: np.ndarray, path: Path | None = None, fitted_on: str = "") -> str:
     path = path or _TABLE_DIR / f"ctx_{next(_TABLE_COUNTER)}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
     data = {"k": CONTEXT_K, "fitted_on": fitted_on}
     for name, row in zip(TYPE_NAMES, table):
         data[name] = [round(float(v), 4) for v in row]
@@ -271,8 +277,16 @@ def simulate_sized(refs: list[str], sizes: list[int], profile: SituationProfile,
     return out
 
 
+def sim_reads_per_ref(refs: list[str], profile: SituationProfile) -> int:
+    """Enough simulated reads for ~SIM_TARGET_EVENTS error events (low-error Illumina needs more)."""
+    rate = profile.sub_rate + profile.ins_rate + profile.del_rate
+    need = SIM_TARGET_EVENTS / max(len(refs) * len(refs[0]) * rate, 1e-9)
+    return int(np.clip(np.ceil(need), SIM_READS_PER_REF, SIM_MAX_READS_PER_REF))
+
+
 def simulated_stats(refs: list[str], profile: SituationProfile, seed: int) -> ErrorStats:
-    return error_stats(refs, simulate_sized(refs, [SIM_READS_PER_REF] * len(refs), profile, seed))
+    n = sim_reads_per_ref(refs, profile)
+    return error_stats(refs, simulate_sized(refs, [n] * len(refs), profile, seed))
 
 
 def _forward_fill(values: np.ndarray, reliable: np.ndarray) -> np.ndarray:
@@ -303,7 +317,14 @@ def fit_error_model(
     instead of being fit to noise. The context table holds mean-1 multipliers per centered
     k-mer and error type (mean weighted by how often each k-mer occurs in the real data).
     warm=True keeps the start's parameters instead of initializing from the real stats.
+
+    With fit_context the deletion model is del_rate x table[5-mer] x run factor, which is
+    only identifiable with constraints: run factors are fixed to 1 below CONTEXT_RUN_MIN
+    (the centered 5-mer already sees those runs), del_rate follows the overall deletion
+    rate, and table and run factors take damped steps.
     """
+    if fit_context:
+        return _fit_error_model_context(refs, real, start, seed, verbose, iterations, warm)
     reliable = real.run_events[2] >= MIN_RUN_EVENTS
     reliable[0] = True
     del_run = _forward_fill(np.maximum(real.by_run[2], 1e-6), reliable)
@@ -351,6 +372,63 @@ def fit_error_model(
             step = (real_ctx / np.maximum(sim.ctx_relative(), 1e-6)) ** 0.7
             updates["context_table"] = write_context_table(normalized(table * step))
         profile = replace(profile, **updates)
+    final = simulated_stats(refs, profile, seed + 1000)
+    return profile, final
+
+
+def _fit_error_model_context(
+    refs: list[str],
+    real: ErrorStats,
+    start: SituationProfile,
+    seed: int,
+    verbose: bool,
+    iterations: int,
+    warm: bool,
+) -> tuple[SituationProfile, ErrorStats]:
+    iterations = max(iterations, CONTEXT_FIT_ITERATIONS) if not warm else iterations
+    reliable = real.run_events[2] >= MIN_RUN_EVENTS
+    fit_run = reliable & (np.arange(1, MAX_RUN + 1) >= CONTEXT_RUN_MIN)
+    weights = real.ctx_bases / max(real.ctx_bases.sum(), 1)
+    real_ctx = real.ctx_relative()
+
+    def normalized(table: np.ndarray) -> np.ndarray:
+        return table / np.maximum((table * weights).sum(axis=1, keepdims=True), 1e-12)
+
+    profile = start
+    if not warm:
+        profile = replace(
+            start,
+            sub_rate=real.sub,
+            ins_rate=real.ins,
+            del_rate=real.dele,
+            homopolymer_run_factors=tuple([1.0] * MAX_RUN),
+            end_factor=max(real.end_ratio, 0.1),
+            malformed_read_rate=real.outlier_fraction,
+            context_table=write_context_table(normalized(real_ctx)),
+        )
+    for it in range(iterations):
+        sim = simulated_stats(refs, profile, seed + it)
+        if verbose:
+            sd = np.round(np.std(np.log(sim.ctx_relative() / real_ctx), axis=1), 3).tolist()
+            print(
+                f"  fit {it}: sim sub {sim.sub:.4f} ins {sim.ins:.4f} del {sim.dele:.4f} "
+                f"end {sim.end_ratio:.3f} del-by-run {np.round(sim.by_run[2], 3).tolist()} ctx log-ratio sd {sd}"
+            )
+        factors = np.asarray(profile.homopolymer_run_factors, dtype=np.float64)
+        run_step = np.where(fit_run, real.by_run[2] / np.maximum(sim.by_run[2], 1e-6), 1.0)
+        factors = _forward_fill(factors * run_step**CONTEXT_DAMPING, fit_run | (np.arange(MAX_RUN) == 0))
+        factors[: CONTEXT_RUN_MIN - 1] = 1.0
+        _, table = load_context_table(profile.context_table)
+        step = (real_ctx / np.maximum(sim.ctx_relative(), 1e-6)) ** CONTEXT_DAMPING
+        profile = replace(
+            profile,
+            sub_rate=min(profile.sub_rate * real.sub / max(sim.sub, 1e-9), 0.3),
+            ins_rate=min(profile.ins_rate * real.ins / max(sim.ins, 1e-9), 0.3),
+            del_rate=min(profile.del_rate * real.dele / max(sim.dele, 1e-9), 0.3),
+            homopolymer_run_factors=tuple(factors.tolist()),
+            end_factor=max(profile.end_factor + real.end_ratio - sim.end_ratio, 0.1),
+            context_table=write_context_table(normalized(table * step)),
+        )
     final = simulated_stats(refs, profile, seed + 1000)
     return profile, final
 
@@ -427,7 +505,15 @@ def fit_spreads(
     for _ in range(2):
         pos_sigma = min(POS_GRID, key=lambda p: score(read_sigma, p))
         read_sigma = min(READ_GRID, key=lambda r: score(r, pos_sigma))
-    return min(cache.values(), key=lambda v: v[0])[1]
+    # The simplest candidate (smallest spreads) whose loss is within sampling noise of the
+    # best: 2 x sum_k p_k (1 - p_k) / n is the expected loss of a perfect model.
+    n = len(curve_refs)
+    tolerance = 2.0 * float(np.sum(real_curve * (1 - real_curve))) / n
+    best = min(v[0] for v in cache.values())
+    ok = [(r + p, key) for key, (loss, _) in cache.items() if loss <= best + tolerance for r, p in [key]]
+    chosen = min(ok)[1]
+    print(f"  chosen read {chosen[0]:.2f} pos {chosen[1]:.2f} (best loss {best:.4f}, noise tolerance {tolerance:.4f})")
+    return cache[chosen][1]
 
 
 def rounded(profile: SituationProfile) -> SituationProfile:
@@ -568,7 +654,7 @@ def calibrate(
     table_name = None
     if fit_context:
         _, table = load_context_table(fitted.context_table)
-        table_name = table_out or f"{profile_names[0]}_context.json"
+        table_name = table_out or f"context/{profile_names[0]}.json"
         table_path = PROFILES_DIR / table_name if (table_out or not dry_run) else _TABLE_DIR / table_name
         fitted = replace(fitted, context_table=write_context_table(table, table_path, f"{source} (train split)"))
         print(f"  context table -> {table_path}")
@@ -705,7 +791,7 @@ def main(argv: list[str] | None = None) -> None:
             profiles, fit_dispersion, dry = ["nanopore_budget"], False, True
         # Illumina has ~1 error per 1000 bases: too few events per 5-mer for a context table.
         fit_context = "illumina" not in name.lower() and not args.no_context
-        table_out = None if "illumina" in name.lower() else "nanopore_budget_context_b.json"
+        table_out = None if "illumina" in name.lower() else "context/nanopore_budget_b.json"
         calibrate(
             clusters, profiles, f"dnaformer_{name}", args.seed, fit_dispersion, dry,
             fit_context=fit_context, table_out=table_out,

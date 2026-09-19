@@ -25,7 +25,8 @@ Realism extensions (profile defaults switch them off and reproduce the model abo
     - malformed_read_rate: this fraction of reads is generated from a different, random
       strand of the same batch (a clustering error), then goes through the same channel.
       Needs at least two strands in the batch.
-    - context_table: file (under profiles/, or an absolute path) with one multiplier per
+    - context_table: file (relative to profiles/, kept in profiles/context/ because every
+      profiles/*.json is a profile; or an absolute path) with one multiplier per
       centered k-mer and error type, {"k": 5, "sub": [...], "ins": [...], "del": [...]}.
       Index = the k-mer read as a base-4 number (A=0, C=1, G=2, T=3, first base most
       significant). Bases closer than k//2 to a strand end get multiplier 1. On real
@@ -156,7 +157,7 @@ def load_context_table(name: str) -> tuple[int, np.ndarray]:
 
 def context_multipliers(codes: np.ndarray, profile: SituationProfile) -> np.ndarray | None:
     """(3, S, L) multipliers for sub, ins, del from the profile's context table, or None."""
-    name = getattr(profile, "context_table", None)  # field proposed, not in every profile
+    name = profile.context_table
     if not name:
         return None
     k, table = load_context_table(name)
