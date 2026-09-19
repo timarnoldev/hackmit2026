@@ -37,7 +37,8 @@ def predict(
         chunk = todo[start : start + batch_size]
         read_lists = [select_reads(clusters[i], strand_length, model.cfg.max_reads) for i in chunk]
         batch = encode_batch(read_lists, [strand_length] * len(chunk)).to(device)
-        logits = model(batch.reads, batch.lengths)
+        with torch.autocast(device.type, dtype=torch.bfloat16, enabled=device.type == "cuda"):
+            logits = model(batch.reads, batch.lengths)
         pred = logits.argmax(-1).cpu().numpy()
         for i, row in zip(chunk, pred):
             out[i] = _LETTERS[row[:strand_length]].tobytes().decode()
@@ -49,6 +50,9 @@ class TransformerDecoder:
     """Loads a checkpoint written by dnacodec.model.train or finetune."""
 
     name = "transformer"
+    # Evaluation calls decode() once, in the main process, with all clusters of all trials.
+    # predict() processes them in chunks of batch_size, so only one chunk is on the GPU.
+    main_process_only = True
 
     def __init__(self, checkpoint_path: str | Path, device: str | None = None, batch_size: int = 256):
         self.device = pick_device(device)

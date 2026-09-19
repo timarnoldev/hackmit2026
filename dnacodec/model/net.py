@@ -12,6 +12,7 @@ near base i of each read; the layers learn to follow indel shifts.
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 
 import torch
@@ -30,6 +31,12 @@ class ModelConfig:
     dropout: float = 0.1
     max_reads: int = MAX_READS
     max_strand_length: int = 160
+    # "dual": half the channels are sinusoids of the position from the start, half of the
+    # position from the end (of the read, or of the strand for output queries), plus a learned
+    # correction. Nearby positions look alike, so query i softly attends around base i, and
+    # the end anchor stops indel drift from piling up toward the strand end.
+    # "sinusoidal": start anchor only. "learned": plain learned table (older checkpoints).
+    pos_encoding: str = "dual"
 
     @property
     def max_read_len(self) -> int:
@@ -47,6 +54,15 @@ PRESETS: dict[str, ModelConfig] = {
 }
 
 
+def sinusoids(n: int, d: int) -> torch.Tensor:
+    pos = torch.arange(n, dtype=torch.float32)[:, None]
+    freq = torch.exp(torch.arange(0, d, 2, dtype=torch.float32) * (-math.log(10_000.0) / d))
+    out = torch.zeros(n, d)
+    out[:, 0::2] = torch.sin(pos * freq)
+    out[:, 1::2] = torch.cos(pos * freq)
+    return out
+
+
 class ConsensusNet(nn.Module):
     def __init__(self, cfg: ModelConfig):
         super().__init__()
@@ -54,6 +70,16 @@ class ConsensusNet(nn.Module):
         d = cfg.d_model
         self.tok_emb = nn.Embedding(PAD + 1, d, padding_idx=PAD)
         self.pos_emb = nn.Embedding(cfg.max_read_len, d)
+        if cfg.pos_encoding == "sinusoidal":
+            nn.init.zeros_(self.pos_emb.weight)
+            self.register_buffer("pos_sin", sinusoids(cfg.max_read_len, d), persistent=False)
+        elif cfg.pos_encoding == "dual":
+            nn.init.zeros_(self.pos_emb.weight)
+            self.register_buffer("pos_sin", sinusoids(cfg.max_read_len, d // 2), persistent=False)
+        elif cfg.pos_encoding == "learned":
+            self.pos_sin = None
+        else:
+            raise ValueError(f"unknown pos_encoding {cfg.pos_encoding!r}")
         self.read_emb = nn.Embedding(cfg.max_reads, d)
         self.query_emb = nn.Embedding(cfg.max_strand_length, d)
         self.len_emb = nn.Embedding(cfg.max_strand_length + 1, d)
@@ -72,6 +98,21 @@ class ConsensusNet(nn.Module):
         self.out_norm = nn.LayerNorm(d)
         self.head = nn.Linear(d, 4)
         nn.init.normal_(self.null_mem, std=0.02)
+        if cfg.pos_encoding != "learned":
+            # Start with position (and base identity) dominating; the rest is learned.
+            for emb in (self.read_emb, self.query_emb, self.len_emb):
+                nn.init.normal_(emb.weight, std=0.02)
+
+    def positions(self, start: torch.Tensor, length: torch.Tensor) -> torch.Tensor:
+        """Position codes for index `start` in a sequence of `length` (broadcastable)."""
+        p = self.pos_emb(start)
+        if self.cfg.pos_encoding == "sinusoidal":
+            return p + self.pos_sin[start]
+        if self.cfg.pos_encoding == "dual":
+            end = (length - 1 - start).clamp(min=0)
+            start = start.expand_as(end)
+            return p + torch.cat([self.pos_sin[start], self.pos_sin[end]], dim=-1)
+        return p
 
     def forward(self, reads: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
         """reads (B, R, L) long, lengths (B,) long -> logits (B, max(lengths), 4)."""
@@ -85,20 +126,23 @@ class ConsensusNet(nn.Module):
         d = self.cfg.d_model
 
         pad = reads == PAD  # (B, R, L)
-        x = self.tok_emb(reads) + self.pos_emb(torch.arange(L, device=dev)) \
+        read_len = (~pad).sum(-1, keepdim=True)  # (B, R, 1)
+        x = self.tok_emb(reads) + self.positions(torch.arange(L, device=dev), read_len) \
             + self.read_emb(torch.arange(R, device=dev))[:, None, :]
         x = x.reshape(B * R, L, d)
         pad_flat = pad.reshape(B * R, L)
         nonempty = ~pad_flat.all(dim=1)
         h = x.new_zeros(B * R, L, d)
         if nonempty.any():
-            h[nonempty] = self.encoder(x[nonempty], src_key_padding_mask=pad_flat[nonempty])
+            enc = self.encoder(x[nonempty], src_key_padding_mask=pad_flat[nonempty])
+            h[nonempty] = enc.to(h.dtype)
         mem = self.mem_norm(h).reshape(B, R * L, d)
         mem = torch.cat([self.null_mem.expand(B, 1, d).to(mem.dtype), mem], dim=1)
         mem_mask = torch.cat([torch.zeros(B, 1, dtype=torch.bool, device=dev), pad.reshape(B, R * L)], 1)
 
         pos = torch.arange(S, device=dev)
-        q = (self.query_emb(pos) + self.pos_emb(pos))[None] + self.len_emb(lengths)[:, None, :]
+        q = self.query_emb(pos)[None] + self.positions(pos[None, :], lengths[:, None]) \
+            + self.len_emb(lengths)[:, None, :]
         q_pad = pos[None, :] >= lengths[:, None]
         y = self.decoder(q, mem, tgt_key_padding_mask=q_pad, memory_key_padding_mask=mem_mask)
         return self.head(self.out_norm(y))
@@ -130,6 +174,7 @@ def save_checkpoint(path, model: ConsensusNet, **extra) -> None:
 
 def load_checkpoint(path, device: torch.device | str = "cpu") -> tuple[ConsensusNet, dict]:
     ckpt = torch.load(path, map_location=device, weights_only=False)
-    model = ConsensusNet(ModelConfig(**ckpt["config"])).to(device)
+    cfg = {"pos_encoding": "learned", **ckpt["config"]}  # checkpoints from before the option
+    model = ConsensusNet(ModelConfig(**cfg)).to(device)
     model.load_state_dict(ckpt["model"])
     return model, ckpt

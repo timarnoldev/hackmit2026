@@ -181,6 +181,31 @@ def test_finetune_writes_loadable_checkpoint(tmp_path):
     assert all(len(s) == 36 for s in dec.decode(clusters[:4], 36))
 
 
+def test_decoder_batches_many_clusters_in_main_process(tmp_path):
+    assert TransformerDecoder.main_process_only is True
+    path = tmp_path / "m.pt"
+    save_checkpoint(path, ConsensusNet(TINY))
+    dec = TransformerDecoder(path, device="cpu", batch_size=64)
+    rng = np.random.default_rng(3)
+    refs = random_strands(500, 110, rng)
+    clusters = [[noisy_copy(r, rng, 0.02) for _ in range(int(rng.integers(0, 30)))] for r in refs]
+    out = dec.decode(clusters, 110)
+    assert len(out) == 500
+    assert all((o is None) == (not c) for o, c in zip(out, clusters))
+    assert all(len(o) == 110 for o in out if o is not None)
+
+
+@pytest.mark.parametrize("pos_encoding", ["learned", "sinusoidal", "dual"])
+def test_position_encodings_roundtrip(tmp_path, pos_encoding):
+    from dnacodec.model.net import ModelConfig, load_checkpoint
+
+    model = ConsensusNet(ModelConfig(**{**TINY.to_dict(), "pos_encoding": pos_encoding})).eval()
+    save_checkpoint(tmp_path / "p.pt", model)
+    loaded, _ = load_checkpoint(tmp_path / "p.pt")
+    batch = encode_batch([["ACGT" * 30, "ACG"]], [120])
+    assert torch.allclose(model(batch.reads, batch.lengths), loaded.eval()(batch.reads, batch.lengths))
+
+
 def test_predict_restores_training_mode():
     model = ConsensusNet(TINY).train()
     predict(model, [["ACGT"]], 10)

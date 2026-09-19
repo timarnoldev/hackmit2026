@@ -273,7 +273,16 @@ def train(args: argparse.Namespace) -> Path:
             rec[f"val/{name}"] = coverage_accuracy(model, refs, clusters)
         for name, (refs, clusters) in heldout.items():
             rec[f"heldout/{name}"] = coverage_accuracy(model, refs, clusters)
-        sel = float(np.mean([rec[f"val/{n}"]["mean"] for n in val])) if val else -train_loss
+        # Validation strand accuracy averaged over budgets; the small edit distance term only
+        # breaks ties (e.g. early on, when every exact accuracy is still 0).
+        if val:
+            sel = float(np.mean([
+                rec[f"val/{n}"]["mean"]
+                - 1e-4 * np.mean([rec[f"val/{n}"][f"edit{c}"] for c in EVAL_COVERAGES])
+                for n in val
+            ]))
+        else:
+            sel = -train_loss
         rec["select"] = sel
         model.train()
         parts = [f"{name} acc(edit) " + " ".join(f"{c}r={d[f'cov{c}']:.3f}({d[f'edit{c}']:.2f})"
