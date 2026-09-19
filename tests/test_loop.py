@@ -447,3 +447,27 @@ def test_tier1_ignores_candidate_grid_but_tier2_searches_it(monkeypatch):
     cfg = tiny_config(grid=replace(tiny_config().grid, redundancy=(1.0,), candidates_per_strand=(8, 32)))
     run(max_iterations=1, config=cfg)
     assert seen[0] == {8} and seen[1] == {8, 32}
+
+
+def test_redundancy_override_overlapping_fallback_records_target_not_met():
+    """--redundancy 0.8,1.0,1.3,1.6,2.0 overlaps the fallback redundancies; nothing passes."""
+    comps = mock_components()
+    comps.recovery_trials = formula_runner(lambda s, seeds: False)
+    comps = replace(comps, min_reads_at_target=lambda *a, **k: None)
+    grid = replace(tiny_config().grid, redundancy=(0.8, 1.0, 1.3, 1.6, 2.0), fallback_redundancy=(1.3, 1.6, 2.0))
+    out = run(comps=comps, max_iterations=1, config=tiny_config(grid=grid))
+    assert all("TARGET NOT MET" in it.notes for it in out.iterations)
+    assert all(it.min_reads_at_target is None for it in out.iterations)
+    assert results.load_runs("t")[0].iterations[-1].stage == "alternation 0"
+
+
+def test_cli_redundancy_override(monkeypatch):
+    import scripts.run_loop as cli
+
+    seen = {}
+    monkeypatch.setattr(cli, "setup_logging", lambda run_id: None)
+    monkeypatch.setattr(cli, "run_loop", lambda profile, run_id, settings, alts, config, components, decoder:
+                        seen.setdefault("config", config) and (_ for _ in ()).throw(SystemExit(0)))
+    with pytest.raises(SystemExit):
+        cli.main(["--profile", "nanopore_budget", "--run-id", "t", "--redundancy", "0.8,1.0,1.3,1.6,2.0"])
+    assert seen["config"].grid.redundancy == (0.8, 1.0, 1.3, 1.6, 2.0)

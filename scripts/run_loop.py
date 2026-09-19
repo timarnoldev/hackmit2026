@@ -4,6 +4,17 @@
     uv run python -m scripts.run_loop --profile nanopore_budget --run-id r1 \\
         --decoder transformer --checkpoint checkpoints/mixed_ft/best.pt
 
+Recommended for run2 (nanopore_budget): the calibrated Nanopore channel decodes only about half
+the strands at 6 reads, so redundancies below ~0.8 can't meet the target there and only cost
+screening time. Restrict its grid:
+
+    uv run python -m scripts.run_loop --profile nanopore_budget --run-id run2 --workers 15 \\
+        --redundancy 0.8,1.0,1.3,1.6,2.0
+
+If nothing in the grid (plus the fallback redundancies) meets the target on train seeds, the
+loop records the best-effort setting with "TARGET NOT MET ON TRAIN SEEDS" in its notes and
+still evaluates it and computes min reads; it never crashes on this.
+
 Progress goes to results/<run_id>/log.txt and stdout. Results: results/<run_id>/<profile>.json
 (after every alternation). Frozen codecs for run_experiments: checkpoints/loop/<run_id>/.
 
@@ -281,7 +292,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--mock", default=None, help="comma list of components to mock: trials, risk, all")
     ap.add_argument("--eval-trials", type=int, default=None, help="override held-out trials per evaluation")
     ap.add_argument("--no-refine", action="store_true", help="don't test c - 0.5 after the coverage grid")
-    ap.add_argument("--redundancy", default=None, help="grid override, e.g. 0.2,0.3,0.45,0.6,0.8,1.0")
+    ap.add_argument("--redundancy", default=None,
+                    help="redundancy grid override; for nanopore_budget use 0.8,1.0,1.3,1.6,2.0 (see module doc)")
     ap.add_argument("--lengths", default=None, help="strand length grid override, e.g. 110,140")
     args = ap.parse_args(argv)
 
