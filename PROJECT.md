@@ -258,7 +258,7 @@ Real data alone can't drive the loop: every alternation produces new strands, an
 
 **Caveat on the Microsoft set.** The dataset README (note added 8/12/2024) says the references are *not* uniformly random: a generation bug gave them long-range dependencies, and some clusters may be malformed as a result. We therefore never train the risk model on its references. We use it as a reconstruction benchmark, for calibration and for comparison with published results (Trellis BMA, BBS, DNAformer).
 
-Calibration does include a per-5-mer error table fit on Microsoft train reads. That is a different thing: it measures the error rate *given* a context, which the skewed reference composition only makes noisier for rare contexts, not biased. Two checks keep it honest: the same context families lead on DNAformer Nanopore, and Simulator B uses a table fit on DNAformer instead. A pattern the risk model learned only from a Microsoft quirk would lose its advantage in firewall test 2.
+Calibration does include a per-5-mer error table fit on Microsoft train reads. That is a different thing: it measures the error rate *given* a context, which the skewed reference composition mostly makes noisier for rare contexts. Malformed clusters could still bias some contexts. Two checks keep it honest: the same context families lead on DNAformer Nanopore, and Simulator B uses a table fit on DNAformer instead. A pattern the risk model learned only from a Microsoft quirk would lose its advantage in firewall test 2.
 
 **How we use real data**
 

@@ -49,7 +49,7 @@ Which errors dominate depends on the situation:
 | Long-term storage | DNA degrades, more strands are lost entirely |
 | Tight reading budget | Few noisy copies per strand to reconstruct from |
 
-Practical pipelines fix their sequence rules ("avoid long runs of the same letter", "keep GC content near 50%") and their redundancy by hand, and train decoders once. Adaptive constrained coding, learned decoders and end-to-end learned codes all exist, but they tune the rules, the redundancy or the decoder in isolation. Nobody measures, on a given channel, which rules and how much redundancy actually buy fewer decoding failures.
+Practical pipelines fix their sequence rules ("avoid long runs of the same letter", "keep GC content near 50%") and their redundancy by hand, and train decoders once. Adaptive constrained coding, learned decoders and end-to-end learned codes all exist, but they tune the rules, the redundancy or the decoder in isolation. Standard practice doesn't measure, on a given channel, which rules and how much redundancy actually buy fewer decoding failures.
 
 An engineer who wants to archive data in DNA has no tool that answers:
 
@@ -282,7 +282,7 @@ How real data is used:
 3. **Validate the risk model**: its predicted risk must rank real failing strands above succeeding ones.
 4. **Benchmark honestly** on held-out real clusters that no training touches.
 
-**Caveat:** the Microsoft README (note of 8/12/2024) states that its references are not uniformly random due to a generation bug, and some clusters may be malformed. We use it for reconstruction benchmarks and calibration, and the risk model never trains on its references. The 5-mer error table fit on its reads measures the error rate *given* a context, which the skewed composition makes noisier but not biased; the same context families lead on DNAformer, and Simulator B uses a DNAformer table instead.
+**Caveat:** the Microsoft README (note of 8/12/2024) states that its references are not uniformly random due to a generation bug, and some clusters may be malformed. We use it for reconstruction benchmarks and calibration, and the risk model never trains on its references. The 5-mer error table fit on its reads measures the error rate *given* a context, which the skewed composition mostly makes noisier for rare contexts. Malformed clusters could still bias some contexts, which is why we cross-check: the same context families lead on DNAformer, and Simulator B uses a DNAformer table instead.
 
 Loading:
 
