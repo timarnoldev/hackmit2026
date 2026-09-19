@@ -279,6 +279,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--workers", type=int, default=None, help="CPU workers for trials (default: all cores)")
     ap.add_argument("--alternations", type=int, default=3, help="at most 3")
     ap.add_argument("--mock", default=None, help="comma list of components to mock: trials, risk, all")
+    ap.add_argument("--eval-trials", type=int, default=None, help="override held-out trials per evaluation")
+    ap.add_argument("--no-refine", action="store_true", help="don't test c - 0.5 after the coverage grid")
     ap.add_argument("--redundancy", default=None, help="grid override, e.g. 0.2,0.3,0.45,0.6,0.8,1.0")
     ap.add_argument("--lengths", default=None, help="strand length grid override, e.g. 110,140")
     args = ap.parse_args(argv)
@@ -286,6 +288,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     setup_logging(args.run_id)
     profile = load_profile(args.profile)
     config = LoopConfig.quick_mode(args.workers) if args.quick else LoopConfig(workers=args.workers)
+    if args.eval_trials:
+        config = replace(config, eval_trials=args.eval_trials)
+    if args.no_refine:
+        config = replace(config, refine_half_step=False)
     if args.redundancy:
         config = replace(config, grid=replace(config.grid, redundancy=tuple(float(x) for x in args.redundancy.split(","))))
     if args.lengths:

@@ -541,10 +541,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--real-clusters", type=int, default=2000)
     ap.add_argument("--mock", default=None, help="comma list of components to mock: trials, risk, all")
+    ap.add_argument("--eval-trials", type=int, default=None, help="override held-out trials per evaluation")
+    ap.add_argument("--no-refine", action="store_true", help="don't test c - 0.5 after the coverage grid")
     args = ap.parse_args(argv)
 
     setup_logging(args.run_id)
     config = LoopConfig.quick_mode(args.workers) if args.quick else LoopConfig(workers=args.workers)
+    if args.eval_trials:
+        config = replace(config, eval_trials=args.eval_trials)
+    if args.no_refine:
+        config = replace(config, refine_half_step=False)
     mocks = parse_mock(args.mock)
     comps = mock_components(mocks) if mocks else Components()
     situations = [s.strip() for s in args.situations.split(",") if s.strip()]
