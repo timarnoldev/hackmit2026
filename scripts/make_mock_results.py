@@ -84,6 +84,8 @@ def main() -> None:
                         else [("GGCGG", 0.34), ("CCGCC", 0.31), ("AAAA", 0.12), ("TTTT", 0.11)]
                     ),
                     notes="mock",
+                    stage=("tier1", "alternation 0", "alternation 1")[i],
+                    default_min_reads_matched=round(start_reads - 0.1 * (i + 1), 2),
                 )
             )
         curve = [
