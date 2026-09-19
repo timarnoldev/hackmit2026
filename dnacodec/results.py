@@ -177,10 +177,10 @@ class CandidateExample:
 class ExperimentSummary:
     ablation: list[AblationEntry] = field(default_factory=list)
     rule_audit: list[RuleAuditEntry] = field(default_factory=list)
-    tier2: list[Tier2Entry] = field(default_factory=list)
     crossover: list[CrossoverEntry] = field(default_factory=list)
     firewall: list[FirewallEntry] = field(default_factory=list)
     examples: list[CandidateExample] = field(default_factory=list)
+    tier2: list[Tier2Entry] = field(default_factory=list)  # last so positional callers keep working
     is_mock: bool = False
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
