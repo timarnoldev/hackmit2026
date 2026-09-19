@@ -317,6 +317,99 @@
       `<span class="pill illus">illustration, real strands are 110 letters</span></div>`;
   }
 
+  /* ------------------------------------------------------------ appendix A0: architecture */
+
+  // One canvas, 1680 x 700. Builds: 1 the storage path, 2 the polisher, 3 the loop, 4 evaluation
+  // and the firewall. "learned" boxes are the two learned models, everything else is classic code.
+  const ARCH_BOXES = [
+    { f: 1, x: 0, y: 40, w: 290, h: 232, title: 'Channel profile',
+      list: ['error rates per base', '5-mer context table', 'dropout and coverage', 'read budget, costs'],
+      foot: 'JSON per situation, fit on real reads' },
+    { f: 1, x: 317, y: 40, w: 310, h: 232, title: 'Encoder',
+      list: ['Fountain code', '8 to 32 candidates per slot', 'a checksum in every strand', 'a scorer keeps one'] },
+    { f: 1, x: 654, y: 40, w: 300, h: 232, title: 'Simulator A',
+      list: ['dropouts, uneven coverage', 'per-read quality', 'errors every read shares', '5-mer context errors'] },
+    { f: 1, x: 981, y: 12, w: 340, h: 342, title: 'Decoder chain', subs: [
+      { f: 1, title: 'Baseline', text: 'aligns the reads, votes a draft' },
+      { f: 2, learned: true, title: 'Polisher', text: 'dilated 1D CNN, 0.8M parameters<br>17 vote features per position<br>heads: keep, substitute, delete, insert' },
+    ] },
+    { f: 1, x: 1348, y: 40, w: 330, h: 232, title: 'Recover',
+      list: ['the checksum turns a wrong strand into a missing one', 'the Fountain code rebuilds the file'] },
+    { f: 4, x: 654, y: 328, w: 300, h: 182, firewall: true, title: 'Simulator B',
+      list: ['different mechanisms, never optimized on', 'only checks that a gain survives'] },
+    { f: 4, x: 1348, y: 346, w: 330, h: 232, title: 'Evaluation',
+      list: ['300 held-out trials', 'fewest reads at the recovery target', 'writes the result JSON that the dashboard, this deck and the demo read'] },
+    { f: 3, x: 1020, y: 524, w: 300, h: 130, title: 'Freeze the decoder', n: '1',
+      list: ['adapt it to the channel, then hold it fixed'] },
+    { f: 3, x: 680, y: 524, w: 300, h: 130, title: 'Label strands', n: '2',
+      list: ['32 simulations each, see where the decoder fails'] },
+    { f: 3, x: 340, y: 524, w: 300, h: 130, learned: true, title: 'Train the risk model', n: '3',
+      list: ['predicts a strand\u2019s failure rate on this channel'] },
+    { f: 3, x: 0, y: 524, w: 300, h: 130, title: 'Search settings', n: '4',
+      list: ['rules, redundancy, risk threshold, candidates'] },
+  ];
+
+  function arrow(x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const hx = -uy;
+    const hy = ux;
+    const p = (a, b) => `${(x2 - ux * 14 + hx * a).toFixed(1)} ${(y2 - uy * 14 + hy * b).toFixed(1)}`;
+    return `M${p(8, 8)} L${x2} ${y2} L${p(-8, -8)}`;
+  }
+
+  function buildArchitecture() {
+    const host = document.getElementById('arch');
+    if (!host) return;
+    const box = (b) => {
+      const cls = ['abox', b.learned ? 'learned' : '', b.firewall ? 'firewall' : '', 'frag', 'fade'].filter(Boolean).join(' ');
+      const inner = b.subs
+        ? b.subs.map((s) => `<div class="sub ${s.learned ? 'learned frag fade' : ''}"${s.learned ? ` data-f="${s.f}"` : ''}><b>${s.title}</b><p>${s.text}</p>${s.learned ? '<span class="tagl">learned</span>' : ''}</div>`).join('')
+        : `<ul>${(b.list || []).map((l) => `<li>${l}</li>`).join('')}</ul>`;
+      return (
+        `<div class="${cls}" data-f="${b.f}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px">` +
+        `<h4>${b.n ? `<span class="n">${b.n}</span>` : ''}${b.title}</h4>${inner}` +
+        (b.foot ? `<div class="afoot">${b.foot}</div>` : '') +
+        (b.learned && !b.subs ? '<span class="tagl">learned</span>' : '') +
+        `</div>`
+      );
+    };
+    const wire = (f, d, cls) => `<path class="frag fade ${cls || ''}" data-f="${f}" d="${d}"/>`;
+    const label = (f, x, y, text, anchor) =>
+      `<text class="frag fade" data-f="${f}" x="${x}" y="${y}"${anchor ? ` text-anchor="${anchor}"` : ''}>${text}</text>`;
+
+    const wires =
+      // the storage path
+      wire(1, `M292 156 H309 ${arrow(292, 156, 313, 156)}`) +
+      wire(1, `M290 66 C 420 18, 540 18, 686 34 ${arrow(662, 28, 694, 36)}`) +
+      label(1, 470, 10, 'the channel, fit on real reads', 'middle') +
+      wire(1, `M631 156 H646 ${arrow(631, 156, 650, 156)}`) +
+      wire(1, `M958 156 H973 ${arrow(958, 156, 977, 156)}`) +
+      wire(1, `M1325 156 H1340 ${arrow(1325, 156, 1344, 156)}`) +
+      // the loop
+      wire(3, `M1170 358 V514 ${arrow(1170, 490, 1170, 518)}`) +
+      label(3, 1156, 440, 'decoder failures', 'end') +
+      wire(3, `M1014 589 H994 ${arrow(1014, 589, 986, 589)}`) +
+      wire(3, `M674 589 H654 ${arrow(674, 589, 646, 589)}`) +
+      wire(3, `M334 589 H314 ${arrow(334, 589, 306, 589)}`) +
+      wire(3, `M150 520 V320 H466 V286 ${arrow(466, 316, 466, 280)}`, 'learnedwire') +
+      label(3, 168, 302, 'the risk model feeds the scorer') +
+      label(3, 680, 690, 'at most 3 rounds', 'middle') +
+      // evaluation and the firewall
+      wire(4, `M804 276 V324 ${arrow(804, 300, 804, 328)}`, 'dash') +
+      label(4, 818, 306, 'firewall') +
+      wire(4, `M1513 276 V342 ${arrow(1513, 318, 1513, 346)}`) +
+      label(4, 1527, 322, 'every codec, every claim');
+
+    host.innerHTML =
+      `<div class="legend"><span><i></i>classic code</span><span><i class="learned"></i>learned</span><span><i class="firewall"></i>firewall only</span></div>` +
+      `<svg class="wires" width="1680" height="700" viewBox="0 0 1680 700" aria-hidden="true">${wires}</svg>` +
+      ARCH_BOXES.map(box).join('');
+  }
+
   /* ------------------------------------------------------------ slide 7: cycle and Pareto */
 
   function buildCycle() {
@@ -476,7 +569,7 @@
 
   const LADDER = [
     ['A', 'Fixed rules', 'majority vote'],
-    ['B', 'Fixed rules', 'our decoder'],
+    ['B', 'Fixed rules', 'polished decoder'],
     ['C', 'Audited rules', 'tuned redundancy'],
     ['D', 'C plus', 'risk model'],
     ['E', 'Full loop', 'all rounds'],
@@ -805,6 +898,7 @@
       buildCandidates();
       buildAudit(R);
       buildTier2();
+      buildArchitecture();
       buildCycle();
       buildPareto(R);
       buildAblation(R);
