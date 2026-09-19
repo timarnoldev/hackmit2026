@@ -93,10 +93,10 @@ def test_heldout_seeds_never_reach_the_search(monkeypatch):
     def guarded(*args, **kwargs):
         runner = args[6]
 
-        def check(data, settings, scorer, decoder, profile, seeds, workers=None):
+        def check(data, settings, scorer, decoder, profile, seeds, workers=None, **kw):
             assert not any(is_heldout(s) for s in seeds), "held-out seed in the search"
             search_seeds.extend(seeds)
-            return runner(data, settings, scorer, decoder, profile, seeds, workers)
+            return runner(data, settings, scorer, decoder, profile, seeds, workers, **kw)
 
         return real_search(*args[:6], check, *args[7:], **kwargs)
 
@@ -130,8 +130,8 @@ def test_heldout_results_never_influence_choices():
         comps = mock_components()
         inner = comps.recovery_trials
 
-        def runner(data, settings, scorer, decoder, profile, seeds, workers=None):
-            m = inner(data, settings, scorer, decoder, profile, seeds, workers)
+        def runner(data, settings, scorer, decoder, profile, seeds, workers=None, **kw):
+            m = inner(data, settings, scorer, decoder, profile, seeds, workers, **kw)
             if poison_heldout and all(is_heldout(s) for s in seeds):
                 return replace(m, recovery_rate=0.0, file_recovered=False, strand_accuracy=0.0)
             return m
@@ -202,7 +202,7 @@ def formula_runner(passing):
     """Recovery 1.0 iff passing(settings, seeds); records the number of trials run."""
     calls = []
 
-    def runner(data, settings, scorer, decoder, profile, seeds, workers=None):
+    def runner(data, settings, scorer, decoder, profile, seeds, workers=None, **kw):
         calls.append((settings, list(seeds)))
         ok = passing(settings, list(seeds))
         return fake_metrics(1.0 if ok else 0.0, len(seeds), acc=0.5 + settings.redundancy / 10)
@@ -277,17 +277,28 @@ def test_no_setting_meets_target_is_recorded_not_crashing():
 
 def test_constraints_too_strict_are_skipped():
     runner = formula_runner(lambda s, seeds: True)
-
-    def strict(data, settings, *a, **k):
-        if settings.max_homopolymer == 1:
-            raise ValueError("constraints too strict")
-        return runner(data, settings, *a, **k)
-
-    cands = [EncoderSettings(redundancy=0.1, max_homopolymer=1), EncoderSettings(redundancy=0.3)]
-    res = search_settings(DATA, NANOPORE, None, None, cands, tiny_config(), strict,
+    # GC window that no strand can meet: encode() raises ValueError, the candidate is skipped.
+    impossible = EncoderSettings(redundancy=0.1, gc_min=0.9, gc_max=0.95)
+    cands = [impossible, EncoderSettings(redundancy=0.3)]
+    res = search_settings(DATA, NANOPORE, None, None, cands, tiny_config(), runner,
                           train_seeds(10, 6), train_seeds(20, 12))
     assert res.chosen == cands[1]
     assert res.candidates[0].error
+    assert all(s != impossible for s, _ in runner.calls)
+
+
+def test_search_encodes_each_candidate_once_and_passes_it_on():
+    seen = []
+
+    def runner(data, settings, scorer, decoder, profile, seeds, workers=None, *, encoded=None, simulator=None):
+        seen.append((settings, id(encoded), encoded.meta.settings == settings))
+        return fake_metrics(1.0, len(seeds))
+
+    cands = [EncoderSettings(redundancy=0.3)]
+    search_settings(DATA, NANOPORE, None, None, cands, tiny_config(), runner, train_seeds(10, 6), train_seeds(20, 12))
+    assert len(seen) == 3  # two screen batches and the re-check
+    assert all(ok for _, _, ok in seen)
+    assert len({i for _, i, _ in seen[:2]}) == 1  # screen batches share one encoding
 
 
 # ---------------------------------------------------------------- helpers
@@ -379,3 +390,18 @@ def test_gpu_decoders_label_in_process(monkeypatch):
     assert seen["workers"] == 1
     loop._real_label(["ACGT" * 10], NANOPORE, object(), 2, 1, workers=8)
     assert seen["workers"] == 8
+
+
+def test_iterations_carry_stage_and_matched_density():
+    comps = mock_components()
+    out = run(comps=comps, max_iterations=2, config=tiny_config(stop_when_converged=False))
+    assert [it.stage for it in out.iterations] == ["tier1", "alternation 0", "alternation 1"]
+    for it in out.iterations:
+        matched = loop.matched_default(EncoderSettings(), it.settings)
+        expected = comps.min_reads_at_target(DATA, matched, None, None, NANOPORE, heldout_seeds(tiny_config().eval_trials),
+                                             1.0, tiny_config().coverages)
+        assert it.default_min_reads_matched == expected
+        assert "min reads" not in it.notes.split("matched-density default")[-1]
+    loaded = results.load_runs("t")[0]
+    assert [it.stage for it in loaded.iterations] == [it.stage for it in out.iterations]
+    assert [it.default_min_reads_matched for it in loaded.iterations] == [it.default_min_reads_matched for it in out.iterations]

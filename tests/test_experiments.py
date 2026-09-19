@@ -23,10 +23,10 @@ from scripts.run_experiments import (
     accepted_by,
     build_summary,
     candidate_examples,
+    load_simulator_b,
     roc_auc,
-    use_simulator,
 )
-from scripts.run_loop import MockRiskModel, mock_components, mock_generate_strands
+from scripts.run_loop import MockRiskModel, mock_components, mock_generate_strands, mock_min_reads
 
 DATA = np.random.default_rng(11).bytes(2000)
 
@@ -74,10 +74,21 @@ def test_summary_has_every_piece_of_evidence(finished_run):
             assert e.metrics == run.iterations[-1].metrics
 
     audit = {(e.situation, e.rule.split()[0]) for e in summary.rule_audit}
-    assert audit == {(s, r) for s in CORE for r in ("max_homopolymer=3", "gc", "redundancy")}
+    assert audit == {(s, r) for s in CORE for r in ("max_homopolymer=3", "gc", "redundancy", "tuned")}
     for e in summary.rule_audit:
         assert e.verdict in ("pays off", "no measurable benefit", "harmful", "tuned is better", "default is fine")
-        assert e.min_reads_on == runs[e.situation].default_min_reads_at_target
+        if not e.rule.startswith("tuned codec"):
+            assert e.min_reads_on == runs[e.situation].default_min_reads_at_target
+    assert any(e.rule == "redundancy 0.3 vs tuned" for e in summary.rule_audit)  # dashboard's pretty_rule format
+    # Matched density: same bits per base on both sides, numbers straight from the loop's iterations.
+    for s in CORE:
+        run = runs[s]
+        tier1 = next(e for e in summary.rule_audit if e.situation == s and e.rule.startswith("tuned codec (tier 1)"))
+        assert tier1.bits_per_base_on == tier1.bits_per_base_off == run.iterations[0].metrics.bits_per_base
+        assert tier1.min_reads_on == run.iterations[0].default_min_reads_matched
+        assert tier1.min_reads_off == run.iterations[0].min_reads_at_target
+        matched = [f for f in summary.firewall if f.situation == s and f.metric == "min_reads_default_matched"]
+        assert len(matched) == 1
 
     pairs = {(e.codec, e.channel) for e in summary.crossover}
     assert pairs == {(c, ch) for c in ("default", *CORE) for ch in CORE}
@@ -120,19 +131,23 @@ def test_roc_auc_matches_pairwise_definition():
     assert math.isnan(roc_auc(np.ones(3), np.zeros(3, dtype=bool)))
 
 
-def test_use_simulator_patches_and_restores():
-    original = simulator.simulate
-    calls = []
+def test_sim_b_goes_through_the_simulator_argument(finished_run):
+    seen = []
+    comps = mock_components()
+    comps.mocked = ("risk",)  # pretend the trial runner is real, so Simulator B is attempted
+    inner = comps.recovery_trials
 
-    def fake(strands, profile, seed):
-        calls.append(seed)
-        return [[s] for s in strands]
+    def runner(*args, simulator=None, **kw):
+        seen.append(simulator)
+        return inner(*args, **kw)
 
-    with use_simulator(fake) as used:
-        assert not used()
-        out = simulator.simulate(["ACGT"], load_profile("nanopore_budget"), 3)
-        assert out == [["ACGT"]] and used() and calls == [3]
-    assert simulator.simulate is original
+    comps.recovery_trials = runner
+    comps.min_reads_at_target = mock_min_reads(runner)
+    summary = build_summary(finished_run, CORE, tiny_config(), comps, real_clusters=0, data=DATA)
+    sim_b = load_simulator_b()
+    assert sim_b is not None and sim_b in seen
+    assert simulator.simulate not in seen  # never patched, never passed explicitly
+    assert all(e.metric != "not_run" for e in summary.firewall if e.test == "sim_b")
 
 
 def test_candidate_examples_disagree_between_channels():
@@ -168,3 +183,13 @@ def test_verdict_rules_are_fixed():
     assert redundancy_verdict(6, 8.0, 1.2, 6.0, 0.8, cov) == "tuned is better"  # only tuned meets the budget
     assert redundancy_verdict(6, 4.0, 1.2, 6.0, 1.5, cov) == "tuned is better"  # both meet, denser
     assert redundancy_verdict(6, 4.0, 1.2, 4.0, 1.1, cov) == "default is fine"
+
+
+def test_matched_verdict():
+    from scripts.run_experiments import matched_verdict
+
+    cov = (2, 4, 6, 8, 10)
+    assert matched_verdict(8.0, 6.0, cov) == "tuned is better"
+    assert matched_verdict(6.0, 6.0, cov) == "no measurable benefit"
+    assert matched_verdict(6.0, 8.0, cov) == "harmful"
+    assert matched_verdict(None, 10.0, cov) == "tuned is better"

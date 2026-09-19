@@ -169,18 +169,24 @@ def _call_flexible(fn: Callable, **available: Any) -> Any:
     return fn(**kwargs)
 
 
-def _real_recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=None) -> Metrics:
+def _real_recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=None, **kw) -> Metrics:
+    """kw: simulator= (another channel, e.g. Simulator B) and encoded= (skip re-encoding)."""
     from .evaluate import recovery_trials
 
-    return recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=workers)
+    return recovery_trials(data, settings, scorer, decoder, profile, seeds, workers=workers, **kw)
 
 
-def _real_min_reads(data, settings, scorer, decoder, profile, seeds, target, coverages, workers=None):
+def _real_min_reads(data, settings, scorer, decoder, profile, seeds, target, coverages, workers=None, **kw):
     from .evaluate import min_reads_at_target
 
     return min_reads_at_target(
-        data, settings, scorer, decoder, profile, seeds, target=target, coverages=coverages, workers=workers
+        data, settings, scorer, decoder, profile, seeds, target=target, coverages=coverages, workers=workers, **kw
     )
+
+
+def _options(simulator=None, encoded=None) -> dict:
+    """Only pass the keyword options that are set, so simple injected runners keep working."""
+    return {k: v for k, v in (("simulator", simulator), ("encoded", encoded)) if v is not None}
 
 
 def _real_generate_strands(n: int, length: int, seed: int) -> list[Strand]:
@@ -276,9 +282,10 @@ def default_adapt(
 class Components:
     """Everything the loop calls that another agent owns. None = the real implementation."""
 
-    # (data, settings, scorer, decoder, profile, seeds, workers) -> Metrics
+    # (data, settings, scorer, decoder, profile, seeds, workers, *, simulator=, encoded=) -> Metrics
     recovery_trials: Callable | None = None
-    # (data, settings, scorer, decoder, profile, seeds, target, coverages, workers) -> float | None
+    # (data, settings, scorer, decoder, profile, seeds, target, coverages, workers, *, simulator=, encoded=)
+    #   -> float | None
     min_reads_at_target: Callable | None = None
     # (n, length, seed) -> list[Strand]
     generate_strands: Callable | None = None
@@ -489,11 +496,18 @@ def search_settings(
     t0 = time.time()
     trials = 0
 
+    encoded_cache: dict[EncoderSettings, Any] = {}
+
     def run(settings: EncoderSettings, seeds: list[int]) -> Metrics:
+        """Trials on train seeds; each candidate is encoded once and reused (screen, re-check)."""
         nonlocal trials
         assert_train_seeds(seeds)
+        if settings not in encoded_cache:
+            encoded_cache.clear()  # candidates are visited one after another; keep memory flat
+            encoded_cache[settings] = encode(data, settings, scorer)  # ValueError if too strict
         trials += len(seeds)
-        return runner(data, settings, scorer, decoder, profile, seeds, config.workers)
+        return runner(data, settings, scorer, decoder, profile, seeds, config.workers,
+                      **_options(encoded=encoded_cache[settings]))
 
     allowed_misses = math.floor((1 - target) * len(screen_seeds) + 1e-9)
     first = min(len(screen_seeds), max(1, config.first_screen_batch, config.workers or 0))
@@ -533,6 +547,7 @@ def search_settings(
                 profile.name, bpb, len(level), len(passers), len(screen_seeds), time.time() - t0, trials,
             )
             for c in passers[: config.max_rechecks_per_level]:
+                encoded_cache.clear()
                 c.recheck = run(c.settings, list(recheck_seeds))
                 log.info("[%s]   re-check %s: %.3f", profile.name, describe(c.settings), c.recheck.recovery_rate)
                 if _meets(c.recheck, target):
@@ -675,12 +690,16 @@ def _evaluate_heldout(
     profile: SituationProfile,
     config: LoopConfig,
     comps: Components,
+    simulator: Callable | None = None,
 ) -> tuple[Metrics, float | None]:
-    """The one held-out evaluation of a codec: recovery at budget B plus min reads at target."""
+    """The one held-out evaluation of a codec: recovery at budget B plus min reads at target.
+
+    simulator: another channel (Simulator B for the firewall); None = the default simulator."""
     seeds = heldout_seeds(config.eval_trials)
-    metrics = comps.recovery_trials(data, settings, scorer, decoder, profile, seeds, config.workers)
+    opts = _options(simulator=simulator, encoded=encode(data, settings, scorer))
+    metrics = comps.recovery_trials(data, settings, scorer, decoder, profile, seeds, config.workers, **opts)
     min_reads = comps.min_reads_at_target(
-        data, settings, scorer, decoder, profile, seeds, config.target, config.coverages, config.workers
+        data, settings, scorer, decoder, profile, seeds, config.target, config.coverages, config.workers, **opts
     )
     return metrics, min_reads
 
@@ -767,7 +786,7 @@ def run_loop(
     save_run(run, run_id)
 
     def record(stage: str, chosen: EncoderSettings, scorer: Scorer | None, decoder_used: Decoder,
-               search: SearchResult, extra: dict, notes_extra: str) -> IterationResult:
+               search: SearchResult, extra: dict, notes_extra: str, stage_name: str) -> IterationResult:
         """Held-out evaluation of one chosen codec (with the decoder its search used), saved at once."""
         idx = len(run.iterations)
         metrics, min_reads = _evaluate_heldout(data, chosen, scorer, decoder_used, profile, config, comps)
@@ -786,12 +805,14 @@ def run_loop(
             f"{sum(c.screen is not None for c in search.candidates)} candidates screened, "
             f"{search.trials_run} train trials; train re-check {rc.recovery_rate if rc else 'n/a'}"
             f"{'' if search.target_met else '; TARGET NOT MET ON TRAIN SEEDS (best effort)'}; "
-            f"{notes_extra}default rules at matched bits/base ({describe(matched)}): min reads {matched_reads}"
+            f"{notes_extra}matched-density default: {describe(matched)}"
         )
-        result = IterationResult(idx, chosen, metrics, min_reads, kmers, notes)
+        result = IterationResult(idx, chosen, metrics, min_reads, kmers, notes,
+                                 stage=stage_name, default_min_reads_matched=matched_reads)
         run.iterations.append(result)
         store.save_iteration(idx, chosen, scorer, decoder_used, {
             "stage": stage,
+            "stage_name": stage_name,
             "target_met_train": search.target_met,
             "train_recheck_rate": rc.recovery_rate if rc else None,
             "matched_default_settings": asdict(matched),
@@ -807,9 +828,9 @@ def run_loop(
             **extra,
         })
         save_run(run, run_id)
-        log.info("[%s] %s: held-out recovery %.3f, strand acc %.3f, %.3f bits/base, min reads %s "
-                 "(default rules at matched bits/base: %s)",
-                 profile.name, STAGE_LABEL[stage], metrics.recovery_rate or 0.0, metrics.strand_accuracy,
+        log.info("[%s] %s: held-out recovery %.3f, strand acc %.3f, %.3f bits/base | "
+                 "MIN READS tuned %s vs default rules at the same bits/base %s",
+                 profile.name, stage_name, metrics.recovery_rate or 0.0, metrics.strand_accuracy,
                  metrics.bits_per_base or 0.0, min_reads, matched_reads)
         return result
 
@@ -826,7 +847,7 @@ def run_loop(
     )
     log.info("[%s] rules only: chose %s (target met on train: %s; %d train trials, %.0fs)",
              profile.name, search.summary(), search.target_met, search.trials_run, search.seconds)
-    record("rules", search.chosen, None, decoder_b, search, {}, "")
+    record("rules", search.chosen, None, decoder_b, search, {}, "", "tier1")
 
     # Tier 2: the alternating loop with the learned risk scorer (first alternation = system D).
     current = decoder_b
@@ -866,7 +887,7 @@ def run_loop(
             "alternation": it,
             "label_mean_failure": label_mean,
             "thresholds": {f"len{k[0]} hp{k[1]} gc{'on' if k[2] else 'off'} q{k[3]}": v for k, v in thresholds.items()},
-        }, f"alternation {it}; label mean failure {label_mean:.3f}; ")
+        }, f"label mean failure {label_mean:.3f}; ", f"alternation {it}")
         if it == 0 and n_alt > 1:
             per_alt = time.time() - t_alt
             log.info("[%s] measured: first alternation took %.1f min; projected remaining ~%.0f min "
