@@ -107,7 +107,15 @@ Tables live in `profiles/context/`. Bases within 2 letters of a strand end use m
 | Simulator A (calibrated) | 4.5% | 40.8% | 63.0% | 83.5% | 90.5% |
 | First simulator (rates only) | 0.4% | 50.0% | 83.7% | 96.4% | 97.5% |
 
-Simulator A is within 2.3 points of reality at every read count. The first version, which only matched average error rates, was far too easy. Matching averages isn't enough; the structure of the errors matters.
+**Independent check on the held-out split.** The table above uses train clusters held apart from the fit. As a stricter test, we repeated it on the Microsoft **held-out** split (1,996 clusters), which no calibration step ever touched, giving the baseline the same number of reads per strand on real and simulated clusters:
+
+| Reads per strand | 2 | 4 | 6 | 10 | 16 |
+|---|---|---|---|---|---|
+| Real (held-out) | 4.9% | 39.8% | 66.5% | 84.5% | 90.1% |
+| Simulator A | 3.6% | 40.3% | 63.7% | 83.0% | 90.3% |
+| Difference (points) | −1.3 | +0.5 | −2.8 | −1.5 | +0.3 |
+
+Simulator A is within about 3 points of reality at every read count, and where it deviates it's slightly harder, the conservative direction. This probe uses the baseline decoder; the transformer has to be checked the same way once trained. The first version, which only matched average error rates, was far too easy. Matching averages isn't enough; the structure of the errors matters.
 
 Current `nanopore_budget` values (fit on Microsoft train): substitution 1.52%, insertion 1.89%, deletion 2.20% per base; run multipliers for runs of 1 to 7 of 1.0, 1.0, 1.0, 1.05, 2.28, 5.02, 6.66 (deletions); end ramp 1.2; read quality spread 0.5; shared spread 0.8; no malformed reads.
 
