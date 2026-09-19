@@ -43,6 +43,7 @@ PALETTES = {
         "default": "#7a7974",
         "baseline": "#b5b4ad",
         "tailored_soft": "#86b6ef",
+        "ladder": ["#9ec5f4", "#5598e7", "#1c5cab"],
         "transformer": "#eb6834",
         "extra": ["#1baf7a", "#4a3aa7", "#e87ba4", "#008300"],
         "grid": "rgba(0,0,0,0.08)",
@@ -58,6 +59,7 @@ PALETTES = {
         "default": "#a3a29b",
         "baseline": "#5f5e5a",
         "tailored_soft": "#1c5cab",
+        "ladder": ["#184f95", "#2a78d6", "#6da7ec"],
         "transformer": "#d95926",
         "extra": ["#199e70", "#9085e9", "#d55181", "#008300"],
         "grid": "rgba(255,255,255,0.10)",
@@ -72,6 +74,9 @@ PALETTES = {
 }
 
 FONT_SIZE = 16
+
+HEADLINE = ("We built a tool that measures whether a DNA coding rule actually pays off on your channel, "
+            "and tunes the codec accordingly.")
 
 # Display order: the demo opens on Nanopore, then Illumina. Unknown situations go last.
 SITUATION_ORDER = ["nanopore_budget", "illumina_standard", "illumina_archive_100y"]
@@ -90,9 +95,10 @@ DECODER_LABELS = {
 
 SYSTEMS = {
     "A": "fixed rules<br>majority vote",
-    "B": "fixed rules<br>AI decoder",
-    "C": "learned encoder<br>same decoder",
-    "D": "full loop<br>decoder re-tuned",
+    "B": "fixed rules<br>(default)",
+    "C": "rules audited<br>(tier 1)",
+    "D": "+ learned<br>(tier 2)",
+    "E": "full loop",
 }
 
 FIREWALL_TESTS = {
@@ -298,7 +304,7 @@ CSS = """
 <style>
 html { font-size: 18px; }
 .block-container { padding-top: 2.2rem; max-width: 1700px; }
-h1 { font-size: 2.6rem !important; letter-spacing: -0.01em; }
+h1 { font-size: 2.3rem !important; letter-spacing: -0.01em; line-height: 1.2 !important; max-width: 62rem; }
 h2 { font-size: 1.9rem !important; margin-top: 1.6rem !important; }
 h3 { font-size: 1.35rem !important; }
 [data-testid="stMetricValue"] { font-size: 2.3rem; font-weight: 650; }
@@ -333,6 +339,13 @@ table.compare td { text-align: right; padding: 0.35rem 0.4rem; border-top: 1px s
 table.compare td:first-child, table.compare th:first-child { text-align: left; white-space: normal; }
 table.compare td:nth-child(4) { font-weight: 700; }
 .flat { opacity: 0.6; font-weight: 500; }
+table.audit td { padding: 0.8rem 0.9rem; }
+table.audit th { font-size: 1.2rem; }
+table.audit .verdict { font-size: 1.15rem; padding: 0.15rem 0.7rem; margin-bottom: 0.35rem; }
+table.audit .effect { font-size: 1.05rem; line-height: 1.4; }
+.contrast { font-size: 1.35rem; font-weight: 650; margin: 0.3rem 0 0.8rem 0; }
+.overline { font-size: 1.0rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.65;
+  margin-bottom: -0.4rem; }
 .badge { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.9rem;
   font-weight: 700; border: 1.5px solid currentColor; white-space: nowrap; }
 </style>
@@ -382,14 +395,101 @@ def glossary() -> None:
         ("Strand", "one short piece of DNA, about 110 letters (A, C, G, T). A file is split over thousands."),
         ("Reads per strand", "how many noisy copies of each strand we sequence. Fewer reads = cheaper reading."),
         ("Bits per base", "data stored per DNA letter (max 2). Spare strands for safety lower it."),
-        ("Default (B)", "fixed hand-written rules and redundancy, with the same AI decoder as ours."),
+        ("Rule", "a hand-written constraint like “never AAAA”, or a fixed share of spare strands."),
+        ("Default (B)", "the usual fixed rules and redundancy, with the same AI decoder as ours."),
     ]
     for col, (term, text) in zip(st.columns(len(items)), items):
         col.markdown(f'<div class="gloss"><b>{term}</b>: {text}</div>', unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# 1. Pareto plot and headline numbers
+# 1. Rule audit
+# ---------------------------------------------------------------------------
+
+# verdict -> (palette key for the badge color, icon, phrase used in the headline sentence)
+VERDICTS = {
+    "pays off": ("good", "✓", "pays off"),
+    "no measurable benefit": ("muted", "–", "has no measurable benefit"),
+    "harmful": ("bad", "✗", "is harmful"),
+    "tuned is better": ("tailored", "↻", "is beaten by a tuned value"),
+}
+
+
+def pretty_rule(rule: str) -> str:
+    """'max_homopolymer=3' -> 'No run of more than 3 identical letters', unknown rules unchanged."""
+    m = re.fullmatch(r"\s*max_homopolymer\s*=\s*(\d+)\s*", rule)
+    if m:
+        return f"No run of more than {m.group(1)} identical letters"
+    m = re.fullmatch(r"\s*gc\s*([\d.]+)\s*-\s*([\d.]+)\s*", rule)
+    if m:
+        return f"G+C share between {float(m.group(1)):.0%} and {float(m.group(2)):.0%}"
+    m = re.fullmatch(r"\s*redundancy\s*([\d.]+)\s*vs\s*tuned\s*", rule)
+    if m:
+        return f"Fixed {float(m.group(1)):.0%} spare strands"
+    return rule
+
+
+def rule_effect(e) -> str:
+    """Plain-words cost and benefit, e.g. 'Switching this rule off: reads needed 8.5 to 12.0'."""
+    tuned = "tuned" in e.rule
+    prefix = "With the tuned value instead" if tuned else "Switching this rule off"
+
+    def reads(v):
+        return "target not met" if v is None else f"{v:.1f}"
+
+    if e.min_reads_on is not None and e.min_reads_off is not None and abs(e.min_reads_on - e.min_reads_off) < 0.05:
+        parts = [f"reads needed stay at {e.min_reads_on:.1f}"]
+    else:
+        parts = [f"reads needed {reads(e.min_reads_on)} to {reads(e.min_reads_off)}"]
+    if (e.bits_per_base_on is not None and e.bits_per_base_off is not None
+            and abs(e.bits_per_base_on - e.bits_per_base_off) >= 0.005):
+        parts.append(f"bits per base {e.bits_per_base_on:.2f} to {e.bits_per_base_off:.2f}")
+    return f"{prefix}: " + ", ".join(parts)
+
+
+def verdict_badge(verdict: str) -> str:
+    pal = palette()
+    key, icon, _ = VERDICTS.get(verdict, ("muted", "•", verdict))
+    return f'<span class="badge verdict" style="color:{pal[key]}">{icon} {html.escape(verdict)}</span>'
+
+
+def audit_contrast(entries, situations: list[str]) -> str | None:
+    """One sentence for the first rule whose verdict differs between channels."""
+    by_rule: dict[str, dict[str, str]] = {}
+    for e in entries:
+        if e.situation in situations:
+            by_rule.setdefault(e.rule, {})[e.situation] = e.verdict
+    for rule, verdicts in by_rule.items():
+        if len(set(verdicts.values())) > 1:
+            parts = [f"{VERDICTS.get(v, ('', '', v))[2]} on {pretty_situation(s)}"
+                     for s, v in sorted(verdicts.items(), key=lambda sv: situation_rank(sv[0]))]
+            return f"“{pretty_rule(rule)}” " + ", but ".join(parts) + "."
+    return None
+
+
+def rule_audit_table(entries, situations: list[str]) -> str:
+    sits = [s for s in situations if any(e.situation == s for e in entries)]
+    by = {(e.rule, e.situation): e for e in entries}
+    rules = list(dict.fromkeys(e.rule for e in entries if e.situation in sits))
+    head = "<th>Rule</th>" + "".join(f"<th>{html.escape(pretty_situation(s))}</th>" for s in sits)
+    rows = []
+    for rule in rules:
+        cells = [f'<td class="knob"><b>{html.escape(pretty_rule(rule))}</b>'
+                 f"<small>{html.escape(rule)}</small></td>"]
+        for s in sits:
+            e = by.get((rule, s))
+            if e is None:
+                cells.append('<td class="same">not audited</td>')
+                continue
+            note = f'<div class="muted">{html.escape(e.note)}</div>' if e.note else ""
+            cells.append(f'<td>{verdict_badge(e.verdict)}<div class="effect">{html.escape(rule_effect(e))}</div>'
+                         f"{note}</td>")
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    return f'<table class="dash audit"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+
+
+# ---------------------------------------------------------------------------
+# 2. Pareto plot and headline numbers
 # ---------------------------------------------------------------------------
 
 
@@ -596,9 +696,12 @@ def ablation_chart(summary: ExperimentSummary, situation: str) -> go.Figure | No
     if not entries:
         return None
     pal = palette()
-    colors = {"A": pal["baseline"], "B": pal["default"], "C": pal["tailored_soft"], "D": pal["tailored"]}
+    colors = {"A": pal["baseline"], "B": pal["default"], "C": pal["ladder"][0], "D": pal["ladder"][1],
+              "E": pal["ladder"][2]}
     ys = [e.min_reads_at_target for e in entries]
     top = max([y for y in ys if y is not None], default=1.0)
+    reads = {e.system: e.min_reads_at_target for e in entries}
+    order = [e.system for e in entries]
     fig = go.Figure(go.Bar(
         x=[f"<b>{e.system}</b><br>{SYSTEMS.get(e.system, '')}" for e in entries],
         y=[top * 1.05 if y is None else y for y in ys],
@@ -612,11 +715,20 @@ def ablation_chart(summary: ExperimentSummary, situation: str) -> go.Figure | No
         hovertemplate="%{y:.1f} reads needed<br>recovery at budget %{customdata[0]:.0%}"
                       "<br>%{customdata[1]:.2f} bits per base<extra></extra>",
     ))
-    base_layout(fig, height=420)
-    fig.update_layout(title=dict(text=pretty_situation(situation), font=dict(size=FONT_SIZE + 2)), bargap=0.35,
+    # Mark the two tiers of the claim: B to C (rule audit) and C to D (learned selection).
+    for a, b, label in (("B", "C", "tier 1"), ("C", "D", "tier 2")):
+        ra, rb = reads.get(a), reads.get(b)
+        if a in order and b in order and ra is not None and rb is not None:
+            change = rel_change(rb, ra)
+            fig.add_annotation(
+                x=(order.index(a) + order.index(b)) / 2, y=max(ra, rb) + top * 0.13, showarrow=False,
+                text=f"<b>{label}</b><br>{change:+.0%}", font=dict(size=FONT_SIZE + 1, color=pal["tailored"]),
+            )
+    base_layout(fig, height=440)
+    fig.update_layout(title=dict(text=pretty_situation(situation), font=dict(size=FONT_SIZE + 2)), bargap=0.3,
                       showlegend=False)
-    fig.update_yaxes(title="reads per strand needed (lower is better)", range=[0, top * 1.2])
-    fig.update_xaxes(tickangle=0, tickfont=dict(size=FONT_SIZE - 2))
+    fig.update_yaxes(title="reads per strand needed (lower is better)", range=[0, top * 1.3])
+    fig.update_xaxes(tickangle=0, tickfont=dict(size=FONT_SIZE - 3))
     return fig
 
 
@@ -869,24 +981,42 @@ def render_body(run_id: str, focus: str, target: float) -> None:
     if any(r.is_mock for r in runs) or (summary is not None and summary.is_mock):
         mock_banner()
 
-    st.title("Adaptive DNA codec")
+    st.markdown('<div class="overline">Adaptive DNA codec · HackMIT 2026</div>', unsafe_allow_html=True)
+    st.title(HEADLINE)
     st.markdown(
-        '<p class="lede">Decoder failures tell the encoder what to avoid, separately for each channel. '
-        "With the <b>same decoder</b>, the tailored codec recovers the file with fewer reads per strand, "
-        "or stores more data per letter, than the one-size-fits-all default.</p>",
+        '<p class="lede">DNA storage pipelines copy the same hand-written rules to every sequencing channel. '
+        "We switch each rule on and off, measure what it costs and what it buys, and keep only what pays off. "
+        "Then decoder failures teach the encoder what else to avoid. Same encoder, <b>same decoder</b>.</p>",
         unsafe_allow_html=True,
     )
     glossary()
 
+    audit = list(getattr(summary, "rule_audit", None) or [])
+    if focus != "All situations":
+        audit = [e for e in audit if e.situation == focus]
+    shown = [r.situation for r in runs] or sorted(
+        {e.situation for e in audit} | {e.situation for e in getattr(summary, "ablation", [])}, key=situation_rank)
+    audit_sits = [s for s in shown if any(e.situation == s for e in audit)] or sorted(
+        {e.situation for e in audit}, key=situation_rank)
+
+    if audit:
+        st.header("1. Does each rule pay off on this channel?")
+        st.caption("Each rule is measured on the default codec with the same decoder: switched off (or replaced by "
+                   "a tuned value) with everything else unchanged. Reads needed = reads per strand to recover the "
+                   "file every time.")
+        contrast = audit_contrast(audit, audit_sits)
+        if contrast:
+            st.markdown(f'<div class="contrast">{html.escape(contrast)}</div>', unsafe_allow_html=True)
+        st.markdown(rule_audit_table(audit, audit_sits), unsafe_allow_html=True)
+
     if runs:
-        st.header("1. The tailored codec moves past the default")
-        st.caption("Each panel is one channel. Gray diamond = default codec, blue dots = loop alternations. "
+        st.header("2. The tuned codec moves past the default")
+        st.caption("Each panel is one channel. Gray diamond = default codec, blue dots = tuning steps. "
                    "Down and right is better: fewer reads to recover the file, more data per letter.")
         in_columns(runs, verdict)
 
-    shown = [r.situation for r in runs]
     if summary is not None and summary.crossover:
-        st.header("2. Each codec wins at home, not away")
+        st.header("3. Each codec wins at home, not away")
         st.caption("Reads per strand each codec needs to recover the file, on each channel. Blue = fewer reads "
                    "than the default on that channel, red = more. Outlined cells: the codec on its own channel.")
         fig = crossover_chart(summary)
@@ -895,9 +1025,10 @@ def render_body(run_id: str, focus: str, target: float) -> None:
             show(fig, key="crossover")
 
     if summary is not None and summary.ablation:
-        st.header("3. Where the gain comes from")
-        st.caption("A and B use the same fixed codec, B swaps in the AI decoder. "
-                   "B to C is our contribution: a learned encoder with the same decoder. C to D adds co-adaptation.")
+        st.header("4. Where the gain comes from")
+        st.caption("A and B use the same fixed rules; B swaps in the AI decoder and is the default we compare "
+                   "against. Tier 1 (B to C): rules audited and redundancy tuned, same decoder. Tier 2 (C to D): "
+                   "a risk model learned from decoder failures picks the candidates. E re-tunes the decoder too.")
         sits = [s for s in shown if any(e.situation == s for e in summary.ablation)] or sorted(
             {e.situation for e in summary.ablation}, key=situation_rank)
         for start in range(0, len(sits), 3):
@@ -907,7 +1038,7 @@ def render_body(run_id: str, focus: str, target: float) -> None:
                     show(ablation_chart(summary, s), key=f"ablation-{s}")
 
     if runs:
-        st.header("4. What the encoder learned")
+        st.header("5. What the encoder learned")
         st.caption("Short DNA patterns each channel's risk model learned to fear. The encoder steers around them.")
 
         def render_risky(run: RunResult) -> None:
@@ -925,7 +1056,7 @@ def render_body(run_id: str, focus: str, target: float) -> None:
         st.caption("Blue cells: rules the loop changed from the default for that channel.")
         st.markdown(settings_table(runs), unsafe_allow_html=True)
 
-    st.header("5. Details")
+    st.header("6. Details")
     if summary is not None and summary.firewall:
         st.subheader("Does it hold outside our own simulator?")
         st.caption("Tuned on our simulator only. Checked on unseen seeds, a differently built simulator, and real reads.")

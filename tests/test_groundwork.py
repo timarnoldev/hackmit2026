@@ -98,3 +98,16 @@ def test_test_file_is_fixed():
     assert len(data) == 20 * 1024
     assert data == test_file()
     assert hashlib.sha256(data).hexdigest()[:16] == "575e0ef9a36dfce0"  # must never change
+
+
+@pytest.mark.skipif(
+    not (realdata.DNAFORMER_DIR / "BinnedNanoporeSecondFlowcell_Random.txt").exists(),
+    reason="run scripts/download_data.sh",
+)
+def test_dnaformer_split_is_consistent_across_files():
+    names = [p.stem for p in realdata.DNAFORMER_DIR.glob("Binned*.txt")]
+    train_refs, heldout_refs = set(), set()
+    for name in names:
+        train_refs |= {c.reference for c in realdata.load_dnaformer(name, "train")}
+        heldout_refs |= {c.reference for c in realdata.load_dnaformer(name, "heldout")}
+    assert heldout_refs and not train_refs & heldout_refs
