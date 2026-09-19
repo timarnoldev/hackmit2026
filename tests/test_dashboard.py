@@ -75,7 +75,7 @@ def test_mock_run_renders_with_banner(mock_run):
     assert any("actually pays off on your channel" in t.value for t in at.title)
     headers = [h.value for h in at.header]
     assert "rule pay off" in headers[0]  # the rule audit is the first view
-    for section in ("moves past the default", "wins at home", "Where the gain comes from", "encoder learned"):
+    for section in ("moves past the default", "at home and away", "Where the gain comes from", "encoder learned"):
         assert any(section in h for h in headers), (section, headers)
     # Rule audit: verdict badges, plain-words effect, and the cross-channel contrast sentence.
     assert "pays off" in text and "no measurable benefit" in text and "tuned is better" in text
@@ -152,6 +152,13 @@ def test_stage_helpers():
     assert [app.stage_label(run, it) for it in run.iterations] == ["C: rules audited", "D: + learned", "E: loop"]
     assert [app.short_step(run, it) for it in run.iterations] == ["C", "D", "E"]
     assert app.reference_reads(run, run.iterations[-1]) == (8.2, True)
+    # Worse than the default rules at the same density: said plainly, no switch to another comparison.
+    worse = run_result("nanopore_budget", [IterationResult(0, EncoderSettings(), small_metrics(0.9, 0.72), 7.0,
+                                                           stage="alternation 2", default_min_reads_matched=6.0)],
+                       default_min_reads_at_target=20.0)
+    assert app.headline(worse, worse.iterations[0]) == (
+        "Same decoder, same bits per base: the tuned codec needs more reads per strand than the default rules "
+        "(7.0 vs 6.0).")
     # Older files: no stage, no matched value.
     old = run_result("nanopore_budget", [IterationResult(0, EncoderSettings(), small_metrics(0.9, 1.4), 7.0)],
                      default_min_reads_at_target=8.5)
@@ -251,6 +258,51 @@ def test_rule_audit_helpers():
     assert "has no measurable benefit on Illumina" in sentence
     assert app.audit_contrast([tuned], ["illumina_standard"]) is None
     assert "not audited" in app.rule_audit_table([on, off, unmet], ["nanopore_budget", "illumina_standard"])
+
+
+def test_single_step_marker():
+    app = load_app_module()
+    # Illumina homopolymer rule: 4 vs 3 reads is one coverage step -> flagged. Nanopore 20 vs 25 is not.
+    small = RuleAuditEntry("illumina_standard", "max_homopolymer=3", 4.0, 3.0, 1.2, 1.2, "harmful")
+    big = RuleAuditEntry("nanopore_budget", "max_homopolymer=3", 20.0, 25.0, 1.2, 1.2, "pays off")
+    same = RuleAuditEntry("illumina_standard", "gc 0.4-0.6", 4.0, 4.0, 1.2, 1.2, "no measurable benefit")
+    assert app.single_step(small) and not app.single_step(big) and not app.single_step(same)
+    table = app.rule_audit_table([small, big], ["nanopore_budget", "illumina_standard"])
+    assert table.count("1 step, may be noise") == 1
+    sentence = app.audit_contrast([big, small], ["nanopore_budget", "illumina_standard"])
+    assert sentence.endswith("is harmful on Illumina, standard lab (one coverage step, may be noise).")
+    matched = RuleAuditEntry("nanopore_budget", "tuned codec (full loop) vs default rules at the same bits per base",
+                             6.0, 7.0, 0.72, 0.72, "harmful")
+    assert app.rule_effect(matched) == ("Reads needed at 0.72 bits per base: default rules 6.0, tuned codec 7.0")
+
+
+def test_crossover_trade():
+    app = load_app_module()
+    # Illumina channel: the Nanopore codec needs fewer reads but carries far less data per letter.
+    s = app.trade_sentence("Illumina, standard lab", "the codec tuned for Nanopore, tight budget", 2.0, 0.72,
+                           "the home codec", 6.0, 1.50)
+    assert s == ("On Illumina, standard lab, the codec tuned for Nanopore, tight budget needs 2.0 reads instead "
+                 "of 6.0 but stores 52% less per letter (0.72 vs 1.50 bits per base).")
+    assert "never reaches the recovery target" in app.trade_sentence("X", "a", None, 1.5, "b", 4.0, 1.2)
+    assert app.crossover_verdict(2.0, 0.72, 4.0, 1.20) == 0  # fewer reads, less density: a trade
+    assert app.crossover_verdict(6.0, 1.50, 7.0, 1.20) == 1  # better in both
+    assert app.crossover_verdict(None, 1.50, 20.0, 1.20) == -1  # target not met
+    assert app.crossover_verdict(8.0, 1.00, 7.0, 1.20) == -1  # worse in both
+
+
+def test_real_like_crossover_renders(mock_run, results_dir):
+    path = results_dir / "mock" / "summary.json"
+    data = json.loads(path.read_text())
+    for e in data["crossover"]:
+        if e["codec"] == "illumina_standard" and e["channel"] == "nanopore_budget":
+            e["min_reads_at_target"] = None  # the away codec never meets the target, as in run1
+    path.write_text(json.dumps(data))
+    at = run_app()
+    assert not at.exception, at.exception
+    text = markdown_text(at)
+    assert "never reaches the recovery target" in text
+    assert "The trade in plain words" in text
+    assert "per letter" in text or "at the same density" in text  # density is always named with reads
 
 
 def test_no_runs_shows_hint(results_dir):
