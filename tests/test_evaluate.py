@@ -288,26 +288,51 @@ def test_main_process_only_matches_per_trial_path():
     seeds = _seeds(5)
     reference = recovery_trials(DATA, SETTINGS, None, MajorityVoteDecoder(), profile, seeds, workers=1)
     n = reference.n_strands
-    for workers in (1, 3):
+    # default chunk (50 >= 5 trials: one call), and chunk sizes that split unevenly
+    for workers, chunk, expected_calls in [
+        (1, None, [5 * n]),
+        (3, None, [5 * n]),
+        (1, 1, [n] * 5),
+        (3, 2, [2 * n, 2 * n, n]),
+        (2, 5, [5 * n]),
+    ]:
         dec = GatherBaseline()
-        m = recovery_trials(DATA, SETTINGS, None, dec, profile, seeds, workers=workers)
-        assert dec.calls == [n * len(seeds)]  # one decode call over all trials
-        assert dataclasses.asdict(m) == dataclasses.asdict(reference)
+        kw = {} if chunk is None else {"gather_chunk_trials": chunk}
+        m = recovery_trials(DATA, SETTINGS, None, dec, profile, seeds, workers=workers, **kw)
+        assert dec.calls == expected_calls, (workers, chunk)
+        assert dataclasses.asdict(m) == dataclasses.asdict(reference), (workers, chunk)
 
 
-def test_main_process_only_early_exit_matches():
+def test_gather_chunk_must_be_positive():
+    with pytest.raises(ValueError):
+        recovery_trials(
+            DATA, SETTINGS, None, GatherBaseline(), _clean(), _seeds(2), workers=1,
+            gather_chunk_trials=0,
+        )
+
+
+def test_main_process_only_early_exit_matches_and_saves_decoding():
     encoded = encode(DATA, SETTINGS)
+    n = len(encoded.strands)
     profile = load_profile("nanopore_budget")  # every trial fails at this size and coverage
     seeds = _seeds(5)
     with _TrialRunner(encoded, DATA, MajorityVoteDecoder(), 1, 5) as runner:
         reference = runner.run(profile, seeds, max_failures=1)
     assert reference.extra["early_exit"] == 1.0 and reference.n_trials == 2
-    for workers in (1, 2):
+    # the second failure ends it: later chunks are never decoded
+    for workers, chunk, expected_calls in [
+        (1, 50, [5 * n]),
+        (2, 50, [5 * n]),
+        (1, 1, [n, n]),
+        (2, 1, [n, n]),
+        (2, 2, [2 * n]),
+        (1, 3, [3 * n]),
+    ]:
         dec = GatherBaseline()
-        with _TrialRunner(encoded, DATA, dec, workers, 5) as runner:
+        with _TrialRunner(encoded, DATA, dec, workers, 5, chunk) as runner:
             m = runner.run(profile, seeds, max_failures=1)
-        assert dec.calls == [len(encoded.strands) * 5]
-        assert dataclasses.asdict(m) == dataclasses.asdict(reference)
+        assert dec.calls == expected_calls, (workers, chunk)
+        assert dataclasses.asdict(m) == dataclasses.asdict(reference), (workers, chunk)
 
 
 def test_main_process_only_min_reads_matches():
@@ -318,7 +343,19 @@ def test_main_process_only_min_reads_matches():
     expected = min_reads_at_target(
         DATA, settings, None, MajorityVoteDecoder(), profile, seeds, workers=1, **kw
     )
+    assert expected is not None
     dec = GatherBaseline()
     got = min_reads_at_target(DATA, settings, None, dec, profile, seeds, workers=2, **kw)
-    assert got == expected and got is not None
+    assert got == expected
     assert len(dec.calls) == kw["coverages"].index(got) + 1  # one decode per coverage tried
+    for chunk in (1, 4):
+        dec = GatherBaseline()
+        got = min_reads_at_target(
+            DATA, settings, None, dec, profile, seeds, workers=2, gather_chunk_trials=chunk, **kw
+        )
+        assert got == expected, chunk
+        # failing coverages stop after their first failing chunk: fewer trials decoded
+        # than running every trial at every coverage tried
+        n = len(encode(DATA, settings).strands)
+        tried = kw["coverages"].index(got) + 1
+        assert sum(dec.calls) // n < len(seeds) * tried, chunk
