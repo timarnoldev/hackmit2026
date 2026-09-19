@@ -13,6 +13,11 @@ For one situation profile at its read budget B = profile.coverage_mean (PROJECT.
      Chosen = highest bits per base that meets the recovery target at coverage B.
   5. Re-adapt the decoder to the strands the new encoder produces.
 
+Before the alternations, tier 1 (PROJECT.md rule audit, ablation C): the same grid search with
+the rule scorer only (no risk model, no threshold), B's decoder, and the same train seeds as
+the first alternation, whose search adds the learned risk scorer (ablation D). RunResult
+iterations are [tier 1, alternation 0, alternation 1, ...]; the manifest records each stage.
+
 At most three alternations. After every alternation the chosen codec is evaluated once on
 held-out seeds and a RunResult is saved, so the dashboard shows progress live. Held-out
 results never feed back into any choice: the search only ever sees train seeds, and the
@@ -52,6 +57,14 @@ ROOT = Path(__file__).resolve().parents[1]
 CODEC_DIR = ROOT / "checkpoints" / "loop"
 
 MAX_ALTERNATIONS = 3
+
+# RunResult.iterations: index 0 is the tier-1 codec (rules audited, redundancy tuned, rule
+# scorer, B's decoder = ablation C); index 1 is the first alternation with the learned risk
+# scorer (same decoder = ablation D); the last one is the full loop (ablation E).
+STAGE_LABEL = {
+    "rules": "tier 1: audited rules + tuned redundancy, rule scorer",
+    "alternation": "tier 2: learned risk scorer",
+}
 
 # Train seed ranges, all far away from the held-out block (900_000 .. 900_999).
 SEED_TIMING = 1_000_000
@@ -749,11 +762,73 @@ def run_loop(
     )
     save_run(run, run_id)
 
+    def record(stage: str, chosen: EncoderSettings, scorer: Scorer | None, decoder_used: Decoder,
+               search: SearchResult, extra: dict, notes_extra: str) -> IterationResult:
+        """Held-out evaluation of one chosen codec (with the decoder its search used), saved at once."""
+        idx = len(run.iterations)
+        metrics, min_reads = _evaluate_heldout(data, chosen, scorer, decoder_used, profile, config, comps)
+        # PROJECT.md reading metric is "at matched bits per base": the default rules and scorer
+        # at the chosen redundancy and strand length, same decoder, same held-out seeds.
+        matched = matched_default(default_settings, chosen)
+        matched_reads = comps.min_reads_at_target(
+            data, matched, None, decoder_used, profile, heldout_seeds(config.eval_trials),
+            config.target, config.coverages, config.workers,
+        )
+        kmers = [(str(k), float(r)) for k, r in scorer.top_kmers()] if hasattr(scorer, "top_kmers") else []
+        rc = search.chosen_candidate.recheck
+        notes = (
+            f"{mock_note}{quick_note}{STAGE_LABEL[stage]}; decoder {decoder_spec(decoder_used)['kind']}"
+            f"{' (re-adapted)' if decoder_used is not decoder_b else ''}; "
+            f"{sum(c.screen is not None for c in search.candidates)} candidates screened, "
+            f"{search.trials_run} train trials; train re-check {rc.recovery_rate if rc else 'n/a'}"
+            f"{'' if search.target_met else '; TARGET NOT MET ON TRAIN SEEDS (best effort)'}; "
+            f"{notes_extra}default rules at matched bits/base ({describe(matched)}): min reads {matched_reads}"
+        )
+        result = IterationResult(idx, chosen, metrics, min_reads, kmers, notes)
+        run.iterations.append(result)
+        store.save_iteration(idx, chosen, scorer, decoder_used, {
+            "stage": stage,
+            "target_met_train": search.target_met,
+            "train_recheck_rate": rc.recovery_rate if rc else None,
+            "matched_default_settings": asdict(matched),
+            "matched_default_min_reads": matched_reads,
+            "search": [
+                {"settings": describe(c.settings), "bits_per_base": c.bits_per_base,
+                 "screen_rate": c.screen.recovery_rate if c.screen else None,
+                 "screen_trials": c.screen_trials,
+                 "screen_strand_acc": c.screen.strand_accuracy if c.screen else None,
+                 "recheck_rate": c.recheck.recovery_rate if c.recheck else None, "error": c.error}
+                for c in search.candidates
+            ],
+            **extra,
+        })
+        save_run(run, run_id)
+        log.info("[%s] %s: held-out recovery %.3f, strand acc %.3f, %.3f bits/base, min reads %s "
+                 "(default rules at matched bits/base: %s)",
+                 profile.name, STAGE_LABEL[stage], metrics.recovery_rate or 0.0, metrics.strand_accuracy,
+                 metrics.bits_per_base or 0.0, min_reads, matched_reads)
+        return result
+
+    screen_seeds = train_seeds(SEED_SCREEN, config.screen_trials)
+    recheck_seeds = train_seeds(SEED_RECHECK, config.recheck_trials)
+
+    # Tier 1 (system C): audit rules and tune redundancy with the rule scorer only, B's decoder.
+    # Same grid, seeds and decoder as the first alternation's search, minus the risk model.
+    rules_grid = replace(config.grid, risk_quantile=(None,))
+    search = search_settings(
+        data, profile, None, decoder_b, grid_candidates(rules_grid, default_settings, {}), config,
+        comps.recovery_trials, screen_seeds, recheck_seeds,
+        fallback=grid_candidates(rules_grid, default_settings, {}, config.grid.fallback_redundancy),
+    )
+    log.info("[%s] rules only: chose %s (target met on train: %s; %d train trials, %.0fs)",
+             profile.name, search.summary(), search.target_met, search.trials_run, search.seconds)
+    record("rules", search.chosen, None, decoder_b, search, {}, "")
+
+    # Tier 2: the alternating loop with the learned risk scorer (first alternation = system D).
     current = decoder_b
     prev_settings: EncoderSettings | None = None
     risk: Scorer | None = None
     for it in range(n_alt):
-        t_it = time.time()
         # Step 2: label strands with the frozen decoder.
         per_len = max(1, config.label_strands // len(config.grid.strand_length))
         label_seed = train_seed(SEED_LABEL + it * 1_000_000)
@@ -769,61 +844,24 @@ def run_loop(
         # Step 3: train the risk model.
         risk = comps.train_risk(strands, labels, train_seed(label_seed + 200))
 
-        # Step 4: grid search on train seeds.
+        # Step 4: grid search on train seeds (the first alternation shares seeds with tier 1).
         thresholds = risk_thresholds(risk, config.grid, default_settings, SEED_THRESHOLD + it * 10_000,
                                      config.threshold_strands)
-        cands = grid_candidates(config.grid, default_settings, thresholds)
-        fallback = grid_candidates(config.grid, default_settings, thresholds, config.grid.fallback_redundancy)
         search = search_settings(
-            data, profile, risk, current, cands, config, comps.recovery_trials,
-            train_seeds(SEED_SCREEN + it * 10_000, config.screen_trials),
-            train_seeds(SEED_RECHECK + it * 10_000, config.recheck_trials),
-            fallback=fallback,
+            data, profile, risk, current, grid_candidates(config.grid, default_settings, thresholds), config,
+            comps.recovery_trials,
+            screen_seeds if it == 0 else train_seeds(SEED_SCREEN + it * 10_000, config.screen_trials),
+            recheck_seeds if it == 0 else train_seeds(SEED_RECHECK + it * 10_000, config.recheck_trials),
+            fallback=grid_candidates(config.grid, default_settings, thresholds, config.grid.fallback_redundancy),
         )
         chosen = search.chosen
         log.info("[%s] alt %d step 4: chose %s (target met on train: %s; %d train trials, %.0fs)",
                  profile.name, it, search.summary(), search.target_met, search.trials_run, search.seconds)
-
-        # Held-out evaluation of the chosen codec, with the decoder the search used.
-        metrics, min_reads = _evaluate_heldout(data, chosen, risk, current, profile, config, comps)
-        # PROJECT.md reading metric is "at matched bits per base": the default rules and scorer
-        # at the chosen redundancy and strand length, same decoder, same held-out seeds.
-        matched = matched_default(default_settings, chosen)
-        matched_reads = comps.min_reads_at_target(
-            data, matched, None, current, profile, heldout_seeds(config.eval_trials),
-            config.target, config.coverages, config.workers,
-        )
-        kmers = [(str(k), float(r)) for k, r in risk.top_kmers()] if hasattr(risk, "top_kmers") else []
-        screened = sum(c.screen is not None for c in search.candidates)
-        notes = (
-            f"{mock_note}{quick_note}decoder {decoder_spec(current)['kind']}"
-            f"{' (re-adapted)' if it > 0 and current is not decoder_b else ''}; "
-            f"{screened} candidates screened, {search.trials_run} train trials; "
-            f"train re-check {search.chosen_candidate.recheck.recovery_rate if search.chosen_candidate.recheck else 'n/a'}"
-            f"{'' if search.target_met else '; TARGET NOT MET ON TRAIN SEEDS (best effort)'}; "
-            f"label mean failure {label_mean:.3f}; "
-            f"default rules at matched bits/base ({describe(matched)}): min reads {matched_reads}"
-        )
-        run.iterations.append(IterationResult(it, chosen, metrics, min_reads, kmers, notes))
-        store.save_iteration(it, chosen, risk, current, {
-            "target_met_train": search.target_met,
-            "matched_default_settings": asdict(matched),
-            "matched_default_min_reads": matched_reads,
-            "train_recheck_rate": search.chosen_candidate.recheck.recovery_rate if search.chosen_candidate.recheck else None,
+        record("alternation", chosen, risk, current, search, {
+            "alternation": it,
+            "label_mean_failure": label_mean,
             "thresholds": {f"len{k[0]} hp{k[1]} gc{'on' if k[2] else 'off'} q{k[3]}": v for k, v in thresholds.items()},
-            "search": [
-                {"settings": describe(c.settings), "bits_per_base": c.bits_per_base,
-                 "screen_rate": c.screen.recovery_rate if c.screen else None,
-                 "screen_trials": c.screen_trials,
-                 "screen_strand_acc": c.screen.strand_accuracy if c.screen else None,
-                 "recheck_rate": c.recheck.recovery_rate if c.recheck else None, "error": c.error}
-                for c in search.candidates
-            ],
-        })
-        save_run(run, run_id)
-        log.info("[%s] alt %d: held-out recovery %.3f, strand acc %.3f, %.3f bits/base, min reads %s (%.0fs)",
-                 profile.name, it, metrics.recovery_rate or 0.0, metrics.strand_accuracy,
-                 metrics.bits_per_base or 0.0, min_reads, time.time() - t_it)
+        }, f"alternation {it}; label mean failure {label_mean:.3f}; ")
 
         if it == n_alt - 1:
             break
@@ -831,8 +869,7 @@ def run_loop(
         new_strands = encode(data, chosen, risk).strands
         adapted = comps.adapt(current, profile, new_strands, train_seeds(SEED_ADAPT + (it + 1) * 100_000, config.adapt_passes),
                               store.decoder_path(f"it{it + 1}"), config.adapt_steps)
-        unchanged = adapted is current
-        if config.stop_when_converged and unchanged and chosen == prev_settings:
+        if config.stop_when_converged and adapted is current and chosen == prev_settings:
             log.info("[%s] converged: decoder unchanged and settings repeated, stopping after %d alternations",
                      profile.name, it + 1)
             break

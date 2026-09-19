@@ -60,16 +60,24 @@ def test_summary_has_every_piece_of_evidence(finished_run):
     assert summary.is_mock
 
     systems = {(e.situation, e.system) for e in summary.ablation}
-    assert systems == {(s, x) for s in CORE for x in "ABCD"}
+    assert systems == {(s, x) for s in CORE for x in "ABCDE"}
     runs = {r.situation: r for r in results.load_runs(finished_run)}
     for e in summary.ablation:
         run = runs[e.situation]
         if e.system == "B":
             assert e.metrics == run.default_metrics
         if e.system == "C":
-            assert e.metrics == run.iterations[0].metrics
+            assert e.metrics == run.iterations[0].metrics  # tier 1
         if e.system == "D":
+            assert e.metrics == run.iterations[1].metrics  # first alternation
+        if e.system == "E":
             assert e.metrics == run.iterations[-1].metrics
+
+    audit = {(e.situation, e.rule.split()[0]) for e in summary.rule_audit}
+    assert audit == {(s, r) for s in CORE for r in ("max_homopolymer=3", "gc", "redundancy")}
+    for e in summary.rule_audit:
+        assert e.verdict in ("pays off", "no measurable benefit", "harmful", "tuned is better", "default is fine")
+        assert e.min_reads_on == runs[e.situation].default_min_reads_at_target
 
     pairs = {(e.codec, e.channel) for e in summary.crossover}
     assert pairs == {(c, ch) for c in ("default", *CORE) for ch in CORE}
@@ -147,3 +155,16 @@ def test_accepted_by_respects_hard_constraints_and_threshold():
     settings = EncoderSettings(max_homopolymer=3, risk_threshold=0.5)
     acc = accepted_by(settings, model, strands, np.array([0.1, 0.2]))
     assert list(acc) == [True, False]
+
+
+def test_verdict_rules_are_fixed():
+    from scripts.run_experiments import redundancy_verdict, rule_verdict
+
+    cov = (2, 4, 6, 8, 10)
+    assert rule_verdict(6.0, 8.0, cov) == "pays off"
+    assert rule_verdict(6.0, 6.0, cov) == "no measurable benefit"
+    assert rule_verdict(8.0, 6.0, cov) == "harmful"
+    assert rule_verdict(10.0, None, cov) == "pays off"  # off never reaches the target
+    assert redundancy_verdict(6, 8.0, 1.2, 6.0, 0.8, cov) == "tuned is better"  # only tuned meets the budget
+    assert redundancy_verdict(6, 4.0, 1.2, 6.0, 1.5, cov) == "tuned is better"  # both meet, denser
+    assert redundancy_verdict(6, 4.0, 1.2, 4.0, 1.1, cov) == "default is fine"

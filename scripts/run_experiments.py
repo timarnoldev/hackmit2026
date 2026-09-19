@@ -5,9 +5,11 @@
 Reads results/<run_id>/<situation>.json and the frozen codecs in checkpoints/loop/<run_id>/,
 and writes results/<run_id>/summary.json (ExperimentSummary):
 
+- Rule audit per situation (tier 1): each hard rule toggled from the default codec with B's
+  decoder, and default vs tuned redundancy, with a verdict by a rule fixed in code.
 - Ablation ladder per situation: A default codec + baseline decoder, B default codec + the
-  loop's adapted decoder, C risk scorer + settings search with B's frozen decoder (first
-  alternation), D after the final alternation.
+  loop's adapted decoder, C audited rules + tuned redundancy with the rule scorer (tier 1),
+  D C's grid plus the learned risk scorer, same decoder (tier 2), E the full loop.
 - Crossover matrix: default, and each situation's tailored encoder (settings + risk model),
   evaluated on every situation's channel at that channel's budget. On channel X all codecs
   use X's final decoder, so only the encoder differs.
@@ -38,13 +40,14 @@ import numpy as np
 
 from dnacodec.encoder import rule_scorer
 from dnacodec.evaluate import evaluate
-from dnacodec.loop import Components, LoopConfig, _evaluate_heldout, decoder_spec, load_codecs
+from dnacodec.loop import Components, LoopConfig, _evaluate_heldout, bits_per_base, decoder_spec, load_codecs
 from dnacodec.results import (
     AblationEntry,
     CandidateExample,
     CrossoverEntry,
     ExperimentSummary,
     FirewallEntry,
+    RuleAuditEntry,
     RunResult,
     load_runs,
     save_summary,
@@ -203,6 +206,97 @@ def candidate_examples(codecs: dict[str, Codec], n: int = 3000, length: int = 11
     ]
 
 
+# ---------------------------------------------------------------- rule audit (tier 1)
+
+# Fixed before any run: a rule's effect is "measurable" when the reads per strand it needs to
+# meet the recovery target differ by at least this many steps of the coverage grid
+# (LoopConfig.coverages). "Not reached within the grid" counts as one step past its end.
+MEASURABLE_STEPS = 1
+
+
+def ladder_indices(manifest: dict) -> tuple[int, int, int]:
+    """RunResult.iterations indices of ablation systems C, D and E."""
+    stages = [it.get("stage", "alternation") for it in manifest["iterations"]]
+    c = stages.index("rules") if "rules" in stages else 0
+    alts = [i for i, st in enumerate(stages) if st == "alternation"]
+    d = alts[0] if alts else c
+    e = alts[-1] if alts else c
+    return c, d, e
+
+
+def grid_step(reads: float | None, coverages: Sequence[float]) -> int:
+    grid = sorted(coverages)
+    if reads is None:
+        return len(grid)
+    return min(range(len(grid)), key=lambda i: abs(grid[i] - reads))
+
+
+def rule_verdict(reads_on, reads_off, coverages) -> str:
+    """Hard rules don't change bits per base, so the verdict is about reads per strand only."""
+    diff = grid_step(reads_off, coverages) - grid_step(reads_on, coverages)
+    if diff >= MEASURABLE_STEPS:
+        return "pays off"
+    if -diff >= MEASURABLE_STEPS:
+        return "harmful"
+    return "no measurable benefit"
+
+
+def redundancy_verdict(budget, reads_default, bpb_default, reads_tuned, bpb_tuned, coverages) -> str:
+    """Same objective as the search: meet the target at the budget, then maximize bits per base."""
+    meets_d = reads_default is not None and reads_default <= budget
+    meets_t = reads_tuned is not None and reads_tuned <= budget
+    if meets_t and not meets_d:
+        return "tuned is better"
+    if meets_t and meets_d:
+        return "tuned is better" if bpb_tuned > bpb_default + 1e-9 else "default is fine"
+    if not meets_t and not meets_d:
+        more = grid_step(reads_default, coverages) - grid_step(reads_tuned, coverages) >= MEASURABLE_STEPS
+        return "tuned is better" if more else "default is fine"
+    return "default is fine"
+
+
+def rule_audit(situation: str, run: RunResult, manifest: dict, data: bytes, config: LoopConfig, comps: Components):
+    """Toggle each hard rule from the default codec, same (B's) decoder, held-out seeds; and
+    compare default vs tuned redundancy (the tier-1 search's redundancy, default strand length)."""
+    default = run.default_settings
+    decoder = manifest["decoder_b_obj"]
+    base_reads = run.default_min_reads_at_target
+    base_bpb = run.default_metrics.bits_per_base
+    seeds = heldout_seeds(config.eval_trials)
+    out: list[RuleAuditEntry] = []
+
+    def measure(settings: EncoderSettings) -> tuple[float | None, float]:
+        reads = comps.min_reads_at_target(data, settings, None, decoder, run.profile, seeds,
+                                          config.target, config.coverages, config.workers)
+        return reads, bits_per_base(data, settings)
+
+    toggles = []
+    if default.max_homopolymer is not None:
+        toggles.append((f"max_homopolymer={default.max_homopolymer}", replace(default, max_homopolymer=None)))
+    if default.gc_min is not None or default.gc_max is not None:
+        toggles.append((f"gc {default.gc_min}-{default.gc_max}", replace(default, gc_min=None, gc_max=None)))
+    for name, off in toggles:
+        reads_off, bpb_off = measure(off)
+        verdict = rule_verdict(base_reads, reads_off, config.coverages)
+        out.append(RuleAuditEntry(situation, name, base_reads, reads_off, base_bpb, bpb_off, verdict,
+                                  f"default codec with and without this rule, same decoder; "
+                                  f"measurable = >= {MEASURABLE_STEPS} coverage grid step(s)"))
+        log.info("[%s] rule audit %s: reads on %s / off %s -> %s", situation, name, base_reads, reads_off, verdict)
+
+    c, _, _ = ladder_indices(manifest)
+    tuned_r = run.iterations[c].settings.redundancy
+    tuned = replace(default, redundancy=tuned_r)
+    reads_t, bpb_t = measure(tuned) if tuned != default else (base_reads, base_bpb)
+    verdict = redundancy_verdict(run.profile.coverage_mean, base_reads, base_bpb, reads_t, bpb_t, config.coverages)
+    out.append(RuleAuditEntry(situation, f"redundancy {default.redundancy:g} vs tuned {tuned_r:g}", base_reads, reads_t,
+                              base_bpb, bpb_t, verdict,
+                              f"tuned value from the tier-1 search (rule scorer only); strand length kept at "
+                              f"{default.strand_length}; budget {run.profile.coverage_mean:g} reads"))
+    log.info("[%s] rule audit redundancy %g vs %g: reads %s / %s -> %s", situation, default.redundancy, tuned_r,
+             base_reads, reads_t, verdict)
+    return out
+
+
 # ---------------------------------------------------------------- the experiments
 
 
@@ -230,26 +324,30 @@ def build_summary(
         return _evaluate_heldout(data, settings, scorer, decoder, profile, config, comps)
 
     final_decoder = {s: codecs[s]["iterations"][-1]["decoder_obj"] for s in situations}
+    # The tailored codec of a situation is the final one (system E).
     tailored = {
         s: Codec(s, codecs[s]["iterations"][-1]["settings_obj"], codecs[s]["iterations"][-1]["risk"])
         for s in situations
     }
 
-    # 1. Ablation ladder.
+    # 1. Rule audit (tier 1) and ablation ladder A to E.
     for s in situations:
         run, manifest = runs[s], codecs[s]
+        summary.rule_audit += rule_audit(s, run, manifest, data, config, comps)
         if manifest["decoder_b"]["kind"] == "baseline":
             a_metrics, a_reads = run.default_metrics, run.default_min_reads_at_target  # identical codec and decoder
         else:
             a_metrics, a_reads = heldout(run.default_settings, None, comps.baseline_decoder(), run.profile)
+        c, d, e = ladder_indices(manifest)
         summary.ablation += [
             AblationEntry(s, "A", a_metrics, a_reads),
             AblationEntry(s, "B", run.default_metrics, run.default_min_reads_at_target),
-            AblationEntry(s, "C", run.iterations[0].metrics, run.iterations[0].min_reads_at_target),
-            AblationEntry(s, "D", run.iterations[-1].metrics, run.iterations[-1].min_reads_at_target),
+            AblationEntry(s, "C", run.iterations[c].metrics, run.iterations[c].min_reads_at_target),
+            AblationEntry(s, "D", run.iterations[d].metrics, run.iterations[d].min_reads_at_target),
+            AblationEntry(s, "E", run.iterations[e].metrics, run.iterations[e].min_reads_at_target),
         ]
-        log.info("[%s] ablation: A %.3f  B %.3f  C %.3f  D %.3f (held-out recovery)", s,
-                 *(e.metrics.recovery_rate or 0.0 for e in summary.ablation[-4:]))
+        log.info("[%s] ablation (held-out recovery / min reads): %s", s, "  ".join(
+            f"{x.system} {x.metrics.recovery_rate or 0.0:.3f}/{x.min_reads_at_target}" for x in summary.ablation[-5:]))
 
     # 2. Crossover matrix: on channel X every codec uses X's final decoder.
     home: dict[tuple[str, str], tuple[Metrics, float | None]] = {}

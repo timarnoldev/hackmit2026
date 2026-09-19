@@ -151,23 +151,25 @@ def test_saves_after_every_alternation(monkeypatch):
     saved = []
     monkeypatch.setattr(loop, "save_run", lambda r, run_id: saved.append(len(r.iterations)))
     out = run(config=tiny_config(stop_when_converged=False))
-    assert len(out.iterations) == 3
-    assert saved == [0, 1, 2, 3, 3]  # default, one per alternation, final with coverage curve
+    assert len(out.iterations) == 4  # tier 1 + three alternations
+    assert saved == [0, 1, 2, 3, 4, 4]  # default, tier 1, one per alternation, final with coverage curve
 
 
 def test_results_on_disk_after_run():
     out = run(max_iterations=1)
     loaded = results.load_runs("t")
     assert len(loaded) == 1 and loaded[0].situation == NANOPORE.name
-    assert loaded[0].is_mock and len(loaded[0].iterations) == len(out.iterations) == 1
+    assert loaded[0].is_mock and len(loaded[0].iterations) == len(out.iterations) == 2
     assert loaded[0].n_trials == tiny_config().eval_trials
     manifest = loop.load_codecs("t", NANOPORE.name)
-    assert isinstance(manifest["iterations"][0]["risk"], MockRiskModel)
+    assert [it["stage"] for it in manifest["iterations"]] == ["rules", "alternation"]
+    assert manifest["iterations"][0]["risk"] is None
+    assert isinstance(manifest["iterations"][1]["risk"], MockRiskModel)
 
 
 def test_at_most_three_alternations():
     out = run(max_iterations=5, config=tiny_config(stop_when_converged=False))
-    assert len(out.iterations) == 3
+    assert len(out.iterations) == 1 + 3  # tier 1 is not an alternation
 
 
 def test_coverage_curve_names_with_baseline_decoder():
@@ -189,8 +191,8 @@ def test_adapt_gets_default_then_new_encoder_strands():
     out = run(comps=comps, max_iterations=2, config=tiny_config(stop_when_converged=False))
     assert len(calls) == 2  # step 1, then step 5 once (not after the last alternation)
     assert calls[0] == encode(DATA, EncoderSettings()).strands
-    risk0 = loop.load_codecs("t", NANOPORE.name)["iterations"][0]["risk"]
-    assert calls[1] == encode(DATA, out.iterations[0].settings, risk0).strands
+    risk0 = loop.load_codecs("t", NANOPORE.name)["iterations"][1]["risk"]
+    assert calls[1] == encode(DATA, out.iterations[1].settings, risk0).strands
 
 
 # ---------------------------------------------------------------- the search
@@ -250,7 +252,7 @@ def test_chosen_settings_meet_target_on_train_seeds_in_full_loop():
     for it, rec in zip(out.iterations, manifest["iterations"]):
         assert rec["target_met_train"]
         risk = rec["risk"]
-        recheck_seeds = train_seeds(loop.SEED_RECHECK + it.iteration * 10_000, cfg.recheck_trials)
+        recheck_seeds = train_seeds(loop.SEED_RECHECK + rec.get("alternation", 0) * 10_000, cfg.recheck_trials)
         m = comps.recovery_trials(DATA, it.settings, risk, None, NANOPORE, recheck_seeds)
         assert m.recovery_rate >= cfg.target
 
@@ -338,3 +340,21 @@ def test_real_components_default_to_lazy_imports():
     # The baseline decoder has no checkpoint, so adapting it is a no-op.
     dec = comps.baseline_decoder()
     assert loop.default_adapt(dec, NANOPORE, ["ACGT" * 20], [1], None, 10) is dec
+
+
+def test_tier1_uses_rule_scorer_and_same_seeds_as_first_alternation(monkeypatch):
+    real_search = loop.search_settings
+    seen = []
+
+    def spy(data, profile, scorer, decoder, candidates, config, runner, screen, recheck, **kw):
+        seen.append((scorer, [c.risk_threshold for c in candidates], list(screen), list(recheck), decoder))
+        return real_search(data, profile, scorer, decoder, candidates, config, runner, screen, recheck, **kw)
+
+    monkeypatch.setattr(loop, "search_settings", spy)
+    run(max_iterations=1)
+    (s_c, thr_c, scr_c, rc_c, dec_c), (s_d, thr_d, scr_d, rc_d, dec_d) = seen
+    assert s_c is None and all(t is None for t in thr_c)  # C: rule scorer, no risk threshold
+    assert isinstance(s_d, MockRiskModel)  # D: learned scorer
+    assert scr_c == scr_d and rc_c == rc_d and dec_c is dec_d  # same seeds, same frozen decoder
+    # Same grid apart from the risk threshold.
+    assert {c for c in thr_d if c is None} == {None}
