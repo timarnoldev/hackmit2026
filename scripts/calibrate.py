@@ -30,7 +30,7 @@ import itertools
 import json
 import math
 import tempfile
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -67,17 +67,6 @@ ARCHIVE_SUB_BOOST = 1.5
 
 TAGS = {"replace": 0, "insert": 1, "delete": 2}
 TYPE_NAMES = ("sub", "ins", "del")
-
-# context_table is proposed to the architect; until SituationProfile has it, calibration uses
-# a local subclass so simulate() (which reads it with getattr) sees the fitted table.
-HAS_CONTEXT_FIELD = "context_table" in {f.name for f in fields(SituationProfile)}
-if HAS_CONTEXT_FIELD:
-    CalProfile = SituationProfile
-else:
-
-    @dataclass(frozen=True)
-    class CalProfile(SituationProfile):  # type: ignore[no-redef]
-        context_table: str | None = None
 
 
 _TABLE_DIR = Path(tempfile.mkdtemp(prefix="dnacodec_ctx_"))
@@ -539,7 +528,10 @@ def calibrate(
     dry_run: bool,
     fit_spread: bool = True,
     fit_context: bool = False,
+    table_out: str | None = None,
 ) -> SituationProfile:
+    """Fit one dataset. table_out: write the context table under this name in profiles/
+    even on a dry run (used for Simulator B's table)."""
     # Most common reference length only (DNAformer files may contain a few odd ones).
     lengths = np.array([len(c.reference) for c in clusters])
     length = int(np.bincount(lengths).argmax())
@@ -562,7 +554,7 @@ def calibrate(
     print(f"  coverage mean {mean:.2f} var {var:.2f} -> NB shape MLE {shape:.3f} (moments {moments_shape:.3f})")
     print("  " + describe("real", real))
 
-    base = CalProfile(**load_profile(profile_names[0]).to_dict())
+    base = load_profile(profile_names[0])
     if fit_dispersion:
         base = replace(base, coverage_dispersion=shape)
     if fit_spread:
@@ -576,8 +568,8 @@ def calibrate(
     table_name = None
     if fit_context:
         _, table = load_context_table(fitted.context_table)
-        table_name = f"{profile_names[0]}_context.json"
-        table_path = PROFILES_DIR / table_name if not dry_run else _TABLE_DIR / table_name
+        table_name = table_out or f"{profile_names[0]}_context.json"
+        table_path = PROFILES_DIR / table_name if (table_out or not dry_run) else _TABLE_DIR / table_name
         fitted = replace(fitted, context_table=write_context_table(table, table_path, f"{source} (train split)"))
         print(f"  context table -> {table_path}")
 
@@ -652,11 +644,7 @@ def calibrate(
             coverage_dispersion=fitted.coverage_dispersion if fit_dispersion else current.coverage_dispersion,
             calibrated_from=f"{source} (train split)",
         )
-        if HAS_CONTEXT_FIELD:
-            updated = replace(updated, context_table=table_name)
-        elif table_name:
-            print(f"  NOTE: SituationProfile has no context_table field yet; {table_name} is written")
-            print("  but the saved profile can't reference it, so these numbers were fit WITH it.")
+        updated = replace(updated, context_table=table_name)
         if dry_run:
             print(f"  [dry run] {name}: {updated}")
         else:
@@ -712,12 +700,16 @@ def main(argv: list[str] | None = None) -> None:
         if "illumina" in name.lower():
             profiles, fit_dispersion, dry = ["illumina_standard"], True, args.dry_run
         else:
-            # Extra Nanopore files are measured for comparison only; nanopore_budget stays
-            # calibrated on Microsoft, the dataset we benchmark on.
+            # DNAformer Nanopore doesn't change nanopore_budget (calibrated on Microsoft, the
+            # dataset we benchmark on); its context table becomes Simulator B's table.
             profiles, fit_dispersion, dry = ["nanopore_budget"], False, True
         # Illumina has ~1 error per 1000 bases: too few events per 5-mer for a context table.
         fit_context = "illumina" not in name.lower() and not args.no_context
-        calibrate(clusters, profiles, f"dnaformer_{name}", args.seed, fit_dispersion, dry, fit_context=fit_context)
+        table_out = None if "illumina" in name.lower() else "nanopore_budget_context_b.json"
+        calibrate(
+            clusters, profiles, f"dnaformer_{name}", args.seed, fit_dispersion, dry,
+            fit_context=fit_context, table_out=table_out,
+        )
 
 
 if __name__ == "__main__":

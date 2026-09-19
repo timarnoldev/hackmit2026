@@ -31,6 +31,7 @@ def flat_profile(**overrides):
         read_quality_spread=0.0,
         position_rate_spread=0.0,
         malformed_read_rate=0.0,
+        context_table=None,
     )
     return replace(base, **{**defaults, **overrides})
 
@@ -229,3 +230,37 @@ def test_malformed_reads_come_from_other_strands():
     assert far.mean() == pytest.approx(0.1, abs=0.015)
     # a single strand has no other strand to borrow from
     assert simulate(strands[:1], replace(profile, coverage_mean=20.0, coverage_dispersion=1e4), seed=1)[0]
+
+
+def test_kmer_ids():
+    from dnacodec.simulator import _encode, kmer_ids
+
+    codes, _ = _encode(["ACGTAC", "AAA"])
+    ids = kmer_ids(codes, 3)
+    # centered 3-mers of ACGTAC: -, ACG, CGT, GTA, TAC, -
+    assert ids[0].tolist() == [-1, 0 * 16 + 1 * 4 + 2, 1 * 16 + 2 * 4 + 3, 2 * 16 + 3 * 4 + 0, 3 * 16 + 0 * 4 + 1, -1]
+    assert ids[1].tolist()[:3] == [-1, 0, -1]
+    assert ids[1, 3:].tolist() == [-1, -1, -1]  # padding never forms a k-mer
+
+
+def test_context_table_targets_its_kmer(tmp_path):
+    import json
+
+    table = {"k": 5, "sub": [1.0] * 1024, "ins": [1.0] * 1024, "del": [1.0] * 1024, "fitted_on": "test"}
+    hot = 0 * 256 + 1 * 64 + 2 * 16 + 3 * 4 + 0  # ACGTA, centered on the G
+    table["sub"][hot] = 20.0
+    path = tmp_path / "ctx.json"
+    path.write_text(json.dumps(table))
+    strand = "TTACGTATT" * 12
+    profile = flat_profile(sub_rate=0.005, ins_rate=0.0, del_rate=0.0, context_table=str(path), coverage_mean=20.0)
+    errors = np.zeros(len(strand))
+    total = 0
+    for reads in simulate([strand] * 300, profile, seed=8):
+        for r in reads:
+            errors += np.array([a != b for a, b in zip(strand, r)])
+            total += 1
+    rate = errors / total
+    centers = [i for i in range(2, len(strand) - 2) if strand[i - 2 : i + 3] == "ACGTA"]
+    others = [i for i in range(len(strand)) if i not in centers]
+    assert rate[centers].mean() == pytest.approx(0.1, rel=0.15)
+    assert rate[others].mean() == pytest.approx(0.005, rel=0.2)
