@@ -33,7 +33,7 @@ class IterationResult:
 
 @dataclass
 class CoveragePoint:
-    decoder: str  # e.g. "baseline", "transformer", "tailored"
+    decoder: str  # fixed names: "baseline" (system A), "transformer" (system B, default codec), "tailored" (final codec)
     coverage: float  # reads per strand
     strand_accuracy: float
     recovery_rate: float | None = None

@@ -32,6 +32,7 @@ N_TRIALS = 300
 
 
 def fake_metrics(rng: np.random.Generator, accuracy: float, bits: float, reads: float) -> Metrics:
+    accuracy = min(accuracy, 0.995)
     length = 110
     ramp = np.linspace(1.0, 2.0, length)
     recovery = float(np.clip((accuracy - 0.6) / 0.35, 0, 1))
