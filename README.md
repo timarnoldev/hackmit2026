@@ -1,6 +1,10 @@
 # Adaptive DNA Codec
 
-**HackMIT 2026.** A DNA data storage codec that adapts to the situation it's used in. An AI-guided encoder and an AI decoder improve each other in a feedback loop until the codec is tuned for a given sequencing technology, storage duration, and reading budget.
+**HackMIT 2026.** Instead of deciding in advance which DNA sequences are dangerous, we let decoding failures tell the encoder what to avoid, separately for each sequencing channel.
+
+**Thesis:** a sequence constraint, and every extra strand of redundancy, should only be paid for when it measurably reduces decoding failure on the target channel.
+
+**What we show:** at a fixed file recovery target, a closed loop between an AI decoder and a learned candidate scorer finds a codec that needs fewer reads per strand, or carries less redundancy, than a hand-tuned default **using the same decoder**. A crossover experiment checks that each tailored codec wins on its own channel and not on the other.
 
 > **Status: in progress.** The foundation is done: shared interfaces, situation profiles, real data loaders, tests. The simulator, encoder, decoders, risk model, loop, and dashboard are being built in parallel. See [Status](#status).
 
@@ -110,7 +114,11 @@ A fully learned encoder (an autoencoder trained through the channel) sounds appe
 | Encoder and decoder designed separately | Encoder and decoder adapting to each other in a loop |
 | Papers with fixed parameters | An interactive tool for an engineer's real constraints |
 
-**Key metric:** each situation gets a codec that beats the default, storing more data per strand, needing fewer reads, or both.
+Adaptive constrained coding, learned decoders and end-to-end learned codes all exist, but each optimizes the rules, the redundancy or the decoder in isolation. Our claim is narrow: **decoder failures become the training signal for encoder candidate selection**, and the whole codec is optimized for one explicit operating point (channel, read budget, recovery target). We don't claim a better decoder than DNAformer, and the encoder is not a neural network.
+
+**Objective, fixed before any run:** the file must be recovered exactly in all 300 held-out trials. At that target we measure the fewest reads per strand needed and the most bits per base achievable, and judge codecs on the Pareto front of the two. The default we compare against always uses the same decoder.
+
+**Evidence:** an ablation ladder (fixed codec with baseline decoder, fixed codec with transformer, learned scorer with the same frozen transformer, full loop), a crossover matrix (each tailored codec on its own and the other channel), and a sim-to-real firewall (a structurally different Simulator B, plus the risk model's ranking on real reads). See [PROJECT.md](PROJECT.md).
 
 ## Status
 
@@ -119,7 +127,7 @@ A fully learned encoder (an autoencoder trained through the channel) sounds appe
 | Shared types, profiles, seeds, result format | ✅ Done |
 | Real data loaders (Microsoft, DNAformer) with fixed held-out split | ✅ Done |
 | Mock results for dashboard development | ✅ Done |
-| Channel simulator and calibration | 🚧 In progress |
+| Channel simulator | ✅ v1 done, Nanopore calibrated; realism fixes, Illumina calibration, Simulator B in progress |
 | Fountain encoder | 🚧 In progress |
 | Baseline decoder and evaluation | ✅ Done |
 | Transformer decoder | 🚧 In progress |
@@ -211,15 +219,17 @@ We use real sequencing data **and** a simulator. Real data alone can't drive the
 
 | Dataset | Platform | Content | License |
 |---|---|---|---|
-| [Microsoft clustered Nanopore reads](https://github.com/microsoft/clustered-nanopore-reads-dataset) | Nanopore (MinION) | 10,000 random references of length 110, 269,709 reads, already clustered. Mean cluster size 27, median 21. Error rates roughly 1.7% insertions, 2.0% deletions, 2.2% substitutions | MIT |
+| [Microsoft clustered Nanopore reads](https://github.com/microsoft/clustered-nanopore-reads-dataset) | Nanopore (MinION) | 10,000 references of length 110, 269,709 reads, already clustered. Mean cluster size 27, median 21. Error rates roughly 1.7% insertions, 2.0% deletions, 2.2% substitutions | MIT |
 | [DNAformer binned reads](https://zenodo.org/records/17473983) (Technion) | Nanopore (2 flowcells) and Illumina | References of length 140, clusters labeled with their reference, random and semantic files, about 1.2 GB | CC BY 4.0 |
 
 How real data is used:
 
 1. **Calibrate the simulator**: error rates, position dependence, homopolymer effects, and coverage are fit to real reads.
 2. **Fine-tune the decoder** on real clusters after pretraining on simulated data.
-3. **Seed the risk model** with real decoder failures.
+3. **Validate the risk model**: its predicted risk must rank real failing strands above succeeding ones.
 4. **Benchmark honestly** on held-out real clusters that no training touches.
+
+**Caveat:** the Microsoft README (note of 8/12/2024) states that its references are not uniformly random due to a generation bug, and some clusters may be malformed. We use it for reconstruction benchmarks and calibration, never to learn risky motifs.
 
 Loading:
 
@@ -253,7 +263,9 @@ Current profiles:
 |---|---|
 | `nanopore_budget` | Portable Nanopore reading on a tight budget, short-term storage |
 | `illumina_standard` | Lab Illumina reading, normal budget, short-term storage |
-| `illumina_archive_100y` | Century-scale archive read with Illumina; heavy strand loss (extrapolated, no real data exists) |
+| `illumina_archive_100y` | Stretch goal. Century-scale archive read with Illumina; heavy strand loss (extrapolated, no real data exists) |
+
+The two core situations are `nanopore_budget` and `illumina_standard`. `nanopore_budget` is calibrated on the Microsoft train split.
 
 > Cost numbers are placeholders until verified and are not presented as real figures.
 
