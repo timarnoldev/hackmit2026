@@ -1,12 +1,17 @@
 # Adaptive DNA Codec
 
-**HackMIT 2026.** Instead of deciding in advance which DNA sequences are dangerous, we let decoding failures tell the encoder what to avoid, separately for each sequencing channel.
+**HackMIT 2026.** We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 
-**Thesis:** a sequence constraint, and every extra strand of redundancy, should only be paid for when it measurably reduces decoding failure on the target channel.
+DNA storage pipelines follow hand-written rules such as "never more than 3 identical letters in a row" and "keep GC content between 40 and 60%", plus a fixed amount of redundancy. These rules are chosen once, copied between papers, and applied to every sequencing channel. Nobody measures whether they pay off.
 
-**What we show:** at a fixed file recovery target, a closed loop between an AI decoder and a learned candidate scorer finds a codec that needs fewer reads per strand, or carries less redundancy, than a hand-tuned default **using the same decoder**. A crossover experiment checks that each tailored codec wins on its own channel and not on the other.
+For a given channel (sequencing technology, read budget, recovery target), our tool
 
-> **Status: in progress.** The foundation is done: shared interfaces, situation profiles, real data loaders, tests. The simulator, encoder, decoders, risk model, loop, and dashboard are being built in parallel. See [Status](#status).
+1. **audits every rule and the redundancy level**: switches each rule on and off, measures what it costs and what it buys, and keeps only what pays off, and
+2. **learns what to avoid from decoder failures**: a risk model trained on where the decoder actually fails picks the safest candidate strands, going beyond the hand rules where the channel has patterns they don't cover.
+
+The result is a codec tuned to that channel that reaches the same recovery target with fewer reads per strand or less redundancy than the hand-tuned default, with the **same** encoder and the **same** decoder.
+
+> **Status: in progress.** Simulator, encoder, baseline decoder, evaluation, risk model and dashboard are merged. The transformer decoder and the loop are being built. See [Status](#status).
 
 ---
 
@@ -114,11 +119,20 @@ A fully learned encoder (an autoencoder trained through the channel) sounds appe
 | Encoder and decoder designed separately | Encoder and decoder adapting to each other in a loop |
 | Papers with fixed parameters | An interactive tool for an engineer's real constraints |
 
-Adaptive constrained coding, learned decoders and end-to-end learned codes all exist, but each optimizes the rules, the redundancy or the decoder in isolation. Our claim is narrow: **decoder failures become the training signal for encoder candidate selection**, and the whole codec is optimized for one explicit operating point (channel, read budget, recovery target). We don't claim a better decoder than DNAformer, and the encoder is not a neural network.
+We compete at the **system level**: how an existing codec should be configured for one channel. Our opponent is the hand-tuned default practitioners use, not other papers' components. We don't claim a better encoder than DNA Fountain (ours is a standard Fountain code on purpose) or a better decoder than DNAformer, and the encoder is not a neural network.
+
+The claim has two tiers:
+
+| Tier | Claim | Status |
+|---|---|---|
+| **1. Rule audit** | Measured per channel, some standard rules and redundancy levels don't pay off; tuning them reaches the recovery target more cheaply | Holds regardless of what the risk model learns |
+| **2. Learned selection** | Decoder failures teach the encoder to avoid patterns the hand rules don't cover | First evidence from real reads says the channel has such patterns (below) |
+
+**Evidence for tier 2.** On real Nanopore reads, errors shared by all reads of a strand (the ones more reads can't fix) are largely predictable from the local 5-letter context: it explains 45 to 66% of their variance on held-apart data and predicts error hot spots with AUC 0.80 to 0.90, with the same context families leading in two independent datasets. The hand rules don't cover these contexts.
 
 **Objective, fixed before any run:** a fixed 20 KB test file must be recovered exactly in all 300 held-out trials. At that target we measure the fewest reads per strand needed and the most bits per base achievable, and judge codecs on the Pareto front of the two. The default we compare against always uses the same decoder.
 
-**Evidence:** an ablation ladder (fixed codec with baseline decoder, fixed codec with transformer, learned scorer with the same frozen transformer, full loop), a crossover matrix (each tailored codec on its own and the other channel), and a sim-to-real firewall (a structurally different Simulator B, plus the risk model's ranking on real reads). See [PROJECT.md](PROJECT.md).
+**Evidence:** a rule audit table (each rule, each channel: pays off or not), an ablation ladder (fixed codec with baseline decoder, fixed codec with transformer, audited rules and tuned redundancy, plus the learned scorer, full loop), a crossover matrix (each tailored codec on its own and the other channel), and a sim-to-real firewall (a structurally different Simulator B, plus the risk model's ranking on real reads). See [PROJECT.md](PROJECT.md).
 
 ## Status
 
@@ -127,12 +141,12 @@ Adaptive constrained coding, learned decoders and end-to-end learned codes all e
 | Shared types, profiles, seeds, result format | ✅ Done |
 | Real data loaders (Microsoft, DNAformer) with fixed held-out split | ✅ Done |
 | Mock results for dashboard development | ✅ Done |
-| Channel simulator | ✅ v1 done, Nanopore calibrated; realism fixes, Illumina calibration, Simulator B in progress |
+| Channel simulator | ✅ Nanopore calibrated incl. shared errors; sequence-context errors, Illumina calibration and Simulator B being merged |
 | Fountain encoder (LT, CRC-16 per strand, risk threshold) | ✅ Done |
 | Baseline decoder and evaluation | ✅ Done |
 | Transformer decoder | 🚧 In progress |
 | Dashboard (Pareto, crossover, ablation, learned patterns) | ✅ Done on mock data |
-| Risk model | 🚧 In progress |
+| Risk model (controlled strands, failure-rate labels, CNN) | ✅ Done |
 | Alternating loop and evidence experiments | 🚧 In progress |
 
 Anything under `results/mock/` is fake data for building the dashboard and is flagged as such.

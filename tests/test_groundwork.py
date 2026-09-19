@@ -55,7 +55,8 @@ def test_mock_results_roundtrip():
         assert dataclasses.asdict(run) == run.to_dict()
     summary = load_summary("mock")
     assert summary is not None and summary.is_mock
-    assert {e.system for e in summary.ablation} == {"A", "B", "C", "D"}
+    assert {e.system for e in summary.ablation} == {"A", "B", "C", "D", "E"}
+    assert summary.rule_audit and {e.situation for e in summary.rule_audit} == {"nanopore_budget", "illumina_standard"}
     assert summary.to_dict() == type(summary).from_dict(summary.to_dict()).to_dict()
 
 
