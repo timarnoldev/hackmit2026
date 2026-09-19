@@ -141,7 +141,7 @@ The claim has two tiers:
 | Transformer decoder | ✅ Code done, smoke-tested; full training on the GX10 pending |
 | Dashboard (rule audit, Pareto, crossover, ablation A to E, learned patterns) | ✅ Done on mock data |
 | Risk model (controlled strands, failure-rate labels, CNN) | ✅ Done |
-| Alternating loop and evidence experiments | 🚧 In progress |
+| Alternating loop and evidence experiments | ✅ Done; first full run (baseline decoder) on the GX10 |
 
 Anything under `results/mock/` is fake data for building the dashboard and is flagged as such.
 
@@ -233,7 +233,28 @@ uv run python scripts/eval_real.py
 uv run python -m dnacodec.model.benchmark checkpoints/mixed_ft/best.pt
 ```
 
-The loop and experiment commands will be added when they're merged. They run fully with the baseline decoder, so they don't have to wait for the transformer.
+### Loop and experiments
+
+```bash
+# One alternating loop per core situation (baseline decoder unless --decoder transformer)
+uv run python scripts/run_loop.py --profile nanopore_budget --run-id run1 --workers 7
+uv run python scripts/run_loop.py --profile illumina_standard --run-id run1 --workers 7
+
+# After both loops: rule audit, ablation A to E, crossover, firewall, candidate examples
+uv run python scripts/run_experiments.py --run-id run1 --workers 14
+
+# Quick smoke run with reduced budgets (not the objective)
+uv run python scripts/run_loop.py --profile illumina_standard --run-id quick --quick
+```
+
+Results land in `results/<run_id>/` and show up in the dashboard. `scripts/gx10_pipeline.sh` runs the next steps on the GX10 by itself inside `tmux` (experiments after the loops, the transformer benchmark after training), independent of any SSH session. Long jobs are listed in `GPU_JOBS.md`.
+
+## Pitch and marketing
+
+- `marketing/deck/`: the animated web pitch deck with presenter mode (serve it, press `P`)
+- `marketing/`: brand identity (StrandAudit), logo, one-pager, pitch script, deck outline, Devpost text, social posts, landing page
+
+Result placeholders are marked `[RESULT: ...]` until the final runs are in.
 
 ## Repository layout
 
