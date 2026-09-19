@@ -142,8 +142,11 @@ def recovery_trials(
     - Metrics.n_strands is the number of strands of the encoded file (one trial), not the
       pooled count; extra["n_strand_decodes"] holds the pooled count.
     - Pooled strand metrics: every (trial, strand) pair is one row in evaluate().
-    - The decoder is pickled to the worker processes once. A decoder that cannot be pickled
-      or must stay in this process (e.g. one holding a GPU) needs workers=1.
+    - CPU decoders are pickled to the worker processes once and each trial runs fully in a
+      worker. Decoders with main_process_only=True (GPU) stay in this process: all trials are
+      simulated in workers, their clusters concatenated and decoded with ONE decode() call
+      here, then split per trial and recovered in workers. Memory: all trials' clusters are
+      held at once (roughly n_trials * n_strands * coverage reads).
     - Workers use the platform's default multiprocessing start method; with spawn (macOS)
       the calling script needs an `if __name__ == "__main__":` guard.
     """
@@ -175,6 +178,9 @@ def min_reads_at_target(
     - Per coverage, trials stop as soon as the failures (counted in seed order) make the
       target unreachable, so the answer is identical to running every trial, serial or
       parallel. A coverage that meets the target always ran all len(seeds) trials.
+    - main_process_only decoders: every trial of a coverage is simulated and decoded in one
+      batch, then the same early-exit cut is applied in seed order, so the returned value and
+      Metrics match the per-trial path; the early exit saves no decoding there.
     - coverage_mean is the mean reads per surviving strand (profile semantics); dropouts
       come on top of that.
     """
@@ -215,12 +221,19 @@ def _density_and_costs(
 # ---- trial machinery -------------------------------------------------------------------
 
 # (strands, meta, data, decoder) set once per worker process by _init_worker.
-_WORKER_STATE: tuple[list[Strand], FileMeta, bytes, Decoder] | None = None
+# decoder is None in workers when the decoder is main_process_only.
+_WORKER_STATE: tuple[list[Strand], FileMeta, bytes, Decoder | None] | None = None
 
 
-def _init_worker(strands: list[Strand], meta: FileMeta, data: bytes, decoder: Decoder) -> None:
+def _init_worker(
+    strands: list[Strand], meta: FileMeta, data: bytes, decoder: Decoder | None
+) -> None:
     global _WORKER_STATE
     _WORKER_STATE = (strands, meta, data, decoder)
+
+
+def _is_main_process_only(decoder: Decoder) -> bool:
+    return bool(getattr(decoder, "main_process_only", False))
 
 
 def _one_trial(
@@ -241,6 +254,17 @@ def _worker_trial(profile: SituationProfile, seed: int):
     return _one_trial(_WORKER_STATE, profile, seed)
 
 
+def _worker_simulate(profile: SituationProfile, seed: int) -> list[Cluster]:
+    assert _WORKER_STATE is not None, "worker not initialized"
+    return simulate(_WORKER_STATE[0], profile, seed)
+
+
+def _worker_recover(decoded: list[Strand | None]) -> bool:
+    assert _WORKER_STATE is not None, "worker not initialized"
+    _, meta, data, _ = _WORKER_STATE
+    return recover(decoded, meta) == data
+
+
 class _TrialRunner:
     """Runs trials for one encoded file, serially or on a process pool kept across calls."""
 
@@ -249,6 +273,7 @@ class _TrialRunner:
     ) -> None:
         self.encoded = encoded
         self.state = (list(encoded.strands), encoded.meta, bytes(data), decoder)
+        self.gather = _is_main_process_only(decoder)
         if workers is None:
             workers = os.cpu_count() or 1
         if workers < 1:
@@ -256,8 +281,10 @@ class _TrialRunner:
         self.workers = min(workers, max(1, n_tasks))
         self.pool: ProcessPoolExecutor | None = None
         if self.workers > 1:
+            # a main_process_only decoder never leaves this process
+            worker_state = self.state[:3] + ((None if self.gather else decoder),)
             self.pool = ProcessPoolExecutor(
-                max_workers=self.workers, initializer=_init_worker, initargs=self.state
+                max_workers=self.workers, initializer=_init_worker, initargs=worker_state
             )
 
     def __enter__(self) -> _TrialRunner:
@@ -267,8 +294,49 @@ class _TrialRunner:
         if self.pool is not None:
             self.pool.shutdown(wait=True, cancel_futures=True)
 
+    def _map(self, fn, args_list: list[tuple]) -> list:
+        """fn(*args) for each args, in order; on the pool when there is one."""
+        if self.pool is None:
+            return [fn(*a) for a in args_list]
+        futures = [self.pool.submit(fn, *a) for a in args_list]
+        try:
+            return [f.result() for f in futures]
+        finally:
+            for f in futures:
+                f.cancel()
+
+    def _gathered_results(self, profile: SituationProfile, seeds: Sequence[int]):
+        """main_process_only decoders: simulate every trial in workers, decode all trials'
+        clusters with ONE decode() call here, split per trial, recover in workers.
+        Same per-trial results as the per-trial path for a decoder that is deterministic
+        per cluster. Every trial runs; early exit is applied afterwards by run()."""
+        strands, meta, data, decoder = self.state
+        if self.pool is None:
+            per_trial = [simulate(strands, profile, s) for s in seeds]
+        else:
+            per_trial = self._map(_worker_simulate, [(profile, s) for s in seeds])
+        n = len(strands)
+        flat: list[Cluster] = [c for clusters in per_trial for c in clusters]
+        sizes = [[len(c) for c in clusters] for clusters in per_trial]
+        del per_trial
+        decoded_flat = list(decoder.decode(flat, meta.settings.strand_length))
+        del flat
+        if len(decoded_flat) != n * len(seeds):
+            raise ValueError(
+                f"decoder returned {len(decoded_flat)} strands for {n * len(seeds)} clusters"
+            )
+        decoded = [decoded_flat[t * n : (t + 1) * n] for t in range(len(seeds))]
+        if self.pool is None:
+            recovered = [recover(d, meta) == data for d in decoded]
+        else:
+            recovered = self._map(_worker_recover, [(d,) for d in decoded])
+        return list(zip(decoded, sizes, recovered))
+
     def _results(self, profile: SituationProfile, seeds: Sequence[int]):
         """Trial results in seed order, lazily, regardless of completion order."""
+        if self.gather:
+            yield from self._gathered_results(profile, seeds)
+            return
         if self.pool is None:
             for seed in seeds:
                 yield _one_trial(self.state, profile, seed)

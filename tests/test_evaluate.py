@@ -261,3 +261,64 @@ def test_min_reads_parallel_equals_serial():
     serial = min_reads_at_target(*args, workers=1, **kw)
     assert serial is not None and serial > 3
     assert serial == min_reads_at_target(*args, workers=3, **kw)
+
+
+class GatherBaseline(MajorityVoteDecoder):
+    """The baseline flagged as a GPU-style decoder: must be decoded in the main process,
+    all trials in one call. Deterministic per cluster, so results must equal the
+    per-trial path. Refuses to be pickled, which proves it never reaches a worker."""
+
+    name = "baseline_gather"
+    main_process_only = True
+
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    def decode(self, clusters, strand_length):
+        self.calls.append(len(clusters))
+        return super().decode(clusters, strand_length)
+
+    def __reduce__(self):
+        raise TypeError("main_process_only decoder must not be pickled")
+
+
+def test_main_process_only_matches_per_trial_path():
+    profile = load_profile("nanopore_budget")
+    seeds = _seeds(5)
+    reference = recovery_trials(DATA, SETTINGS, None, MajorityVoteDecoder(), profile, seeds, workers=1)
+    n = reference.n_strands
+    for workers in (1, 3):
+        dec = GatherBaseline()
+        m = recovery_trials(DATA, SETTINGS, None, dec, profile, seeds, workers=workers)
+        assert dec.calls == [n * len(seeds)]  # one decode call over all trials
+        assert dataclasses.asdict(m) == dataclasses.asdict(reference)
+
+
+def test_main_process_only_early_exit_matches():
+    encoded = encode(DATA, SETTINGS)
+    profile = load_profile("nanopore_budget")  # every trial fails at this size and coverage
+    seeds = _seeds(5)
+    with _TrialRunner(encoded, DATA, MajorityVoteDecoder(), 1, 5) as runner:
+        reference = runner.run(profile, seeds, max_failures=1)
+    assert reference.extra["early_exit"] == 1.0 and reference.n_trials == 2
+    for workers in (1, 2):
+        dec = GatherBaseline()
+        with _TrialRunner(encoded, DATA, dec, workers, 5) as runner:
+            m = runner.run(profile, seeds, max_failures=1)
+        assert dec.calls == [len(encoded.strands) * 5]
+        assert dataclasses.asdict(m) == dataclasses.asdict(reference)
+
+
+def test_main_process_only_min_reads_matches():
+    profile = load_profile("nanopore_budget")
+    settings = dataclasses.replace(SETTINGS, redundancy=1.0)
+    kw = dict(coverages=(3, 6, 10, 16, 24))
+    seeds = _seeds(6)
+    expected = min_reads_at_target(
+        DATA, settings, None, MajorityVoteDecoder(), profile, seeds, workers=1, **kw
+    )
+    dec = GatherBaseline()
+    got = min_reads_at_target(DATA, settings, None, dec, profile, seeds, workers=2, **kw)
+    assert got == expected and got is not None
+    assert len(dec.calls) == kw["coverages"].index(got) + 1  # one decode per coverage tried
