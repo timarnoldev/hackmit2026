@@ -102,7 +102,7 @@ class MockTrialRunner:
         self.calls: list[tuple[EncoderSettings, list[int], str]] = []
 
     def __call__(self, data, settings, scorer, decoder, profile, seeds, workers=None, *,
-                 simulator=None, encoded=None) -> Metrics:
+                 simulator=None, encoded=None, per_trial=False) -> Metrics:
         """simulator= is ignored: the mock channel has nothing to swap."""
         seeds = list(seeds)
         self.calls.append((settings, seeds, profile.name))
@@ -121,12 +121,17 @@ class MockTrialRunner:
         correct = 0
         reads_total = 0
         dropped = 0
+        trial_acc: list[float] = []
+        trial_rec: list[bool] = []
         for seed in seeds:
             rng = np.random.default_rng(seed)
             reads = _mock_reads(rng, n, profile)
             ok = rng.random(n) >= mock_fail_probability(enc.strands, profile, reads, difficulty)
             decoded = [s if k else None for s, k in zip(enc.strands, ok)]
-            recovered += recover(decoded, enc.meta) == data
+            ok_file = recover(decoded, enc.meta) == data
+            recovered += ok_file
+            trial_rec.append(bool(ok_file))
+            trial_acc.append(float(ok.mean()))
             correct += int(ok.sum())
             reads_total += int(reads.sum())
             dropped += int((reads == 0).sum())
@@ -144,7 +149,8 @@ class MockTrialRunner:
             bits_per_base=payload_bits_per_base(enc.meta, n),
             recovery_rate=rate,
             n_trials=t,
-            extra={"mock": 1.0},
+            extra={"mock": 1.0, **({"trial_strand_accuracy": trial_acc, "trial_recovered": trial_rec}
+                                   if per_trial else {})},
         )
 
 

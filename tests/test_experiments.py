@@ -128,10 +128,10 @@ def test_experiments_only_use_heldout_seeds(finished_run):
     calls = comps.recovery_trials.calls
     assert calls, "crossover must evaluate the away codecs"
     assert all(all(is_heldout(s) for s in seeds) for _, seeds, _ in calls)
-    # Full evaluations use all held-out seeds; the tier-2 measurement runs them one trial at a time.
-    assert all(len(seeds) in (tiny_config().eval_trials, 1) for _, seeds, _ in calls)
-    single = [seeds[0] for _, seeds, _ in calls if len(seeds) == 1]
-    assert set(single) == set(heldout_seeds(tiny_config().eval_trials))
+    # Evaluations use whole blocks of held-out seeds (recovery and tier 2 the first block).
+    blocks = [set(b) for b in loop.heldout_blocks(tiny_config())]
+    assert all(set(seeds) in blocks for _, seeds, _ in calls)
+    assert all(len(set(a) & set(b)) == 0 for i, a in enumerate(blocks) for b in blocks[i + 1:])
 
 
 def test_roc_auc_matches_pairwise_definition():

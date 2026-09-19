@@ -31,8 +31,6 @@ import argparse
 import importlib
 import importlib.util
 import logging
-import os
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable, Sequence
@@ -315,35 +313,18 @@ TIER2_CANDIDATES = (8, 32)
 BOOTSTRAP_RESAMPLES = 2000
 BOOTSTRAP_SEED = 0  # resampling of already measured trials, not a channel seed
 
-_TIER2_STATE: tuple | None = None
-
-
-def _tier2_init(data: bytes, encoded, decoder: Decoder, simulator) -> None:
-    global _TIER2_STATE
-    _TIER2_STATE = (data, encoded, decoder, simulator)
-
-
-def _tier2_trial(profile, seed: int) -> Metrics:
-    from dnacodec.evaluate import recovery_trials
-
-    data, encoded, decoder, simulator = _TIER2_STATE
+def per_trial_results(data, encoded, decoder, profile, seeds, config: LoopConfig, comps: Components,
+                      simulator=None) -> tuple[np.ndarray, np.ndarray]:
+    """Per-trial strand accuracy and recovered flag, in seed order, from ONE recovery_trials call
+    with per_trial=True (evaluate() computes everything; GPU decoders keep the chunked path)."""
     opts = {"simulator": simulator} if simulator is not None else {}
-    return recovery_trials(data, encoded.meta.settings, None, decoder, profile, [seed], workers=1,
-                           encoded=encoded, **opts)
-
-
-def per_trial_metrics(data, encoded, decoder, profile, seeds, config: LoopConfig, comps: Components,
-                      simulator=None) -> list[Metrics]:
-    """One Metrics per trial (from recovery_trials, so evaluate() computes everything), in seed
-    order. Parallel over trials for CPU decoders; in process for GPU decoders and mocks."""
-    workers = config.workers or os.cpu_count() or 1
-    opts = {"simulator": simulator} if simulator is not None else {}
-    if "trials" in comps.mocked or getattr(decoder, "main_process_only", False) or workers <= 1 or len(seeds) <= 1:
-        return [comps.recovery_trials(data, encoded.meta.settings, None, decoder, profile, [s], 1,
-                                      encoded=encoded, **opts) for s in seeds]
-    with ProcessPoolExecutor(min(workers, len(seeds)), initializer=_tier2_init,
-                             initargs=(data, encoded, decoder, simulator)) as pool:
-        return list(pool.map(_tier2_trial, [profile] * len(seeds), list(seeds), chunksize=4))
+    m = comps.recovery_trials(data, encoded.meta.settings, None, decoder, profile, seeds, config.workers,
+                              encoded=encoded, per_trial=True, **opts)
+    acc = np.asarray(m.extra["trial_strand_accuracy"], dtype=np.float64)
+    rec = np.asarray(m.extra["trial_recovered"], dtype=np.float64)
+    if len(acc) != len(seeds) or len(rec) != len(seeds):
+        raise ValueError(f"per-trial results for {len(acc)} trials, expected {len(seeds)}")
+    return acc, rec
 
 
 def paired_bootstrap(a: np.ndarray, b: np.ndarray, n: int = BOOTSTRAP_RESAMPLES, seed: int = BOOTSTRAP_SEED) -> dict:
@@ -377,13 +358,13 @@ def tier2_direct(situation: str, run: RunResult, manifest: dict, data: bytes, co
         points.append(("A", None, "default min reads", run.default_min_reads_at_target))
     if sim_b is not None and "trials" not in comps.mocked:
         points.append(("B", sim_b, "budget", run.profile.coverage_mean))
-    cache: dict[tuple, list[Metrics]] = {}
+    cache: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
 
-    def trials(settings, scorer, coverage, sim_name, simulator) -> list[Metrics]:
+    def trials(settings, scorer, coverage, sim_name, simulator) -> tuple[np.ndarray, np.ndarray]:
         enc = encode(data, settings, scorer)
         key = (hash(tuple(enc.strands)), coverage, sim_name)  # the rule scorer ignores candidates_per_strand
         if key not in cache:
-            cache[key] = per_trial_metrics(data, enc, decoder, replace(run.profile, coverage_mean=float(coverage)),
+            cache[key] = per_trial_results(data, enc, decoder, replace(run.profile, coverage_mean=float(coverage)),
                                            seeds, config, comps, simulator)
         return cache[key]
 
@@ -391,10 +372,10 @@ def tier2_direct(situation: str, run: RunResult, manifest: dict, data: bytes, co
     for sim_name, simulator, cov_name, coverage in points:
         for k in TIER2_CANDIDATES:
             settings = replace(base, candidates_per_strand=k)
-            rule = trials(settings, None, coverage, sim_name, simulator)
-            learned = trials(settings, risk, coverage, sim_name, simulator)
-            fail = paired_bootstrap([1.0 - m.strand_accuracy for m in rule], [1.0 - m.strand_accuracy for m in learned])
-            rec = paired_bootstrap([m.recovery_rate or 0.0 for m in rule], [m.recovery_rate or 0.0 for m in learned])
+            rule_acc, rule_rec = trials(settings, None, coverage, sim_name, simulator)
+            risk_acc, risk_rec = trials(settings, risk, coverage, sim_name, simulator)
+            fail = paired_bootstrap(1.0 - rule_acc, 1.0 - risk_acc)
+            rec = paired_bootstrap(rule_rec, risk_rec)
             entry = Tier2Entry(
                 situation=situation, coverage=float(coverage), candidates_per_strand=k, n_trials=len(seeds),
                 strand_fail_rule=fail["a"][0], strand_fail_risk=fail["b"][0], strand_fail_diff=fail["diff"][0],
