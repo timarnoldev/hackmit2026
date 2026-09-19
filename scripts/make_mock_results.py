@@ -7,11 +7,11 @@ crossover matrix, firewall tests, and candidate examples.
 
 from __future__ import annotations
 
+import shutil
+
 import numpy as np
 
 from dnacodec.profiles import load_profile
-import shutil
-
 from dnacodec.results import (
     RESULTS_DIR,
     AblationEntry,
