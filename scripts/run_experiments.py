@@ -214,11 +214,11 @@ def candidate_examples(codecs: dict[str, Codec], n: int = 3000, length: int = 11
 MEASURABLE_STEPS = 1
 
 
-def ladder_indices(manifest: dict) -> tuple[int, int, int]:
-    """RunResult.iterations indices of ablation systems C, D and E."""
-    stages = [it.get("stage", "alternation") for it in manifest["iterations"]]
-    c = stages.index("rules") if "rules" in stages else 0
-    alts = [i for i, st in enumerate(stages) if st == "alternation"]
+def ladder_indices(run: RunResult) -> tuple[int, int, int]:
+    """RunResult.iterations indices of ablation systems C (tier1), D (alternation 0) and E (last)."""
+    stages = [it.stage for it in run.iterations]
+    c = stages.index("tier1") if "tier1" in stages else 0
+    alts = [i for i, st in enumerate(stages) if st.startswith("alternation")]
     d = alts[0] if alts else c
     e = alts[-1] if alts else c
     return c, d, e
@@ -283,18 +283,46 @@ def rule_audit(situation: str, run: RunResult, manifest: dict, data: bytes, conf
                                   f"measurable = >= {MEASURABLE_STEPS} coverage grid step(s)"))
         log.info("[%s] rule audit %s: reads on %s / off %s -> %s", situation, name, base_reads, reads_off, verdict)
 
-    c, _, _ = ladder_indices(manifest)
+    c, _, e = ladder_indices(run)
     tuned_r = run.iterations[c].settings.redundancy
     tuned = replace(default, redundancy=tuned_r)
     reads_t, bpb_t = measure(tuned) if tuned != default else (base_reads, base_bpb)
     verdict = redundancy_verdict(run.profile.coverage_mean, base_reads, base_bpb, reads_t, bpb_t, config.coverages)
-    out.append(RuleAuditEntry(situation, f"redundancy {default.redundancy:g} vs tuned {tuned_r:g}", base_reads, reads_t,
+    out.append(RuleAuditEntry(situation, f"redundancy {default.redundancy:g} vs tuned", base_reads, reads_t,
                               base_bpb, bpb_t, verdict,
-                              f"tuned value from the tier-1 search (rule scorer only); strand length kept at "
-                              f"{default.strand_length}; budget {run.profile.coverage_mean:g} reads"))
+                              f"tuned redundancy {tuned_r:g} from the tier-1 search (rule scorer only); strand "
+                              f"length kept at {default.strand_length}; budget {run.profile.coverage_mean:g} reads"))
     log.info("[%s] rule audit redundancy %g vs %g: reads %s / %s -> %s", situation, default.redundancy, tuned_r,
              base_reads, reads_t, verdict)
+
+    # The key claim question: at the SAME bits per base, does the tuned codec need fewer reads
+    # than the default rules? (Both numbers were measured by the loop on held-out seeds.)
+    for label, idx in (("tier 1", c), ("full loop", e)):
+        if label == "full loop" and idx == c:
+            continue
+        it = run.iterations[idx]
+        default_matched, tuned_reads = it.default_min_reads_matched, it.min_reads_at_target
+        bpb = it.metrics.bits_per_base
+        v = matched_verdict(default_matched, tuned_reads, config.coverages)
+        out.append(RuleAuditEntry(
+            situation, f"tuned codec ({label}) vs default rules at the same bits per base",
+            default_matched, tuned_reads, bpb, bpb, v,
+            f"on = default rules and rule scorer at the tuned codec's redundancy and strand length "
+            f"({it.settings.redundancy:g}, {it.settings.strand_length}); off = tuned codec ({it.stage}); "
+            f"same decoder, held-out seeds; measurable = >= {MEASURABLE_STEPS} coverage grid step(s)"))
+        log.info("[%s] MATCHED DENSITY (%s, %.3f bits/base): default rules need %s reads, tuned codec %s -> %s",
+                 situation, label, bpb or 0.0, default_matched, tuned_reads, v)
     return out
+
+
+def matched_verdict(default_reads, tuned_reads, coverages) -> str:
+    """Same bits per base, so only reads count: fewer reads for the tuned codec = better."""
+    diff = grid_step(default_reads, coverages) - grid_step(tuned_reads, coverages)
+    if diff >= MEASURABLE_STEPS:
+        return "tuned is better"
+    if -diff >= MEASURABLE_STEPS:
+        return "harmful"
+    return "no measurable benefit"
 
 
 # ---------------------------------------------------------------- the experiments
@@ -338,7 +366,7 @@ def build_summary(
             a_metrics, a_reads = run.default_metrics, run.default_min_reads_at_target  # identical codec and decoder
         else:
             a_metrics, a_reads = heldout(run.default_settings, None, comps.baseline_decoder(), run.profile)
-        c, d, e = ladder_indices(manifest)
+        c, d, e = ladder_indices(run)
         summary.ablation += [
             AblationEntry(s, "A", a_metrics, a_reads),
             AblationEntry(s, "B", run.default_metrics, run.default_min_reads_at_target),
@@ -375,13 +403,12 @@ def build_summary(
         d_m, d_r = home[("default", s)]
         t_m, t_r = home[(s, s)]
         summary.firewall += _comparison(s, "sim_a_heldout", d_m, d_r, t_m, t_r, "Simulator A, held-out seeds")
-        last = codecs[s]["iterations"][-1]
-        if "matched_default_min_reads" in last:
-            v = last["matched_default_min_reads"]
-            summary.firewall.append(FirewallEntry(
-                s, "sim_a_heldout", "min_reads_default_matched", NAN if v is None else float(v),
-                f"default rules at the tailored codec's bits per base ({last['matched_default_settings']['redundancy']} "
-                f"redundancy, length {last['matched_default_settings']['strand_length']}), same decoder"))
+        final = run.iterations[-1]
+        v = final.default_min_reads_matched
+        summary.firewall.append(FirewallEntry(
+            s, "sim_a_heldout", "min_reads_default_matched", NAN if v is None else float(v),
+            f"default rules at the tailored codec's bits per base (redundancy {final.settings.redundancy:g}, "
+            f"length {final.settings.strand_length}), same decoder"))
         if sim_b is None:
             summary.firewall.append(FirewallEntry(s, "sim_b", "not_run", 0.0, "dnacodec.simulator_b not available yet"))
         else:

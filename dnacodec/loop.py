@@ -767,7 +767,7 @@ def run_loop(
     save_run(run, run_id)
 
     def record(stage: str, chosen: EncoderSettings, scorer: Scorer | None, decoder_used: Decoder,
-               search: SearchResult, extra: dict, notes_extra: str) -> IterationResult:
+               search: SearchResult, extra: dict, notes_extra: str, stage_name: str) -> IterationResult:
         """Held-out evaluation of one chosen codec (with the decoder its search used), saved at once."""
         idx = len(run.iterations)
         metrics, min_reads = _evaluate_heldout(data, chosen, scorer, decoder_used, profile, config, comps)
@@ -786,12 +786,14 @@ def run_loop(
             f"{sum(c.screen is not None for c in search.candidates)} candidates screened, "
             f"{search.trials_run} train trials; train re-check {rc.recovery_rate if rc else 'n/a'}"
             f"{'' if search.target_met else '; TARGET NOT MET ON TRAIN SEEDS (best effort)'}; "
-            f"{notes_extra}default rules at matched bits/base ({describe(matched)}): min reads {matched_reads}"
+            f"{notes_extra}matched-density default: {describe(matched)}"
         )
-        result = IterationResult(idx, chosen, metrics, min_reads, kmers, notes)
+        result = IterationResult(idx, chosen, metrics, min_reads, kmers, notes,
+                                 stage=stage_name, default_min_reads_matched=matched_reads)
         run.iterations.append(result)
         store.save_iteration(idx, chosen, scorer, decoder_used, {
             "stage": stage,
+            "stage_name": stage_name,
             "target_met_train": search.target_met,
             "train_recheck_rate": rc.recovery_rate if rc else None,
             "matched_default_settings": asdict(matched),
@@ -807,9 +809,9 @@ def run_loop(
             **extra,
         })
         save_run(run, run_id)
-        log.info("[%s] %s: held-out recovery %.3f, strand acc %.3f, %.3f bits/base, min reads %s "
-                 "(default rules at matched bits/base: %s)",
-                 profile.name, STAGE_LABEL[stage], metrics.recovery_rate or 0.0, metrics.strand_accuracy,
+        log.info("[%s] %s: held-out recovery %.3f, strand acc %.3f, %.3f bits/base | "
+                 "MIN READS tuned %s vs default rules at the same bits/base %s",
+                 profile.name, stage_name, metrics.recovery_rate or 0.0, metrics.strand_accuracy,
                  metrics.bits_per_base or 0.0, min_reads, matched_reads)
         return result
 
@@ -826,7 +828,7 @@ def run_loop(
     )
     log.info("[%s] rules only: chose %s (target met on train: %s; %d train trials, %.0fs)",
              profile.name, search.summary(), search.target_met, search.trials_run, search.seconds)
-    record("rules", search.chosen, None, decoder_b, search, {}, "")
+    record("rules", search.chosen, None, decoder_b, search, {}, "", "tier1")
 
     # Tier 2: the alternating loop with the learned risk scorer (first alternation = system D).
     current = decoder_b
@@ -866,7 +868,7 @@ def run_loop(
             "alternation": it,
             "label_mean_failure": label_mean,
             "thresholds": {f"len{k[0]} hp{k[1]} gc{'on' if k[2] else 'off'} q{k[3]}": v for k, v in thresholds.items()},
-        }, f"alternation {it}; label mean failure {label_mean:.3f}; ")
+        }, f"label mean failure {label_mean:.3f}; ", f"alternation {it}")
         if it == 0 and n_alt > 1:
             per_alt = time.time() - t_alt
             log.info("[%s] measured: first alternation took %.1f min; projected remaining ~%.0f min "

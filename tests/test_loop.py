@@ -379,3 +379,18 @@ def test_gpu_decoders_label_in_process(monkeypatch):
     assert seen["workers"] == 1
     loop._real_label(["ACGT" * 10], NANOPORE, object(), 2, 1, workers=8)
     assert seen["workers"] == 8
+
+
+def test_iterations_carry_stage_and_matched_density():
+    comps = mock_components()
+    out = run(comps=comps, max_iterations=2, config=tiny_config(stop_when_converged=False))
+    assert [it.stage for it in out.iterations] == ["tier1", "alternation 0", "alternation 1"]
+    for it in out.iterations:
+        matched = loop.matched_default(EncoderSettings(), it.settings)
+        expected = comps.min_reads_at_target(DATA, matched, None, None, NANOPORE, heldout_seeds(tiny_config().eval_trials),
+                                             1.0, tiny_config().coverages)
+        assert it.default_min_reads_matched == expected
+        assert "min reads" not in it.notes.split("matched-density default")[-1]
+    loaded = results.load_runs("t")[0]
+    assert [it.stage for it in loaded.iterations] == [it.stage for it in out.iterations]
+    assert [it.default_min_reads_matched for it in loaded.iterations] == [it.default_min_reads_matched for it in out.iterations]
