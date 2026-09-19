@@ -92,11 +92,10 @@ Only edit files you own. If you need something from another module that doesn't 
 3. Simulator B in `dnacodec/simulator_b.py`, same signature: rates perturbed by up to ±30%, a structurally different homopolymer and position error model (e.g. bursty errors, non-linear position curve). Used only for the firewall test, never for optimization.
 
 **Agent B, encoder.** `rule_scorer`, `encode`, `recover`. Fountain code (LT with robust soliton distribution), seed in the first `seed_bases` bases, per-strand checksum, candidate seeds ranked by the scorer. Honor `settings.risk_threshold`: candidates the scorer rates above it are rejected like hard-constraint violations (None disables).
-Done when a random 100 KB file round-trips exactly on a noise-free channel, with up to `redundancy` fraction of strands dropped, corrupted strands are discarded without crashing, and strands obey the hard constraints.
+Done (merged). Recovery tolerates losing up to 1 − 1/(1 + redundancy) of strands, the theoretical limit. Original criterion: a random 100 KB file round-trips exactly on a noise-free channel, with strands dropped, corrupted strands are discarded without crashing, and strands obey the hard constraints.
 
 **Agent C, evaluation.** Done: `evaluate()`, `MajorityVoteDecoder`, real-data baseline. Next, trial-based file recovery in `dnacodec/evaluate.py`:
-- `recovery_trials(data, settings, scorer, decoder, profile, seeds) -> Metrics`: per seed, encode, simulate, decode, recover; fills `recovery_rate` and `n_trials` plus the usual strand metrics pooled over trials.
-- `min_reads_at_target(..., target=1.0) -> float | None`: fewest mean reads per strand (search over coverage_mean) at which recovery_rate meets the target.
+- `recovery_trials` and `min_reads_at_target`: signatures and contract are fixed in the stubs in `dnacodec/evaluate.py`. Parallelize trials across CPU cores.
 - Use held-out seeds only when called for final evaluation; the loop calls these with train seeds.
 
 **Agent D, transformer decoder.** See `dnacodec/model/__init__.py`. Pretrain on simulated data across a wide range of error rates, fine-tune per channel. Log held-out accuracy at 2/4/6/10/16 reads against the baseline table in README. Fallback if it doesn't beat the baseline by hour 10: published DNAformer code or the baseline decoder; the B vs C comparison works with any fixed decoder.

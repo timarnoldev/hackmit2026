@@ -10,7 +10,10 @@ from __future__ import annotations
 import numpy as np
 
 from dnacodec.profiles import load_profile
+import shutil
+
 from dnacodec.results import (
+    RESULTS_DIR,
     AblationEntry,
     CandidateExample,
     CoveragePoint,
@@ -49,6 +52,7 @@ def fake_metrics(rng: np.random.Generator, accuracy: float, bits: float, reads: 
 
 
 def main() -> None:
+    shutil.rmtree(RESULTS_DIR / "mock", ignore_errors=True)  # stale files from older formats break loading
     rng = np.random.default_rng(0)
     default = EncoderSettings()
     for name in CORE:
