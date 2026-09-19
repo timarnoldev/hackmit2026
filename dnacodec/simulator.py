@@ -18,8 +18,13 @@ Realism extensions (profile defaults switch them off and reproduce the model abo
       train split) the run effect is almost purely deletions: per-base deletions rise 8x
       from runs of 1 to runs of 6, substitutions only 1.4x, insertions fall.
     - read_quality_spread: q ~ lognormal with mean 1 and this sigma, one draw per read.
+    - position_rate_spread: a lognormal multiplier with mean 1 and this sigma, drawn once
+      per (strand, position) and shared by all reads of that strand (sequence-context hot
+      spots). This is what makes some errors systematic within a cluster, so that more
+      reads don't help: real Nanopore clusters fail ~11% of the time even at full coverage.
     - malformed_read_rate: this fraction of reads is generated from a different, random
       strand of the same batch (a clustering error), then goes through the same channel.
+      Needs at least two strands in the batch.
 
 Everything is vectorized over all reads of a batch with numpy.
 """
@@ -167,6 +172,7 @@ def simulate(strands: Sequence[Strand], profile: SituationProfile, seed: int) ->
     - per read: substitutions, insertions, deletions at the profile rates, scaled up in
       homopolymer runs (homopolymer_factor) and toward the strand end (end_factor)
     - optional realism fields: homopolymer_run_factors, read_quality_spread,
+      position_rate_spread,
       malformed_read_rate (see the module docstring)
 
     Deterministic for a given seed. Uses numpy.random.default_rng(seed).
@@ -191,9 +197,7 @@ def simulate(strands: Sequence[Strand], profile: SituationProfile, seed: int) ->
         source[bad] = other
     sigma = profile.read_quality_spread
     quality = rng.lognormal(-0.5 * sigma**2, sigma, size=n_reads) if sigma > 0 else None
-    # Proposed field, not in SituationProfile yet: per strand and position error multiplier
-    # shared by all reads of the strand (sequence-context hot spots). Off unless present.
-    hot = float(getattr(profile, "position_rate_spread", 0.0) or 0.0)
+    hot = profile.position_rate_spread
     if hot > 0:
         spots = rng.lognormal(-0.5 * hot**2, hot, size=p_del.shape)
         p_del, p_ins, p_sub = p_del * spots, p_ins * spots, p_sub * spots

@@ -9,8 +9,9 @@ Two stages:
    until the SAME measurement on simulated reads (same references, same alignment)
    reproduces the real numbers.
 2. Decoding difficulty. Per-base statistics don't pin down how hard a cluster is to decode:
-   real reads vary much more in quality than i.i.d. errors suggest. So read_quality_spread
-   is chosen by grid search so that baseline decoder accuracy vs reads per cluster on
+   real reads vary much more in quality than i.i.d. errors suggest, and some errors are
+   shared by most reads of a strand. So read_quality_spread and position_rate_spread are
+   chosen by coordinate search so that baseline decoder accuracy vs reads per cluster on
    simulated reads matches the real curve (error rates are refit for every candidate).
 
 The final comparison runs on train clusters that were not used for the fit.
@@ -26,7 +27,7 @@ from __future__ import annotations
 
 import argparse
 import math
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, replace
 
 import numpy as np
 from rapidfuzz.distance import Levenshtein
@@ -55,12 +56,6 @@ CURVE_CLUSTERS = 2000  # clusters used to fit the accuracy curve; the next ones 
 ARCHIVE_SUB_BOOST = 1.5
 
 TAGS = {"replace": 0, "insert": 1, "delete": 2}
-
-# position_rate_spread (per strand and position error multiplier shared by all reads of a
-# strand) is proposed to the architect but not part of SituationProfile yet. simulate()
-# already honors it when present; until then the fit runs without it.
-PROFILE_FIELDS = {f.name for f in fields(SituationProfile)}
-HAS_HOTSPOT_FIELD = "position_rate_spread" in PROFILE_FIELDS
 
 
 @dataclass
@@ -289,7 +284,7 @@ def fit_spreads(
     start: SituationProfile,
     seed: int,
 ) -> SituationProfile:
-    """Choose read_quality_spread (and position_rate_spread if available) by coordinate search.
+    """Choose read_quality_spread and position_rate_spread by coordinate search.
 
     Every candidate gets its error rates refit, then is scored by the squared distance of its
     simulated accuracy curve to the real one.
@@ -299,9 +294,7 @@ def fit_spreads(
     def score(read_sigma: float, pos_sigma: float) -> float:
         key = (read_sigma, pos_sigma)
         if key not in cache:
-            candidate = replace(start, read_quality_spread=read_sigma)
-            if HAS_HOTSPOT_FIELD:
-                candidate = replace(candidate, position_rate_spread=pos_sigma)
+            candidate = replace(start, read_quality_spread=read_sigma, position_rate_spread=pos_sigma)
             candidate, _ = fit_error_model(stats_refs, real_stats, candidate, seed, verbose=False)
             curve = curve_for_profile(curve_refs, curve_clusters, candidate, seed + 7)
             loss = float(np.sum((curve - real_curve) ** 2))
@@ -309,10 +302,9 @@ def fit_spreads(
             cache[key] = (loss, candidate)
         return cache[key][0]
 
-    read_sigma, pos_sigma = (0.5, 1.0) if HAS_HOTSPOT_FIELD else (0.0, 0.0)
+    read_sigma, pos_sigma = 0.5, 1.0
     for _ in range(2):
-        if HAS_HOTSPOT_FIELD:
-            pos_sigma = min(POS_GRID, key=lambda p: score(read_sigma, p))
+        pos_sigma = min(POS_GRID, key=lambda p: score(read_sigma, p))
         read_sigma = min(READ_GRID, key=lambda r: score(r, pos_sigma))
     return min(cache.values(), key=lambda v: v[0])[1]
 
@@ -329,7 +321,7 @@ def rounded(profile: SituationProfile) -> SituationProfile:
         end_factor=round(profile.end_factor, 3),
         coverage_dispersion=round(profile.coverage_dispersion, 3),
         read_quality_spread=round(profile.read_quality_spread, 3),
-        **({"position_rate_spread": round(profile.position_rate_spread, 3)} if HAS_HOTSPOT_FIELD else {}),
+        position_rate_spread=round(profile.position_rate_spread, 3),
         malformed_read_rate=round(profile.malformed_read_rate, 5),
     )
 
@@ -470,7 +462,7 @@ def calibrate(
             read_quality_spread=0.0,
             malformed_read_rate=0.0,
             homopolymer_factor=real_val.hp_ratio,
-            **({"position_rate_spread": 0.0} if HAS_HOTSPOT_FIELD else {}),
+            position_rate_spread=0.0,
         )
         old, _ = fit_error_model_legacy(val_refs, real_val, old, seed + 400)
         old_curve = curve_for_profile(val_refs, val_reads, old, seed + 200)
@@ -500,7 +492,7 @@ def calibrate(
             homopolymer_run_factors=fitted.homopolymer_run_factors,
             end_factor=fitted.end_factor,
             read_quality_spread=fitted.read_quality_spread,
-            **({"position_rate_spread": fitted.position_rate_spread} if HAS_HOTSPOT_FIELD else {}),
+            position_rate_spread=fitted.position_rate_spread,
             malformed_read_rate=fitted.malformed_read_rate,
             coverage_dispersion=fitted.coverage_dispersion if fit_dispersion else current.coverage_dispersion,
             calibrated_from=f"{source} (train split)",

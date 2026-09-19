@@ -153,3 +153,74 @@ def test_calibration_measurement_recovers_simulated_parameters():
     rng = np.random.default_rng(3)
     sizes = rng.negative_binomial(2.5, 2.5 / (2.5 + 20.0), size=20_000)
     assert nb_shape_mle(sizes) == pytest.approx(2.5, rel=0.08)
+
+
+def per_read_errors(strands, clusters):
+    return np.array([Levenshtein.distance(s, r) for s, c in zip(strands, clusters) for r in c])
+
+
+def test_defaults_reproduce_simple_model():
+    strands = random_strands(300)
+    simple = flat_profile()
+    explicit = replace(
+        simple, homopolymer_run_factors=None, read_quality_spread=0.0,
+        position_rate_spread=0.0, malformed_read_rate=0.0,
+    )
+    assert simulate(strands, simple, seed=3) == simulate(strands, explicit, seed=3)
+
+
+def test_run_factors_act_on_deletions_only():
+    runs = ["AAAACCCCGGGGTTTT" * 6 + "ACGT"] * 1500
+    base = flat_profile(sub_rate=0.01, ins_rate=0.0, del_rate=0.0)
+    boosted = replace(base, homopolymer_run_factors=(1.0, 2.0, 3.0, 5.0))
+    subs = lambda cl: np.mean([sum(a != b for a, b in zip(s, r)) for s, c in zip(runs, cl) for r in c])
+    assert subs(simulate(runs, boosted, seed=1)) == pytest.approx(subs(simulate(runs, base, seed=1)), rel=0.1)
+
+    dels = flat_profile(sub_rate=0.0, ins_rate=0.0, del_rate=0.01)
+    plain = ["ACGT" * 25] * 1500
+    for strands, factors, expected in (
+        (plain, (1.0, 2.0, 3.0, 5.0), 0.01),  # no runs, factor 1 everywhere
+        (runs, (1.0, 2.0, 3.0, 5.0), 0.01 * (96 * 5.0 + 4) / 100),
+        (runs, (1.0, 2.0), 0.01 * (96 * 2.0 + 4) / 100),  # last value applies to longer runs
+    ):
+        clusters = simulate(strands, replace(dels, homopolymer_run_factors=factors), seed=2)
+        missing = np.mean([len(s) - len(r) for s, c in zip(strands, clusters) for r in c]) / 100
+        assert missing == pytest.approx(expected, rel=0.08)
+
+
+def test_read_quality_spread_keeps_mean_and_widens_spread():
+    strands = random_strands(1500)
+    base = flat_profile(coverage_mean=6.0)
+    a = per_read_errors(strands, simulate(strands, base, seed=4))
+    b = per_read_errors(strands, simulate(strands, replace(base, read_quality_spread=0.8), seed=4))
+    assert b.mean() == pytest.approx(a.mean(), rel=0.08)
+    assert b.std() > 1.5 * a.std()
+    assert np.mean(b == 0) > 3 * np.mean(a == 0)  # many more near-perfect reads
+
+
+def test_position_rate_spread_errors_are_shared_within_a_strand():
+    strands = random_strands(400)
+    base = flat_profile(sub_rate=0.02, ins_rate=0.0, del_rate=0.0, coverage_mean=30.0, coverage_dispersion=1e4)
+
+    def hotspot_share(profile):
+        fractions = []
+        for s, reads in zip(strands, simulate(strands, profile, seed=5)):
+            if len(reads) < 10:
+                continue
+            wrong = np.array([[a != b for a, b in zip(s, r)] for r in reads])
+            fractions.append(wrong.mean(axis=0))
+        return np.mean(np.concatenate(fractions) >= 0.2)
+
+    iid, hot = hotspot_share(base), hotspot_share(replace(base, position_rate_spread=1.2))
+    assert iid < 0.002
+    assert hot > 10 * max(iid, 1e-4)
+
+
+def test_malformed_reads_come_from_other_strands():
+    strands = random_strands(2000)
+    profile = flat_profile(malformed_read_rate=0.1, coverage_mean=5.0)
+    clusters = simulate(strands, profile, seed=6)
+    far = per_read_errors(strands, clusters) > 0.3 * 110
+    assert far.mean() == pytest.approx(0.1, abs=0.015)
+    # a single strand has no other strand to borrow from
+    assert simulate(strands[:1], replace(profile, coverage_mean=20.0, coverage_dispersion=1e4), seed=1)[0]
