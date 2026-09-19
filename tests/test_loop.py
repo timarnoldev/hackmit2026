@@ -358,3 +358,24 @@ def test_tier1_uses_rule_scorer_and_same_seeds_as_first_alternation(monkeypatch)
     assert scr_c == scr_d and rc_c == rc_d and dec_c is dec_d  # same seeds, same frozen decoder
     # Same grid apart from the risk threshold.
     assert {c for c in thr_d if c is None} == {None}
+
+
+def test_gpu_decoders_label_in_process(monkeypatch):
+    import dnacodec.risk as risk
+
+    seen = {}
+
+    def fake(strands, decoder, profile, k=16, seed=0, workers=None, heldout=False):
+        seen["workers"] = workers
+        return np.zeros(len(strands))
+
+    monkeypatch.setattr(risk, "label_failure_rates", fake)
+
+    class GpuDecoder:
+        name = "transformer"
+        main_process_only = True
+
+    loop._real_label(["ACGT" * 10], NANOPORE, GpuDecoder(), 2, 1, workers=8)
+    assert seen["workers"] == 1
+    loop._real_label(["ACGT" * 10], NANOPORE, object(), 2, 1, workers=8)
+    assert seen["workers"] == 8

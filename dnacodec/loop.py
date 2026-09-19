@@ -197,6 +197,9 @@ def _real_generate_strands(n: int, length: int, seed: int) -> list[Strand]:
 def _real_label(strands, profile, decoder, k, seed, workers=None) -> np.ndarray:
     from .risk import label_failure_rates
 
+    if getattr(decoder, "main_process_only", False):
+        workers = 1  # GPU decoders can't be shipped to worker processes (risk.label_failure_counts)
+
     return np.asarray(
         _call_flexible(
             label_failure_rates, strands=strands, profile=profile, decoder=decoder,
@@ -653,7 +656,8 @@ def estimate_runtime(
     log.info(
         "[%s] runtime estimate: %.2fs/trial wall (%d trials, workers=%s), %.1fs/scored encode, "
         "%d candidates x %d alternations -> ~%.0f min typical, %.0f min worst case "
-        "(adapting a transformer adds fine-tuning time on top)",
+        "(a CNN scorer makes encodes ~10x slower and a transformer adds fine-tuning; "
+        "re-projected after the first alternation)",
         profile.name, per_trial, n_cal, config.workers, per_encode, n_cand, n_alternations,
         est["typical_minutes"], est["worst_minutes"],
     )
@@ -829,6 +833,7 @@ def run_loop(
     prev_settings: EncoderSettings | None = None
     risk: Scorer | None = None
     for it in range(n_alt):
+        t_alt = time.time()
         # Step 2: label strands with the frozen decoder.
         per_len = max(1, config.label_strands // len(config.grid.strand_length))
         label_seed = train_seed(SEED_LABEL + it * 1_000_000)
@@ -862,6 +867,11 @@ def run_loop(
             "label_mean_failure": label_mean,
             "thresholds": {f"len{k[0]} hp{k[1]} gc{'on' if k[2] else 'off'} q{k[3]}": v for k, v in thresholds.items()},
         }, f"alternation {it}; label mean failure {label_mean:.3f}; ")
+        if it == 0 and n_alt > 1:
+            per_alt = time.time() - t_alt
+            log.info("[%s] measured: first alternation took %.1f min; projected remaining ~%.0f min "
+                     "(%d more alternations plus coverage curves)", profile.name, per_alt / 60,
+                     per_alt * (n_alt - 1) / 60 + 0.1 * per_alt / 60, n_alt - 1)
 
         if it == n_alt - 1:
             break
