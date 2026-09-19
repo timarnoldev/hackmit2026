@@ -5,6 +5,7 @@ Result files are written to a temporary RESULTS_DIR, never into the real results
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import json
 from pathlib import Path
@@ -27,6 +28,7 @@ from dnacodec.results import (  # noqa: E402
     IterationResult,
     RuleAuditEntry,
     RunResult,
+    Tier2Entry,
     save_run,
     save_summary,
 )
@@ -161,6 +163,49 @@ def test_stage_helpers():
     more = run_result("nanopore_budget", [IterationResult(i, EncoderSettings(), small_metrics(0.9, 1.4), 7.0,
                                                           stage=f"alternation {i}") for i in range(3)])
     assert [app.short_step(more, it) for it in more.iterations] == ["D", "E1", "E2"]
+
+
+def tier2_entry(situation="nanopore_budget", diff=-0.0052, ci=(-0.0073, -0.0033), simulator="A") -> Tier2Entry:
+    return Tier2Entry(situation=situation, coverage=6.0, candidates_per_strand=8, n_trials=300,
+                      strand_fail_rule=0.0099, strand_fail_risk=0.0099 + diff, strand_fail_diff=diff,
+                      strand_fail_diff_ci=ci, recovery_rule=0.9, recovery_risk=0.95, recovery_diff=0.05,
+                      recovery_diff_ci=(0.01, 0.09), simulator=simulator)
+
+
+def test_tier2_view_renders(mock_run, results_dir):
+    path = results_dir / "mock" / "summary.json"
+    data = json.loads(path.read_text())
+    data["tier2"] = [dataclasses.asdict(e) for e in (
+        tier2_entry(), tier2_entry(simulator="B", diff=0.0005, ci=(-0.001, 0.002)),
+        tier2_entry("illumina_standard", diff=0.0, ci=(-0.0004, 0.0004)))]
+    path.write_text(json.dumps(data))
+    at = run_app()
+    assert not at.exception, at.exception
+    text = markdown_text(at)
+    assert "Tier 2, measured directly" in [s.value for s in at.subheader]
+    assert "The learned scorer cuts strand failures by 0.52 points (95% CI 0.33 to 0.73)." in text
+    assert "No measurable difference in strand failures" in text
+    assert any("rule pay off" in h.value for h in at.header)  # first view unchanged
+
+
+def test_summary_without_tier2_key(mock_run, results_dir):
+    path = results_dir / "mock" / "summary.json"
+    data = json.loads(path.read_text())
+    data.pop("tier2", None)
+    path.write_text(json.dumps(data))
+    at = run_app()
+    assert not at.exception, at.exception
+    assert "Tier 2, measured directly" not in [s.value for s in at.subheader]
+
+
+def test_tier2_sentences():
+    app = load_app_module()
+    assert app.tier2_sentence(tier2_entry()) == ("The learned scorer cuts strand failures by 0.52 points "
+                                                 "(95% CI 0.33 to 0.73).")
+    assert app.tier2_sentence(tier2_entry(diff=0.001, ci=(-0.002, 0.004))).startswith("No measurable difference")
+    assert app.tier2_sentence(tier2_entry(diff=0.003, ci=(0.001, 0.005))).startswith(
+        "The learned scorer raises strand failures by 0.30 points")
+    assert app.tier2_config(tier2_entry(simulator="B")) == "6 reads · 8 candidates · other simulator (B)"
 
 
 def test_summary_only_run_renders(results_dir):

@@ -221,7 +221,7 @@ def fmt_setting(settings: EncoderSettings, key: str) -> str:
     if key == "redundancy":
         return f"{value * 100:.0f}%"
     if key == "risk_threshold":
-        return f"risk ≤ {value:.2f}"
+        return f"risk ≤ {value:.2f}" if value >= 0.01 or value == 0 else f"risk ≤ {value:.2g}"
     return f"{value:g}" if isinstance(value, float) else str(value)
 
 
@@ -306,6 +306,10 @@ def headline(run: RunResult, best: IterationResult) -> str:
     t_reads = best.min_reads_at_target
     d, t = run.default_metrics, best.metrics
     parts = []
+    if matched and t_reads is not None and d_reads is not None and abs(t_reads - d_reads) < 0.05:
+        # The honest comparison is at equal density; don't switch to a different reference point.
+        return (f"Same decoder, same bits per base: the default rules also need {d_reads:.1f} reads per strand, "
+                "no gain yet.")
     if d_reads is not None and t_reads is not None and t_reads < d_reads:
         parts.append(f"{1 - t_reads / d_reads:.0%} fewer reads per strand ({t_reads:.1f} instead of {d_reads:.1f})")
     elif d_reads is None and t_reads is not None:
@@ -537,6 +541,21 @@ def rule_audit_table(entries, situations: list[str]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def merge_coincident_labels(run: RunResult, pts, labels: list[str]) -> list[str]:
+    """Steps that land on the same point share one label ('D, E1, E2') on the last of them, so text
+    never stacks. Other labels are unchanged."""
+    groups: dict[tuple, list[int]] = {}
+    for i, (_, x, y) in enumerate(pts):
+        groups.setdefault((round(x, 4), round(y, 4)), []).append(i)
+    out = list(labels)
+    for idx in groups.values():
+        if len(idx) > 1:
+            for i in idx[:-1]:
+                out[i] = ""
+            out[idx[-1]] = ", ".join(short_step(run, pts[i][0]) for i in idx)
+    return out
+
+
 def pareto_chart(run: RunResult) -> go.Figure | None:
     """x = bits per base, y = reads per strand needed at the recovery target. Better is bottom right."""
     pal = palette()
@@ -560,8 +579,10 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
         # Everything right of and below the default beats it on both axes.
         fig.add_shape(type="rect", x0=dx, x1=xr[1], y0=yr[0], y1=dy, line_width=0,
                       fillcolor=pal["better_fill"], layer="below")
-        fig.add_annotation(x=dx, y=yr[0], xanchor="left", yanchor="bottom", showarrow=False,
-                           text="better than default on both", font=dict(color=pal["tailored"], size=FONT_SIZE - 1))
+        if (xr[1] - dx) >= 0.45 * (xr[1] - xr[0]):  # only label the region when the text fits inside it
+            fig.add_annotation(x=dx, y=yr[0], xanchor="left", yanchor="bottom", showarrow=False,
+                               text="better than default on both",
+                               font=dict(color=pal["tailored"], size=FONT_SIZE - 1))
     path = ([(None, dx, dy)] if dx is not None and dy is not None else []) + pts
     for (_, x0, y0), (_, x1, y1) in zip(path, path[1:]):  # arrows along the tuning path
         fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", text="",
@@ -594,6 +615,7 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
             labels = [f"{it.iteration + 1}" for it, _, _ in pts[:-1]] + ["Tailored"]
         else:
             labels = [lab or f"{it.iteration + 1}" for lab, (it, _, _) in zip(labels, pts)]
+        labels = merge_coincident_labels(run, pts, labels)
         fig.add_trace(go.Scatter(
             x=[x for _, x, _ in pts], y=[y for _, _, y in pts], mode="markers+text",
             name="Tuning steps",
@@ -683,15 +705,17 @@ def verdict(run: RunResult) -> None:
         t_reads = best.min_reads_at_target
         spark = [y for y in [run.default_min_reads_at_target] + [it.min_reads_at_target for it in run.iterations]
                  if y is not None]
-        delta = None
+        delta, same = None, False
         if d_reads is not None and t_reads is not None:
-            delta = f"{t_reads - d_reads:+.1f} ({rel_change(t_reads, d_reads):+.0%})"
+            same = abs(t_reads - d_reads) < 0.05
+            delta = "same" if same else f"{t_reads - d_reads:+.1f} ({rel_change(t_reads, d_reads):+.0%})"
         vs = "default at same bits per base" if matched else "default"
         st.metric(
             "Reads per strand needed",
             "not met" if t_reads is None else f"{t_reads:.1f}",
             delta,
-            delta_color="inverse" if delta and abs(t_reads - d_reads) >= 0.05 else "off",
+            delta_color="inverse" if delta and not same else "off",
+            delta_arrow="off" if same else "auto",
             delta_description=None if d_reads is None else f"vs {vs} {d_reads:.1f}",
             chart_data=spark if len(spark) > 1 else None,
             help=f"Fewest mean reads per strand at which the {target_text(run)}. Compared with the default rules "
@@ -806,6 +830,80 @@ def ablation_chart(summary: ExperimentSummary, situation: str) -> go.Figure | No
     return fig
 
 
+# Tier 2, measured directly: rule scorer vs learned risk scorer, everything else identical.
+
+
+def tier2_config(e, compact: bool = False) -> str:
+    """'6 reads · 8 candidates' (+ ' · other simulator (B)'); compact puts the simulator on a second line."""
+    sim = getattr(e, "simulator", "A") == "B"
+    base = f"{e.coverage:g} reads · {e.candidates_per_strand} candidates"
+    if not sim:
+        return base
+    return base + ("<br>other simulator (B)" if compact else " · other simulator (B)")
+
+
+def tier2_order(e) -> tuple:
+    return (getattr(e, "simulator", "A") != "A", e.coverage, e.candidates_per_strand)
+
+
+def tier2_sentence(e) -> str:
+    """Plain words for the paired difference in strand failure (diff = learned - rule, in fractions)."""
+    lo, hi = sorted(e.strand_fail_diff_ci)
+    if lo <= 0 <= hi:
+        return (f"No measurable difference in strand failures "
+                f"(95% CI {lo * 100:+.2f} to {hi * 100:+.2f} points).")
+    if hi < 0:
+        return (f"The learned scorer cuts strand failures by {-e.strand_fail_diff * 100:.2f} points "
+                f"(95% CI {-hi * 100:.2f} to {-lo * 100:.2f}).")
+    return (f"The learned scorer raises strand failures by {e.strand_fail_diff * 100:.2f} points "
+            f"(95% CI {lo * 100:.2f} to {hi * 100:.2f}).")
+
+
+def tier2_chart(entries, situation: str) -> go.Figure:
+    """Left: strand failure, rule vs learned. Right: paired difference with its 95% CI."""
+    pal = palette()
+    ys = [tier2_config(e, compact=True).replace(" · ", "<br>", 1) for e in entries]
+    fig = make_subplots(rows=1, cols=2, shared_yaxes=True, column_widths=[0.55, 0.45], horizontal_spacing=0.1,
+                        subplot_titles=["strand failure, %", "learned − rule, points"])
+    for name, key, color in (("Rule scorer", "strand_fail_rule", pal["default"]),
+                             ("Learned risk scorer", "strand_fail_risk", pal["tailored"])):
+        vals = [getattr(e, key) * 100 for e in entries]
+        fig.add_trace(go.Bar(
+            y=ys, x=vals, orientation="h", name=name, marker=dict(color=color, cornerradius=4),
+            text=[f"{v:.2f}%" for v in vals], textposition="outside", cliponaxis=False,
+            textfont=dict(size=FONT_SIZE - 1),
+            customdata=[[e.n_trials, e.recovery_rule if key.endswith("rule") else e.recovery_risk] for e in entries],
+            hovertemplate=name + ": %{x:.2f}% strands failed<br>file recovered in %{customdata[1]:.0%} of "
+                          "%{customdata[0]} trials<extra></extra>",
+        ), row=1, col=1)
+    diffs = [e.strand_fail_diff * 100 for e in entries]
+    los = [min(e.strand_fail_diff_ci) * 100 for e in entries]
+    his = [max(e.strand_fail_diff_ci) * 100 for e in entries]
+    colors = [pal["good"] if h < 0 else pal["bad"] if lo_ > 0 else pal["muted"] for lo_, h in zip(los, his)]
+    fig.add_trace(go.Scatter(
+        y=ys, x=diffs, mode="markers", showlegend=False,
+        marker=dict(size=14, color=colors, line=dict(color="white", width=1.5)),
+        error_x=dict(type="data", symmetric=False, array=[h - d for h, d in zip(his, diffs)],
+                     arrayminus=[d - lo_ for d, lo_ in zip(diffs, los)], thickness=2.5, width=8, color=pal["muted"]),
+        customdata=list(zip(los, his)),
+        hovertemplate="%{x:+.2f} points (95% CI %{customdata[0]:+.2f} to %{customdata[1]:+.2f})<extra></extra>",
+    ), row=1, col=2)
+    fig.add_vline(x=0, line=dict(color=pal["muted"], width=1.5, dash="dot"), row=1, col=2)
+    span = max([abs(v) for v in los + his] + [0.05]) * 1.25
+    top = max([e.strand_fail_rule * 100 for e in entries] + [e.strand_fail_risk * 100 for e in entries] + [0.01])
+    base_layout(fig, height=230 + 85 * len(entries))
+    fig.update_layout(title=dict(text=pretty_situation(situation), font=dict(size=FONT_SIZE + 2)),
+                      barmode="group", bargap=0.3, margin=dict(t=90, b=70),
+                      # Legend a fixed ~40 px below the plot area, clear of the tick labels at any height.
+                      legend=dict(orientation="h", y=-40 / (80 + 85 * len(entries)), yanchor="top", x=0))
+    # The bars carry their own value labels, so the axis ticks would only crowd the narrow panel.
+    fig.update_xaxes(range=[0, top * 1.35], showticklabels=False, showgrid=False, row=1, col=1)
+    fig.update_xaxes(range=[-span, span], zeroline=False, nticks=5, row=1, col=2)
+    fig.update_yaxes(autorange="reversed", showgrid=False)
+    fig.update_annotations(font_size=FONT_SIZE - 1)
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # 4. What the encoder learned
 # ---------------------------------------------------------------------------
@@ -844,12 +942,12 @@ def risky_chart(run: RunResult, best: IterationResult) -> go.Figure:
     fig = go.Figure(go.Bar(
         x=[r for _, r in kmers], y=[k for k, _ in kmers], orientation="h",
         marker=dict(color=pal["tailored"], cornerradius=4),
-        text=[f"{r:.2f}" for _, r in kmers], textposition="outside", cliponaxis=False,
-        hovertemplate="%{y}: learned risk %{x:.2f}<extra></extra>",
+        text=[f"{r:.2f}" if r >= 0.01 else f"{r:.2g}" for _, r in kmers], textposition="outside",
+        cliponaxis=False, hovertemplate="%{y}: learned risk %{x:.3g}<extra></extra>",
     ))
     base_layout(fig, height=max(220, 48 * len(kmers) + 90))
     fig.update_layout(title=dict(text=pretty_situation(run.situation), font=dict(size=FONT_SIZE + 2)), bargap=0.35)
-    fig.update_xaxes(range=[0, 1.12], title="learned risk of failing (0 to 1)")
+    fig.update_xaxes(range=[0, 1.12], title="learned risk of failing (0 to 1)")  # same scale on every channel
     fig.update_yaxes(tickfont=dict(family="ui-monospace, Menlo, Consolas, monospace", size=FONT_SIZE + 2))
     return fig
 
@@ -1069,6 +1167,12 @@ def render_body(run_id: str, focus: str, target: float) -> None:
     if any(r.is_mock for r in runs) or (summary is not None and summary.is_mock):
         mock_banner()
 
+    numbers = iter(range(1, 100))
+
+    def section(title: str) -> None:
+        """Numbered section header; numbers stay consecutive when a run lacks some views."""
+        st.header(f"{next(numbers)}. {title}")
+
     st.markdown('<div class="overline">Adaptive DNA codec · HackMIT 2026</div>', unsafe_allow_html=True)
     st.title(HEADLINE)
     st.markdown(
@@ -1088,7 +1192,7 @@ def render_body(run_id: str, focus: str, target: float) -> None:
         {e.situation for e in audit}, key=situation_rank)
 
     if audit:
-        st.header("1. Does each rule pay off on this channel?")
+        section("Does each rule pay off on this channel?")
         st.caption("Each rule is measured on the default codec with the same decoder: switched off (or replaced by "
                    "a tuned value) with everything else unchanged. Reads needed = reads per strand to recover the "
                    "file every time.")
@@ -1098,7 +1202,7 @@ def render_body(run_id: str, focus: str, target: float) -> None:
         st.markdown(rule_audit_table(audit, audit_sits), unsafe_allow_html=True)
 
     if runs:
-        st.header("2. The tuned codec moves past the default")
+        section("The tuned codec moves past the default")
         st.caption("Each panel is one channel. Gray diamond = default codec, blue dots = tuning steps "
                    "(C = rules audited, D = + learned selection, E = full loop). Hollow gray diamond = the default "
                    "rules at the same bits per base as the blue dot above it, so the gap is reads saved at equal "
@@ -1106,7 +1210,7 @@ def render_body(run_id: str, focus: str, target: float) -> None:
         in_columns(runs, verdict)
 
     if summary is not None and summary.crossover:
-        st.header("3. Each codec wins at home, not away")
+        section("Each codec wins at home, not away")
         st.caption("Reads per strand each codec needs to recover the file, on each channel. Blue = fewer reads "
                    "than the default on that channel, red = more. Outlined cells: the codec on its own channel.")
         fig = crossover_chart(summary)
@@ -1114,8 +1218,12 @@ def render_body(run_id: str, focus: str, target: float) -> None:
         with cols[0]:
             show(fig, key="crossover")
 
+    tier2 = list(getattr(summary, "tier2", None) or [])
+    if focus != "All situations":
+        tier2 = [e for e in tier2 if e.situation == focus]
+    if summary is not None and (summary.ablation or tier2):
+        section("Where the gain comes from")
     if summary is not None and summary.ablation:
-        st.header("4. Where the gain comes from")
         st.caption("A and B use the same fixed rules; B swaps in the AI decoder and is the default we compare "
                    "against. Tier 1 (B to C): rules audited and redundancy tuned, same decoder. Tier 2 (C to D): "
                    "a risk model learned from decoder failures picks the candidates. E re-tunes the decoder too.")
@@ -1126,15 +1234,37 @@ def render_body(run_id: str, focus: str, target: float) -> None:
             for col, s in zip(st.columns(len(chunk), gap="large"), chunk):
                 with col:
                     show(ablation_chart(summary, s), key=f"ablation-{s}")
+    if tier2:
+        st.subheader("Tier 2, measured directly")
+        st.caption("Same settings, same decoder, same test trials. Only the candidate picker differs: the hand-written "
+                   "rule scorer or the risk model learned from decoder failures. Strand failure = share of strands "
+                   "not read back exactly. Error bars: 95% confidence interval of the paired difference.")
+        t2_sits = [s for s in shown if any(e.situation == s for e in tier2)] or sorted(
+            {e.situation for e in tier2}, key=situation_rank)
+        for start in range(0, len(t2_sits), 3):
+            chunk = t2_sits[start:start + 3]
+            for col, s in zip(st.columns(len(chunk), gap="large"), chunk):
+                with col:
+                    entries = sorted((e for e in tier2 if e.situation == s), key=tier2_order)
+                    show(tier2_chart(entries, s), key=f"tier2-{s}")
+                    for e in entries:
+                        prefix = f"**{tier2_config(e)}:** " if len(entries) > 1 else ""
+                        st.markdown(prefix + tier2_sentence(e))
 
     if runs:
-        st.header("5. What the encoder learned")
+        section("What the encoder learned")
         st.caption("Short DNA patterns each channel's risk model learned to fear. The encoder steers around them.")
 
         def render_risky(run: RunResult) -> None:
             best = tailored(run)
             if best is None or not best.risky_kmers:
                 st.info(f"{pretty_situation(run.situation)}: no risky patterns logged yet.")
+                return
+            top = max(r for _, r in best.risky_kmers)
+            if top < 0.01:
+                st.markdown(f"**{pretty_situation(run.situation)}**")
+                st.info(f"The risk model found nothing worth avoiding on this channel: every learned risk is "
+                        f"below 0.01 (highest {top:.2g}, for {max(best.risky_kmers, key=lambda kr: kr[1])[0]}).")
                 return
             show(risky_chart(run, best), key=f"risky-{run.situation}")
 
@@ -1146,7 +1276,7 @@ def render_body(run_id: str, focus: str, target: float) -> None:
         st.caption("Blue cells: rules the loop changed from the default for that channel.")
         st.markdown(settings_table(runs), unsafe_allow_html=True)
 
-    st.header("6. Details")
+    section("Details")
     if summary is not None and summary.firewall:
         st.subheader("Does it hold outside our own simulator?")
         st.caption("Tuned on our simulator only. Checked on unseen seeds, a differently built simulator, and real reads.")
