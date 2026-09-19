@@ -7,7 +7,7 @@ import pytest
 from dnacodec import realdata
 from dnacodec.encoder import max_run_length, payload_bits_per_base
 from dnacodec.profiles import SituationProfile, list_profiles, load_profile
-from dnacodec.results import load_runs
+from dnacodec.results import load_runs, load_summary
 from dnacodec.seeds import heldout_seeds, is_heldout, train_seed
 from dnacodec.types import EncoderSettings, FileMeta
 
@@ -48,11 +48,22 @@ def test_mock_results_roundtrip():
 
     main()
     runs = load_runs("mock")
-    assert {r.situation for r in runs} == set(list_profiles())
+    assert {r.situation for r in runs} == {"nanopore_budget", "illumina_standard"}
     for run in runs:
         assert run.is_mock
-        assert run.best.metrics.strand_accuracy >= run.default_metrics.strand_accuracy
+        assert run.best.min_reads_at_target < run.default_min_reads_at_target
         assert dataclasses.asdict(run) == run.to_dict()
+    summary = load_summary("mock")
+    assert summary is not None and summary.is_mock
+    assert {e.system for e in summary.ablation} == {"A", "B", "C", "D"}
+    assert summary.to_dict() == type(summary).from_dict(summary.to_dict()).to_dict()
+
+
+def test_profile_realism_fields_roundtrip():
+    data = load_profile("nanopore_budget").to_dict()
+    profile = SituationProfile.from_dict({**data, "homopolymer_run_factors": [1.0, 1.0, 1.1, 1.8]})
+    assert profile.homopolymer_run_factors == (1.0, 1.0, 1.1, 1.8)
+    assert SituationProfile.from_dict(profile.to_dict()) == profile
 
 
 @pytest.mark.skipif(not realdata.MICROSOFT_DIR.exists(), reason="run scripts/download_data.sh")
