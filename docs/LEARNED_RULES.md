@@ -99,43 +99,62 @@ channel gets them wrong.
 
 ---
 
-# A second finding: why the hand rules actually hurt on our Nanopore channel
+# A second finding, and the check that took it back
 
-The rule audit says both standard rules are **harmful** on `nanopore_budget`, reproducibly at
-3 x 300 held-out trials: reads needed go from 24.5 with the rules to 19.5 without the homopolymer
-rule and 16.0 without the GC rule. That is a large effect in the wrong direction, so we went
-looking for the mechanism instead of reporting it as a curiosity.
+The rule audit reported both standard rules as **harmful** on `nanopore_budget`, reproducibly
+across two runs at 3 x 300 held-out trials: 24.5 reads with the rules, 19.5 without the
+homopolymer rule, 16.0 without the GC rule. We went looking for the mechanism, found a plausible
+one, and then a control measurement contradicted the whole thing. Both halves are below, because
+the second half is the more useful lesson.
 
-**It is not the sequences.** Without the homopolymer rule, 25.4% of strands contain a run of 5 or
-more, and by our own calibrated channel table their mean deletion multiplier is *worse*
-(1.013 against 0.931). By sequence quality alone, the rule should help.
+## The mechanism we found, which is real
 
-**It is the code.** Encoding the same file with and without the rules:
+Screening candidate droplets against the sequence rules also screens their **seeds**. The seed
+lives in the first 16 bases of the strand and has to satisfy the rules like everything else, and
+the seed is what selects which data chunks a droplet combines. Filtering seeds therefore filters
+the structure of the erasure code. Encoding the same file three ways:
 
 | | Mean droplet degree | Minimum coverage of a data chunk |
 |---|---|---|
-| Default, both rules | 9.83 | **3** |
-| Rules off | 11.97 | **6** |
+| Rules applied to the whole strand (standard) | 9.83 | **3** |
+| Rules applied to the payload only | 10.37 | 5 |
+| No rules | 11.97 | 6 |
 
-The seed of a Fountain droplet lives in the first 16 bases of the strand, and **those bases have
-to satisfy the sequence rules too**. Seeds whose base-4 spelling contains a long run, or whose
-letters push the strand out of the GC window, are rejected. Since the seed is what selects which
-data chunks a droplet combines, filtering seeds filters the *structure of the code*: chunk
-coverage becomes uneven, and the worst-covered chunk sits in 3 droplets instead of 6. Lose those
-three and the file is gone, however clean the sequence was.
+The worst-covered chunk sits in 3 droplets instead of 6. Lose those three and the file is gone,
+however clean the sequence was. That effect is real and reproducible, and `constrain_seed=False`
+in `EncoderSettings` now exists to avoid it.
 
-So the rule trades a small, real sequence benefit for a structural weakness in the erasure code,
-and on this channel the trade is a loss.
+It is also **not** a sequence effect: without the homopolymer rule, 25.4% of strands carry a run
+of 5 or more and their mean deletion multiplier is worse (1.013 against 0.931) by our own
+calibrated channel table. By sequence quality alone the rule should help.
 
-**Why this is worth saying out loud.** DNA Fountain, the standard construction, screens candidate
-droplets against exactly these constraints. Our measurement says that screening carries a hidden
-cost that is not usually accounted for, and it is easy to avoid:
+## The control that contradicted the conclusion
 
-1. apply the constraints to the payload only, not to the seed bases, or
-2. encode the seed so that it satisfies the constraints by construction, so no droplet is ever
-   rejected for its seed.
+A direct measurement of the same three codecs, same channel, same decoder, 300 held-out trials:
 
-We did not implement either, and we do not claim a fix that we have not measured. What we claim
-is the measurement: on a channel calibrated to real Nanopore reads, screening droplets by the two
-standard rules costs more reads than it saves, and the reason is the erasure code, not the
-chemistry.
+| Codec | Reads per strand needed |
+|---|---|
+| Rules on, seed screened too (standard) | **16.0** |
+| Rules on, payload only | target not met within the grid (> 16) |
+| Rules off | target not met within the grid (> 16) |
+
+That is the opposite ranking to the audit, with identical encoder settings. The explanation is
+not a bug in either measurement, it is the metric: the recovery target is "all 300 trials
+recover", and around 16 reads the recovery rate sits right at the knife edge, so a single failed
+trial moves the answer by several reads. Different held-out seed blocks then disagree.
+
+## What we actually claim
+
+- **The redundancy result is robust.** Tuning redundancy per channel takes Nanopore from 24.5
+  reads to 6.0 at the recovery target, and that reproduces across every run and every seed block
+  we measured.
+- **The two hand rules show no measurable benefit** on either channel, and the model's own
+  probes agree (flat GC response, and a homopolymer threshold at 4 to 5 rather than 3).
+- **We do not claim the rules are harmful.** The audit said so twice, and a control measurement
+  said the reverse, so the honest statement is that the effect is inside the noise of an
+  all-or-nothing target at this operating point.
+- **The seed screening effect is real but its cost is unmeasured.** It is a clean hypothesis for
+  future work, with the code path already in place.
+
+This is the least comfortable page in the repo, and it is the one we would show first to anyone
+asking how carefully we measured.
