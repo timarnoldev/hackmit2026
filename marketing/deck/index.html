@@ -1,21 +1,19 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Erbgut pitch</title>
 <meta name="description" content="Erbgut pitch deck, HackMIT 2026. Measure the rule. Keep what pays.">
-<meta name="color-scheme" content="dark light">
+<meta name="color-scheme" content="light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M1.5 32C11.56 13.04 23.77 8 32 8C40.23 8 52.44 13.04 62.5 32' fill='none' stroke='%2332C7DB' stroke-width='9' stroke-linecap='round'/%3E%3Cpath d='M1.5 32C11.56 50.96 23.77 56 32 56C40.23 56 52.44 50.96 62.5 32' fill='none' stroke='%2332C7DB' stroke-width='9' stroke-linecap='round'/%3E%3Crect x='10.5' y='18' width='10.5' height='28' rx='5.25' fill='%23FEC746'/%3E%3Crect x='26.75' y='11' width='10.5' height='42' rx='5.25' fill='%23FC68D6'/%3E%3Crect x='43' y='18' width='10.5' height='28' rx='5.25' fill='%235BD67C'/%3E%3C/svg%3E">
 <script>
-  /* set theme and motion before first paint, so nothing flashes */
+  /* motion and the embed flags before first paint, so nothing flashes.
+     The deck is light, always, and there is no theme to choose. */
   (function () {
     var p = new URLSearchParams(location.search), d = document.documentElement, m = null;
     try { m = localStorage.getItem('sa-motion'); } catch (e) {}
-    // Forced to light for now, regardless of any stored preference. Pass ?theme=dark to preview dark.
-    var t = p.get('theme') || 'light';
     m = p.get('motion') || m;
-    d.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
     var reduce = m ? m === 'off' : (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
     if (reduce) d.classList.add('reduce-motion');
     if (p.has('embed')) d.classList.add('embed');
