@@ -14,7 +14,9 @@ and writes results/<run_id>/summary.json (ExperimentSummary):
   evaluated on every situation's channel at that channel's budget. On channel X all codecs
   use X's final decoder, so only the encoder differs.
 - Firewall: tailored vs default on Simulator A held-out seeds, the same comparison with
-  Simulator B, and the risk model's ROC AUC on held-out real DNAformer clusters.
+  Simulator B, and the risk model's ranking of real decoder failures (Microsoft held-out,
+  coverage-stratified and also stratified by longest run, with the unstratified and
+  read-count-only AUCs as context; DNAformer unstratified alongside).
 - Direct tier-2 measurement (ExperimentSummary.tier2): rule vs learned scorer at C's settings,
   same decoder and held-out seeds, per-trial strand failure and recovery with paired bootstrap
   CIs; Simulator A at the budget and at the default's min reads, Simulator B at the budget;
@@ -116,6 +118,80 @@ def roc_auc(scores: np.ndarray, positive: np.ndarray) -> float:
         ranks[order[i : j + 1]] = (i + j) / 2 + 1
         i = j + 1
     return float((ranks[positive].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
+
+
+
+MAX_REAL_READS = 16  # decoders take at most 16 reads per cluster
+REAL_REPEATS = 4  # subsamples per cluster when labeling real clusters at a fixed coverage
+
+
+def real_risk_entries(situation: str, risk: Scorer, decoder: Decoder, profile, max_clusters: int,
+                      workers: int | None) -> list[FirewallEntry]:
+    """Firewall test 3: does the risk model rank real decoder failures?
+
+    On real reads the number of reads a cluster happens to have dominates failure, so an
+    unstratified AUC of a sequence-only score sits near chance by construction. The headline
+    number is therefore coverage-stratified: every cluster is decoded at exactly the same
+    number of reads (several subsamples each), which holds coverage constant. A second entry
+    also holds the longest homopolymer run fixed, so what is left is what the model knows
+    beyond the hand rule. The unstratified and read-count-only AUCs come along as context.
+
+    Microsoft held-out is the set whose references actually vary (26.6% have runs of 5+,
+    GC sd 0.045); DNAformer is reported too but 98% of its references have a longest run of
+    3 or 4, so the homopolymer effect cannot be measured there.
+    """
+    from dnacodec.realdata import MICROSOFT_DIR, load_microsoft
+    from dnacodec.risk import max_run_length, real_failure_rates, roc_auc, stratified_auc
+
+    if not (MICROSOFT_DIR / "Centers.txt").exists():
+        return [FirewallEntry(situation, "real", "not_run", 0.0, "Microsoft dataset not downloaded")]
+    coverage = min(max(2, round(profile.coverage_mean)), MAX_REAL_READS)
+    seed = heldout_seeds(1)[0]
+    w = 1 if getattr(decoder, "main_process_only", False) else workers
+    clusters = [c for c in load_microsoft(split="heldout") if c.reads][:max_clusters]
+    refs = [c.reference for c in clusters]
+    score = np.asarray(risk(refs), dtype=np.float64)
+    tech = "" if profile.technology == "nanopore" else (
+        f"; note {profile.technology} situation scored on Nanopore reads, the only real set whose references vary")
+
+    # Context: the reads each cluster actually has.
+    sizes = np.array([min(len(c.reads), MAX_REAL_READS) for c in clusters], dtype=np.float64)
+    natural = real_failure_rates(refs, [c.reads for c in clusters], decoder, MAX_REAL_READS,
+                                 repeats=1, seed=seed, workers=w, heldout=True) > 0.5
+    context = (f"Microsoft held-out, {len(refs)} clusters, reads as they are (capped {MAX_REAL_READS}), "
+               f"{natural.mean():.1%} failures; read count alone ranks failures here, so this number is "
+               f"misleading for a sequence-only score{tech}")
+    out = [
+        FirewallEntry(situation, "real", "risk_auc_unstratified", roc_auc(natural, score), context),
+        FirewallEntry(situation, "real", "auc_read_count_only", roc_auc(natural, -sizes), context),
+    ]
+
+    # Headline: every cluster decoded at exactly `coverage` reads, so coverage is constant.
+    keep = [i for i, c in enumerate(clusters) if len(c.reads) >= coverage]
+    if len(keep) < 20:
+        return out + [FirewallEntry(situation, "real", "not_run", 0.0,
+                                    f"only {len(keep)} held-out clusters have {coverage} reads")]
+    fixed_refs = [refs[i] for i in keep]
+    rates = real_failure_rates(fixed_refs, [clusters[i].reads for i in keep], decoder, coverage,
+                               repeats=REAL_REPEATS, seed=seed, workers=w, heldout=True)
+    ok = ~np.isnan(rates)
+    fixed_refs = [r for r, good in zip(fixed_refs, ok.tolist()) if good]
+    failed = rates[ok] > 0.5
+    fixed_score = score[np.asarray(keep)][ok]
+    runs = np.array([min(max_run_length(r), 6) for r in fixed_refs])
+    note = (f"Microsoft held-out, {len(fixed_refs)} clusters at exactly {coverage} reads x {REAL_REPEATS} "
+            f"subsamples, {failed.mean():.1%} failures; label = failed in most subsamples{tech}")
+    pooled_runs, rows = stratified_auc(failed, fixed_score, runs)
+    out += [
+        FirewallEntry(situation, "real", "risk_auc_coverage_stratified", roc_auc(failed, fixed_score), note),
+        FirewallEntry(situation, "real", "risk_auc_coverage_and_run_stratified", pooled_runs,
+                      note + f"; also stratified by longest run, strata "
+                             f"{ {r['stratum']: r['n'] for r in rows} }"),
+    ]
+    log.info("[%s] real risk AUC: coverage-stratified %.3f, + run-stratified %.3f "
+             "(unstratified %.3f, read count only %.3f)", situation, out[2].value, out[3].value,
+             out[0].value, out[1].value)
+    return out
 
 
 def real_risk_auc(
@@ -487,12 +563,19 @@ def build_summary(
             summary.firewall.append(FirewallEntry(s, "real", "not_run", 0.0, "skipped (real_clusters=0)"))
             continue
         try:
+            summary.firewall += real_risk_entries(s, tailored[s].scorer, final_decoder[s], run.profile,
+                                                  real_clusters, config.workers)
+        except Exception as e:  # real data problems must not kill the summary
+            summary.firewall.append(FirewallEntry(s, "real", "not_run", 0.0, f"stratified AUC failed: {e}"))
+        try:
             auc, note = real_risk_auc(tailored[s].scorer, final_decoder[s], run.profile.technology,
                                       run.profile.coverage_mean, real_clusters)
+            note += "; 98% of DNAformer references have a longest run of 3 or 4, so the homopolymer "\
+                    "effect cannot be measured on this set"
         except Exception as e:  # real data problems must not kill the summary
             auc, note = NAN, f"failed: {e}"
-        summary.firewall.append(FirewallEntry(s, "real", "risk_auc", auc, note))
-        log.info("[%s] real risk AUC %.3f (%s)", s, auc, note)
+        summary.firewall.append(FirewallEntry(s, "real", "risk_auc_dnaformer_unstratified", auc, note))
+        log.info("[%s] DNAformer risk AUC %.3f (%s)", s, auc, note)
 
     # 4. Direct tier-2 measurement: learned vs rule scorer at C's settings, paired per trial.
     for s in situations:
@@ -530,7 +613,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--situations", default=",".join(CORE))
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--workers", type=int, default=None)
-    ap.add_argument("--real-clusters", type=int, default=2000)
+    ap.add_argument("--real-clusters", type=int, default=None,
+                    help="real held-out clusters for firewall test 3 (default 2000, 200 with --quick)")
     ap.add_argument("--mock", default=None, help="comma list of components to mock: trials, risk, all")
     ap.add_argument("--eval-trials", type=int, default=None, help="override held-out trials per evaluation")
     ap.add_argument("--no-refine", action="store_true", help="don't test c - 0.5 after the coverage grid")
@@ -545,8 +629,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     mocks = parse_mock(args.mock)
     comps = mock_components(mocks) if mocks else Components()
     situations = [s.strip() for s in args.situations.split(",") if s.strip()]
-    summary = build_summary(args.run_id, situations, config, comps,
-                            real_clusters=200 if args.quick else args.real_clusters)
+    real_clusters = args.real_clusters if args.real_clusters is not None else (200 if args.quick else 2000)
+    summary = build_summary(args.run_id, situations, config, comps, real_clusters=real_clusters)
     path = save_summary(summary, args.run_id)
     log.info("summary written to %s (is_mock=%s)", path, summary.is_mock)
     print(path)
