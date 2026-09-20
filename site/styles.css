@@ -1,7 +1,9 @@
 /* Erbgut project homepage. Light theme.
    Tokens follow marketing/BRAND.md section 9, light column, using the darker
-   text step for accents so normal-size text clears WCAG AA. Measured ratios
-   are listed in site/README.md. */
+   text step for accents so normal-size text clears WCAG AA. Every text pair
+   used here was measured: the lowest is 4.72 : 1 (gain on the gain tint inside
+   a white card), body text is 5.4 : 1 or better, ink on paper is 16.7 : 1.
+   Never use colour alone for a verdict: the pills carry a word and a symbol. */
 
 /* Local fallbacks: if Google Fonts is blocked or offline, these self-hosted
    subsets (the deck's own woff2 files) take over. */
