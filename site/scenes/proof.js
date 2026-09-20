@@ -22,6 +22,8 @@ const SANS = "'Instrument Sans','Erbgut Sans',system-ui,-apple-system,'Segoe UI'
 const MONO = "'JetBrains Mono','Erbgut Mono',ui-monospace,SFMono-Regular,Menlo,monospace";
 
 const COLUMNS = [
+  /* `sub` is either a function of the count-up progress, so it counts too, or a
+   * plain string when the second number is fixed. */
   {
     colour: GAIN, from: 0, to: 88.1,
     fmt: (v) => v.toFixed(1) + '%',
@@ -44,6 +46,10 @@ const COLUMNS = [
     at: [0.34, 0.82], show: [-0.20, -0.10],
   },
 ];
+
+function subText(spec, t) {
+  return typeof spec.sub === 'function' ? spec.sub(t) : spec.sub;
+}
 
 function e(tag, attrs, parent) {
   const n = document.createElementNS(NS, tag);
@@ -102,7 +108,7 @@ function build() {
         x: cx, y: cy + L.numSize * 0.40, 'text-anchor': 'middle',
         'font-family': MONO, 'font-size': L.subSize, fill: MUTED,
       }, g);
-      sub.textContent = spec.sub(0);
+      sub.textContent = subText(spec, 0);
     }
 
     const ruleY = cy + L.numSize * (spec.sub ? 0.70 : 0.50);
@@ -138,7 +144,7 @@ function render(p) {
      * and a lone number on an empty stage reads as a broken frame. */
     const appear = smooth(seg(p, c.spec.show[0], c.spec.show[1]));
     c.num.textContent = c.spec.fmt(c.spec.from + (c.spec.to - c.spec.from) * t);
-    if (c.sub) c.sub.textContent = c.spec.sub(t);
+    if (c.sub) c.sub.textContent = subText(c.spec, t);
     c.rule.setAttribute('stroke-dashoffset', 1 - smooth(seg(p, a + 0.02, b)));
     c.g.setAttribute('opacity', appear);
     c.g.setAttribute('transform', 'translate(0,' + ((1 - appear) * 16).toFixed(2) + ')');
