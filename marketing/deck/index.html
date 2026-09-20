@@ -333,8 +333,61 @@
   </aside>
 </section>
 
+<!-- ================================================================ What Erbgut does -->
+<section class="slide" id="s-system" data-title="What Erbgut does" data-plan="82-102">
+  <p class="kicker">What we built</p>
+  <h2 class="title">Two tiers, one fixed target</h2>
+  <p class="lede">For one channel, Erbgut tunes the codec instead of assuming it.</p>
+  <div class="tiers">
+    <div class="tier card enter" style="--d:0.15">
+      <span class="tno">1</span>
+      <h3>Rule audit</h3>
+      <p>Switch each hand-written rule off, one at a time. Measure exactly what it costs and what it buys on this channel. Keep only what pays off.</p>
+    </div>
+    <div class="tier card enter" style="--d:0.3">
+      <span class="tno">2</span>
+      <h3>Learned selection</h3>
+      <p>A risk model trained on where our own decoder actually fails ranks the candidate strands the encoder already generates, and keeps the safest one. Free, since a Fountain encoder tries several seeds per strand anyway.</p>
+    </div>
+  </div>
+  <div class="target card enter" style="--d:0.45">
+    <h4>One fixed target, both tiers</h4>
+    <p>A 20&nbsp;KB file recovered exactly in all 300 held-out trials. Same encoder, same decoder: only the rules, the redundancy and which candidate gets kept ever change.</p>
+  </div>
+  <aside class="notes">
+    <p>So what did we actually build?</p>
+    <p><i class="cue"></i> Tier one, the rule audit: switch each rule off, measure what it costs and buys, keep what pays.</p>
+    <p><i class="cue"></i> Tier two, learned selection: learn from where the decoder fails what else to avoid, and pick the safest candidate strand. That costs no density at all.</p>
+    <p><i class="cue"></i> One fixed test end to end: a 20 KB file back exactly in all 300 held-out trials, same encoder, same decoder.</p>
+    <p class="aside">Stress "same encoder, same decoder". It preempts "isn't it just a better decoder".</p>
+  </aside>
+</section>
+
+<!-- ================================================================ What's new -->
+<section class="slide" id="s-whatsnew" data-title="What's new" data-plan="102-122">
+  <p class="kicker">What's new <span class="tag">vs existing work</span></p>
+  <h2 class="title sm">Existing work tunes one piece. We close the loop.</h2>
+  <p class="lede">Adaptive constrained coding, learned decoders and end-to-end learned codes all exist. Each tunes the rules, the redundancy or the decoder <b>in isolation</b>.</p>
+  <div class="wn-table">
+    <div class="wn-h">Existing practice</div><div class="wn-h">What Erbgut adds</div>
+    <div class="wn-c old">One fixed codec for every situation</div><div class="wn-c new">A codec tuned per situation</div>
+    <div class="wn-c old">Hand-written rules applied to every channel</div><div class="wn-c new">Each rule audited per channel, plus a risk model trained on real decoder failures</div>
+    <div class="wn-c old">AI decoders trained once</div><div class="wn-c new">A decoder fine-tuned to the specific channel</div>
+    <div class="wn-c old">Encoder and decoder designed separately</div><div class="wn-c new">Encoder and decoder adapting to each other in an alternating loop</div>
+    <div class="wn-c old">Papers with fixed parameters</div><div class="wn-c new">An interactive tool for an engineer's real constraints</div>
+  </div>
+  <p class="bottom-note">We don't claim a better encoder than DNA Fountain, or a better decoder than DNAformer. <span class="muted">The gain is entirely in how the same codec gets configured, per channel.</span></p>
+  <aside class="notes">
+    <p>So what's actually new here, against the existing DNA storage literature?</p>
+    <p><i class="cue"></i> Today it's one fixed codec for every situation. We tune a codec per situation.</p>
+    <p><i class="cue"></i> Hand-written rules go on every channel unchanged. We audit each rule per channel, and learn from real decoder failures what the rules miss.</p>
+    <p><i class="cue"></i> AI decoders are usually trained once. Ours fine-tunes to the channel, and the encoder and decoder adapt to each other in a loop instead of being designed apart.</p>
+    <p><i class="cue"></i> We compete at the system level: how an existing codec should be configured for one channel. Not a better encoder than DNA Fountain, not a better decoder than DNAformer.</p>
+  </aside>
+</section>
+
 <!-- ================================================================ 6. Pipeline -->
-<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="82-106"
+<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="122-146"
   data-labels="Bits become letters|Synthesis writes copies|Sequencing returns noisy reads|Decoder votes a consensus|Checksum marks a wrong strand missing|Fountain code rebuilds the file">
   <p class="kicker">How DNA storage works</p>
   <h2 class="title sm">From bits to strands, and back</h2>
@@ -408,7 +461,7 @@
 </section>
 
 <!-- ================================================================ 7. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="106-119"
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="146-159"
   data-labels="Several candidates per slot|Rules reject some|A scorer keeps one|The knobs we measure">
   <p class="kicker">Where the rules come in</p>
   <h2 class="title sm">The encoder picks one of several candidate strands</h2>
@@ -439,7 +492,7 @@
 </section>
 
 <!-- ================================================================ 8. Tier 1 -->
-<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="119-146"
+<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="159-186"
   data-labels="Switch each rule off and measure|Nanopore verdicts|Illumina verdicts|Same rule, different verdict">
   <p class="kicker">Tier 1 <span class="tag">rule audit</span></p>
   <h2 class="title">Does this rule pay off on this channel?</h2>
@@ -457,7 +510,7 @@
 </section>
 
 <!-- ================================================================ 9. Tier 2 -->
-<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="146-166"
+<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="186-206"
   data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
   <h2 class="title sm">Learn where the decoder fails, then steer around it</h2>
@@ -485,7 +538,7 @@
 </section>
 
 <!-- ================================================================ 10. Loop -->
-<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="166-188" data-steps="4"
+<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="206-228" data-steps="4"
   data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
   <p class="kicker">The loop</p>
   <h2 class="title sm">Alternate and freeze, then judge on the Pareto plot</h2>
@@ -503,7 +556,7 @@
 </section>
 
 <!-- ================================================================ 11. Evidence: ablation and crossover -->
-<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="188-206"
+<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="228-246"
   data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">Where the gain comes from, and where it holds</h2>
@@ -530,7 +583,7 @@
 </section>
 
 <!-- ================================================================ 12. Evidence: simulator -->
-<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="206-220"
+<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="246-260"
   data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">No wet lab, so the simulator is checked against real reads</h2>
@@ -560,7 +613,7 @@
 </section>
 
 <!-- ================================================================ 13. Results and close -->
-<section class="slide" id="s-results" data-title="Results and close" data-plan="220-234" data-steps="2"
+<section class="slide" id="s-results" data-title="Results and close" data-plan="260-274" data-steps="2"
   data-labels="Headline results|Close: tagline, team, repo">
   <p class="kicker">Results</p>
   <h2 class="title sm">What the audit measured</h2>

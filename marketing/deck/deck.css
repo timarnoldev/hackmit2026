@@ -636,6 +636,82 @@ html.results-broken .load-error { display: block; }
 }
 #s-problem .bottom .muted { font-weight: 500; }
 
+/* ---------------------------------------------------------------- slide: what erbgut does */
+
+#s-system .tiers {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 300px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+#s-system .tier { padding: 40px 44px; }
+#s-system .tno {
+  display: inline-grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--tint-audit);
+  color: var(--sa-audit);
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 28px;
+  margin-bottom: 22px;
+}
+#s-system .tier h3 { margin: 0 0 14px; font-size: 34px; font-weight: 600; }
+#s-system .tier p { margin: 0; font-size: 25px; line-height: 1.42; color: var(--sa-muted); }
+#s-system .target {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 660px;
+  padding: 30px 40px;
+  border: 3px solid var(--sa-audit);
+  background: var(--tint-audit);
+}
+#s-system .target h4 { margin: 0 0 10px; font-size: 27px; font-weight: 600; color: var(--sa-audit); }
+#s-system .target p { margin: 0; font-size: 26px; line-height: 1.4; }
+
+/* ---------------------------------------------------------------- slide: what's new */
+
+#s-whatsnew .wn-table {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 336px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 32px;
+}
+#s-whatsnew .wn-h {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--sa-muted);
+  padding: 0 30px 14px;
+  border-bottom: 2px solid var(--sa-rule);
+}
+#s-whatsnew .wn-c {
+  padding: 20px 30px;
+  font-size: 25px;
+  line-height: 1.35;
+  border-bottom: 2px solid var(--sa-rule);
+}
+#s-whatsnew .wn-c.old { color: var(--sa-muted); }
+#s-whatsnew .wn-c.new { color: var(--sa-ink); font-weight: 500; }
+#s-whatsnew .bottom-note {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 862px;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+#s-whatsnew .bottom-note .muted { font-weight: 500; }
+
 /* ---------------------------------------------------------------- slide 3: pipeline */
 
 #s-pipeline .canvas {
