@@ -664,6 +664,21 @@
   <aside class="notes"><p>Answer in one or two sentences, then stop.</p></aside>
 </section>
 
+<section class="slide appx" id="a-learned" data-appendix data-title="Appendix: what the model learned"
+  data-labels="The homopolymer curve|GC is flat|The patterns it names|The cross-check on real data">
+  <p class="kicker">Appendix <span class="tag">A6</span></p>
+  <h2 class="title sm">What the model learned, and we did not teach it</h2>
+  <div class="learned" id="learned"></div>
+  <aside class="notes">
+    <p>We never taught the risk model a rule. It only ever saw which strands our decoder got wrong. Afterwards we asked it what it thinks is dangerous.</p>
+    <p><i class="cue"></i> It found the homopolymer rule by itself. Risk is flat up to a run of 4, then it climbs. The standard rule in the field forbids runs longer than 3, so the usual rule is stricter than this channel needs, and that strictness costs candidates for nothing.</p>
+    <p><i class="cue"></i> On GC it is flat, 3.6 points across the whole range. It calls the GC rule pointless, and our rule audit reached the same verdict from a completely different measurement.</p>
+    <p><i class="cue"></i> The patterns it names are all runs, as expected. The interesting part is the order: G and C runs rank above A and T runs. No hand rule makes that distinction, it just counts identical letters.</p>
+    <p><i class="cue"></i> And the cross-check. Our channel table, fitted on real reads, says the worst deletion contexts are GAAAG and AAAAG. The model never saw that table and rates them 0.93 and 0.97. The worst substitution context it shrugs at, 0.44, because voting across reads repairs a substitution while a deletion shifts everything after it. It did not learn where errors happen. It learned where errors are fatal. On Illumina every pattern comes back at zero, correctly, because there the decoder does not fail on sequence grounds at all.</p>
+    <p class="aside">About 35 seconds. Source: docs/LEARNED_RULES.md, probed from the trained model of the final run.</p>
+  </aside>
+</section>
+
 </div><!-- /stage -->
 </div><!-- /viewport -->
 

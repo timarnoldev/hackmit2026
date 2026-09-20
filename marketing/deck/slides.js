@@ -359,6 +359,102 @@
     return `M${p(8, 8)} L${x2} ${y2} L${p(-8, -8)}`;
   }
 
+  /* ------------------------------------------------------------ appendix: what the risk model learned */
+
+  // Measured, from docs/LEARNED_RULES.md (the trained model of the final run, probed with patterns).
+  const RUN_RISK = [[1, 0.429], [2, 0.430], [3, 0.436], [4, 0.460], [5, 0.518], [6, 0.603], [7, 0.689], [8, 0.756], [10, 0.833]];
+  const GC_RISK = [[0.2, 0.453], [0.3, 0.455], [0.4, 0.459], [0.5, 0.465], [0.6, 0.473], [0.7, 0.482], [0.8, 0.489]];
+  const KMERS = [['GGGGG', 0.707], ['CCCCC', 0.685], ['AGGGG', 0.638], ['TCCCC', 0.615], ['TTTTT', 0.613]];
+  const KMER_BG = 0.526;
+
+  function buildLearned() {
+    const host = document.getElementById('learned');
+    if (!host) return;
+    const W = 790;
+    const H = 318;
+    const m = { l: 96, r: 26, t: 26, b: 64 };
+    const pw = W - m.l - m.r;
+    const ph = H - m.t - m.b;
+    const Y = (v) => m.t + ph - ((v - 0.4) / 0.5) * ph;   // both charts share 0.40 to 0.90
+    const yaxis = () => {
+      let g = '';
+      [0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach((t) => {
+        g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${Y(t)}" y2="${Y(t)}"/>` +
+             `<text class="tick" x="${m.l - 14}" y="${Y(t) + 7}" text-anchor="end">${t.toFixed(1)}</text>`;
+      });
+      return g + `<path class="axis" d="M${m.l} ${m.t}V${m.t + ph}H${m.l + pw}"/>` +
+        `<text class="alabel" transform="translate(26 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">Predicted risk</text>`;
+    };
+    const path = (pts, X) => pts.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join('');
+
+    // 1. homopolymer response
+    const Xr = (v) => m.l + ((v - 1) / 9) * pw;
+    let a = yaxis();
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].forEach((t) => {
+      a += `<text class="tick" x="${Xr(t)}" y="${m.t + ph + 32}" text-anchor="middle">${t}</text>`;
+    });
+    a += `<text class="alabel" x="${m.l + pw / 2}" y="${H - 8}" text-anchor="middle">Longest run of the same letter</text>`;
+    a += `<rect class="band frag fade" data-f="1" x="${Xr(4)}" y="${m.t}" width="${Xr(5) - Xr(4)}" height="${ph}" rx="6"/>`;
+    a += `<path class="curve frag fade" data-f="1" d="${path(RUN_RISK, Xr)}"/>`;
+    RUN_RISK.forEach((p) => {
+      a += `<circle class="dot frag fade" data-f="1" cx="${Xr(p[0])}" cy="${Y(p[1])}" r="7"/>`;
+    });
+    a += `<g class="frag fade" data-f="1"><line class="stdline" x1="${Xr(3)}" x2="${Xr(3)}" y1="${m.t}" y2="${m.t + ph}"/>` +
+      `<text class="stdlab" x="${Xr(3) - 12}" y="${m.t + 26}" text-anchor="end">standard rule:</text>` +
+      `<text class="stdlab" x="${Xr(3) - 12}" y="${m.t + 52}" text-anchor="end">no run over 3</text>` +
+      `<text class="modellab" x="${Xr(5) + 14}" y="${m.t + 26}">the model draws</text>` +
+      `<text class="modellab" x="${Xr(5) + 14}" y="${m.t + 52}">the line at 4 to 5</text></g>`;
+
+    // 2. GC response, same scale, so flat looks flat
+    const Xg = (v) => m.l + ((v - 0.2) / 0.6) * pw;
+    let b = yaxis();
+    [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8].forEach((t) => {
+      b += `<text class="tick" x="${Xg(t)}" y="${m.t + ph + 32}" text-anchor="middle">${t.toFixed(1)}</text>`;
+    });
+    b += `<text class="alabel" x="${m.l + pw / 2}" y="${H - 8}" text-anchor="middle">GC content</text>`;
+    b += `<path class="curve flat frag fade" data-f="2" d="${path(GC_RISK, Xg)}"/>`;
+    GC_RISK.forEach((p) => {
+      b += `<circle class="dot flat frag fade" data-f="2" cx="${Xg(p[0])}" cy="${Y(p[1])}" r="7"/>`;
+    });
+    b += `<text class="modellab frag fade" data-f="2" style="fill:var(--sa-audit)" x="${m.l + pw / 2}" y="${Y(0.465) - 30}" text-anchor="middle">3.6 points across the whole range</text>`;
+
+    // 3. the patterns it names
+    const KW = 790;
+    const KH = 268;
+    const km = { l: 150, r: 150, t: 16, b: 44 };
+    const kpw = KW - km.l - km.r;
+    const Xk = (v) => km.l + ((v - 0.45) / 0.33) * kpw;
+    let k = '';
+    KMERS.forEach((p, i) => {
+      const y = km.t + i * 44;
+      k += `<g class="frag fade" data-f="3" style="transition-delay:${i * 60}ms">` +
+        `<text class="klab" x="${km.l - 18}" y="${y + 26}" text-anchor="end">${p[0]}</text>` +
+        `<rect class="kbar" x="${km.l}" y="${y + 6}" width="${Math.max(2, Xk(p[1]) - km.l)}" height="26" rx="6"/>` +
+        `<text class="kval" x="${Xk(p[1]) + 14}" y="${y + 27}">${p[1].toFixed(3)}</text></g>`;
+    });
+    k += `<g class="frag fade" data-f="3"><line x1="${Xk(KMER_BG)}" x2="${Xk(KMER_BG)}" y1="${km.t - 4}" y2="${km.t + 5 * 44 + 4}" stroke="var(--sa-muted)" stroke-width="3" stroke-dasharray="8 6"/>` +
+      `<text class="kval" x="${Xk(KMER_BG)}" y="${km.t + 5 * 44 + 32}" text-anchor="middle">random background ${KMER_BG.toFixed(3)}</text></g>`;
+
+    host.innerHTML =
+      `<div class="panel frag fade" data-f="1" style="left:0;top:0;width:${W}px">` +
+      `<h3>It found the homopolymer rule by itself</h3>` +
+      `<p class="sub">Risk of a strand carrying one run of length r, Nanopore</p>` +
+      `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Predicted risk against run length">${a}</svg></div>` +
+      `<div class="panel frag fade" data-f="2" style="left:890px;top:0;width:${W}px">` +
+      `<h3>It considers the GC rule pointless</h3>` +
+      `<p class="sub">Same model, GC varied with runs capped at 3. Our rule audit agrees</p>` +
+      `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Predicted risk against GC content">${b}</svg></div>` +
+      `<div class="panel" style="left:0;top:424px;width:${KW}px">` +
+      `<h3 class="frag fade" data-f="3">The patterns it names</h3>` +
+      `<p class="sub frag fade" data-f="3">G and C runs rank above A and T runs. No hand rule makes that distinction</p>` +
+      `<svg class="chart" width="${KW}" height="${KH}" viewBox="0 0 ${KW} ${KH}" role="img" aria-label="Most dangerous 5-mers">${k}</svg></div>` +
+      `<div class="panel card frag fade" data-f="4" style="left:890px;top:424px;width:${W}px">` +
+      `<div class="row">Worst <b>deletion</b> contexts in our real-read channel table: <span class="mono">GAAAG</span> 71x, <span class="mono">AAAAG</span> 13x. The model, which never saw that table: <span class="risk">0.934</span> and <span class="risk">0.973</span></div>` +
+      `<div class="row">Worst <b>substitution</b> context: <span class="mono">CCCGA</span> 12.8x. The model shrugs: <span class="calm">0.444</span></div>` +
+      `<div class="punch">It did not learn where errors happen. It learned <b>where errors are fatal</b>.</div>` +
+      `<div class="note">Voting across reads repairs a substitution. A deletion shifts everything after it and destroys the strand. On Illumina every pattern comes back at risk 0.000, correctly.</div></div>`;
+  }
+
   function buildArchitecture() {
     const host = document.getElementById('arch');
     if (!host) return;
@@ -897,6 +993,7 @@
       buildAudit(R);
       buildTier2();
       buildArchitecture();
+      buildLearned();
       buildCycle();
       buildPareto(R);
       buildAblation(R);
