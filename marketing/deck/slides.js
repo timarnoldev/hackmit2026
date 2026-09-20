@@ -816,49 +816,6 @@
     sim: [3.6, 40.3, 63.7, 83.0, 90.3],
   };
 
-  function buildCalibration() {
-    const host = document.getElementById('calchart');
-    if (!host) return;
-    const W = 960;
-    const H = 400;
-    const m = { l: 86, r: 30, t: 24, b: 62 };
-    const pw = W - m.l - m.r;
-    const phh = H - m.t - m.b;
-    const X = (v) => m.l + (v / 17) * pw;
-    const Y = (v) => m.t + phh - (v / 100) * phh;
-    let s = '';
-    [0, 25, 50, 75, 100].forEach((t) => {
-      s += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${Y(t)}" y2="${Y(t)}"/><text class="tick" x="${m.l - 14}" y="${Y(t) + 7}" text-anchor="end">${t}%</text>`;
-    });
-    CAL.reads.forEach((r) => {
-      s += `<text class="tick" x="${X(r)}" y="${m.t + phh + 32}" text-anchor="middle">${r}</text>`;
-    });
-    s += `<path class="axis" d="M${m.l} ${m.t}V${m.t + phh}H${m.l + pw}"/>`;
-    s += `<text class="alabel" x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle">Reads per strand</text>`;
-    s += `<text class="alabel" transform="translate(22 ${m.t + phh / 2}) rotate(-90)" text-anchor="middle">Exact strands</text>`;
-    const line = (arr, cls) => {
-      let len = 0;
-      for (let i = 1; i < arr.length; i++) len += Math.hypot(X(CAL.reads[i]) - X(CAL.reads[i - 1]), Y(arr[i]) - Y(arr[i - 1]));
-      const d = arr.map((v, i) => `${i ? 'L' : 'M'}${X(CAL.reads[i]).toFixed(1)} ${Y(v).toFixed(1)}`).join('');
-      let out = `<path class="line ${cls}" d="${d}" style="--len:${Math.ceil(len) + 2}"/>`;
-      arr.forEach((v, i) => {
-        out += `<circle class="dot ${cls}" style="--i:${i}" cx="${X(CAL.reads[i])}" cy="${Y(v)}" r="${cls === 'real' ? 9 : 10}"/>`;
-      });
-      return out;
-    };
-    s += line(CAL.real, 'real') + line(CAL.sim, 'sim');
-    s +=
-      `<g class="lg"><line x1="${m.l + 30}" x2="${m.l + 80}" y1="${m.t + 22}" y2="${m.t + 22}" stroke="var(--sa-ink)" stroke-width="5"/>` +
-      `<text x="${m.l + 94}" y="${m.t + 30}" style="font-size:23px;fill:var(--sa-ink);font-weight:600">Real reads, held-out</text>` +
-      `<line x1="${m.l + 30}" x2="${m.l + 80}" y1="${m.t + 62}" y2="${m.t + 62}" stroke="var(--sa-audit)" stroke-width="5"/>` +
-      `<circle cx="${m.l + 55}" cy="${m.t + 62}" r="9" fill="var(--sa-paper)" stroke="var(--sa-audit)" stroke-width="4"/>` +
-      `<text x="${m.l + 94}" y="${m.t + 70}" style="font-size:23px;fill:var(--sa-audit);font-weight:600">Simulator A</text></g>`;
-    host.innerHTML =
-      `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Exact strands vs reads per strand, real held-out reads and Simulator A">${s}</svg>` +
-      `<div class="callout3 frag" data-f="2" style="left:500px;top:200px">Within about 3 points at every read count</div>`;
-    host.style.position = 'relative';
-  }
-
   function statusBadge(entry, what) {
     const st = entry && isText(entry.status) ? entry.status.trim().toLowerCase() : null;
     const note = entry && isText(entry.note) ? ` <span class="muted" style="font-weight:500">${esc(entry.note)}</span>` : '';
@@ -868,25 +825,65 @@
     return `<span class="verdict v-pending">${icon('pending')}[RESULT: ${esc(what)}]</span>`;
   }
 
+  /* The firewall slide: one idea, Simulator B. The mechanism rows are the table in
+   * dnacodec/simulator_b.py; the measurement comes from results.js firewall.ab
+   * (docs/NUMBERS.md section 5), and B is the column that is never tuned on. */
+
+  const FW_MECH = [
+    ['Errors inside a read', 'independent, base by base', 'bursty, a two state chain'],
+    ['Homopolymers', 'a per base deletion multiplier', 'run level shortening events'],
+    ['Errors every read shares', 'lognormal per position', 'damaged stretches of the strand'],
+    ['Substitutions', 'uniform over the other three', 'transitions twice as likely'],
+    ['5 letter context table', 'fit on Microsoft reads', 'fit on DNAformer reads'],
+  ];
+
   function buildFirewall(R) {
-    const host = document.getElementById('firewall');
+    const grid = document.getElementById('fwgrid');
+    if (grid) {
+      grid.innerHTML =
+        `<div class="fwhead lab frag fade" data-f="1"></div>` +
+        `<div class="fwhead a frag fade" data-f="1"><b>Simulator A</b><em>what we tune on</em></div>` +
+        `<div class="fwhead b frag fade" data-f="2"><b>Simulator B</b><em>never tuned on, only ever checks</em></div>` +
+        FW_MECH.map((m, i) =>
+          `<div class="fwlab frag fade" data-f="1" style="--i:${i}">${m[0]}</div>` +
+          `<div class="fwa frag fade" data-f="1" style="--i:${i}">${m[1]}</div>` +
+          `<div class="fwb frag fade" data-f="2" style="--i:${i}">${m[2]}</div>`).join('');
+    }
+
+    const host = document.getElementById('fwres');
+    const foot = document.getElementById('fwfoot');
+    const AB = get(R, 'firewall.ab') || {};
+    const rows = Array.isArray(AB.rows) ? AB.rows : [];
     if (!host) return;
-    const F = (R && R.firewall) || {};
-    const steps = [
-      ['Test 1: Simulator A', 'Held-out seeds', statusBadge(F.simAHeldout, 'gain on held-out seeds')],
-      ['Test 2: Simulator B', 'Different mechanisms, context table from another dataset, never optimized on', statusBadge(F.simB, 'does the gain survive Simulator B')],
-      ['Test 3: Real reads', "The risk model's ranking on held-out real clusters", statusBadge(F.real, 'risk model ranking on real reads')],
-    ];
+    if (!rows.length) {
+      host.innerHTML = `<div class="pending-box" style="left:0;right:0;top:20px">${ph('the tier 2 change measured on Simulator A and on Simulator B')}</div>`;
+      if (foot) foot.innerHTML = '';
+      return;
+    }
+    const cell = (side, d, f) => {
+      if (!d || !isNum(d.diff)) return `<div class="fwcell frag fade" data-f="${f}">${ph('measured change')}</div>`;
+      return `<div class="fwcell ${side} frag fade" data-f="${f}">` +
+        `<span class="pts">${d.diff.toFixed(2)}<em> points</em></span>` +
+        `<span class="pair">${isNum(d.rules) ? `${d.rules.toFixed(2)}% <i>to</i> ${d.learned.toFixed(2)}%` : ''}</span>` +
+        (isText(d.ci) ? `<span class="ci">95% CI ${esc(d.ci)}</span>` : '') +
+        `</div>`;
+    };
     host.innerHTML =
-      `<h3 class="frag fade" data-f="3">Sim-to-real firewall</h3>` +
-      `<p class="fwsub frag fade" data-f="3">Optimized on Simulator A with train seeds only, then:</p>` +
-      steps
-        .map(
-          (s, i) =>
-            `<div class="fwstep" style="--i:${i}"><span class="stepno">${i + 1}</span>` +
-            `<div><div class="t">${s[0]}</div><div class="d">${s[1]}</div>${s[2] ? `<div class="st">${s[2]}</div>` : ''}</div></div>`
-        )
-        .join('');
+      `<p class="fwmetric frag fade" data-f="3">${esc(AB.metric || '')}<em>only the model that ranks the candidates changes</em></p>` +
+      rows.map((r, i) => {
+        const f = 3 + i;
+        return `<div class="fwrow"><div class="fwdec frag fade" data-f="${f}">${esc(r.decoder || '')}</div>` +
+          cell('a', r.a, f) + cell('b', r.b, f) + `</div>`;
+      }).join('');
+
+    if (foot) {
+      const b0 = rows[0] && rows[0].b;
+      const a0 = rows[0] && rows[0].a;
+      const ok = b0 && a0 && isNum(b0.diff) && isNum(a0.diff) && b0.diff <= a0.diff;
+      foot.innerHTML = ok
+        ? `<span class="pill2 gain frag fade" data-f="4">${icon('check')}The gain is no smaller on the channel we never touched</span>`
+        : `<span class="pill2 frag fade" data-f="4">Measured on both simulators</span>`;
+    }
   }
 
   /* ------------------------------------------------------------ slide 10: results */
@@ -1021,7 +1018,6 @@
       buildTier2Curve(R);
       buildFieldChart();
       buildCrossover(R);
-      buildCalibration();
       buildFirewall(R);
       buildVerdicts(R);
       buildResults(R);
