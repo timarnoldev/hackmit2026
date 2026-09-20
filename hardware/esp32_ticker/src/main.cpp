@@ -151,6 +151,14 @@ static const uint32_t C_GAIN = 0x39FF6E;     // --sa-gain, a correction
 static const uint32_t C_TBD = 0xFFE13D;      // --sa-tbd, no reads came back
 static const uint32_t C_WHITE = 0xFFFFFF;
 
+// The logo mark has its own four colours, which are not deck tokens: the mark does not
+// invert between themes, so these are the same values the SVGs carry.
+// marketing/logo/erbgut-mark-small.svg.
+static const uint32_t C_MARK_HELIX = 0x32C7DB;
+static const uint32_t C_MARK_A = 0xFEC746;  // the A/T base pair
+static const uint32_t C_MARK_C = 0xFC68D6;  // the C/G base pair
+static const uint32_t C_MARK_G = 0x5BD67C;  // the T/A base pair
+
 static inline uint32_t rgb(uint32_t hex) {
   return lcd.color888((hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF);
 }
@@ -761,20 +769,74 @@ static void drawHeader() {
   canvas.drawFastHLine(0, HEADER_H, LCD_WIDTH, rgb(C_RULE));
 }
 
+// ---------------------------------------------------------------- the logo mark
+
+// One lens of the double helix with three base pairs inside it, that is
+// marketing/logo/erbgut-mark-small.svg, in its own 64 unit box. The panel API has no
+// curves, so each half strand is walked as the cubic the SVG writes and stamped with
+// round dots, and each base pair is a rectangle capped with two circles. Only fillRect
+// and fillCircle are used, so this needs nothing the rest of the firmware does not.
+//
+// The full lockup is not attempted here. At 320x240 the binary digits and the base
+// letters would be two or three pixels tall, which is mush, so the box shows the mark
+// and sets the wordmark in the panel font underneath it.
+struct MarkArc {
+  float x0, y0, x1, y1, x2, y2, x3, y3;
+};
+static const MarkArc MARK_ARCS[4] = {
+    {1.5f, 32.0f, 11.56f, 13.04f, 23.77f, 8.0f, 32.0f, 8.0f},
+    {32.0f, 8.0f, 40.23f, 8.0f, 52.44f, 13.04f, 62.5f, 32.0f},
+    {1.5f, 32.0f, 11.56f, 50.96f, 23.77f, 56.0f, 32.0f, 56.0f},
+    {32.0f, 56.0f, 40.23f, 56.0f, 52.44f, 50.96f, 62.5f, 32.0f},
+};
+struct MarkBase {
+  float x, y, h;
+  uint32_t colour;
+};
+static const MarkBase MARK_BASES[3] = {
+    {10.5f, 18.0f, 28.0f, C_MARK_A},
+    {26.75f, 11.0f, 42.0f, C_MARK_C},
+    {43.0f, 18.0f, 28.0f, C_MARK_G},
+};
+static const float MARK_BASE_W = 10.5f;
+static const float MARK_STROKE = 9.0f;
+
+// lift[i] in 0..1 fades base pair i in from the paper colour, so the splash can breathe.
+static void drawMark(int ox, int oy, float k, const float lift[3]) {
+  const int r = (int)lroundf(MARK_STROKE * k * 0.5f);
+  const uint32_t helix = rgb(C_MARK_HELIX);
+  for (const MarkArc &a : MARK_ARCS) {
+    const int steps = 40;
+    for (int i = 0; i <= steps; ++i) {
+      const float t = (float)i / steps, u = 1.0f - t;
+      const float x = u * u * u * a.x0 + 3 * u * u * t * a.x1 + 3 * u * t * t * a.x2 +
+                      t * t * t * a.x3;
+      const float y = u * u * u * a.y0 + 3 * u * u * t * a.y1 + 3 * u * t * t * a.y2 +
+                      t * t * t * a.y3;
+      canvas.fillCircle(ox + (int)lroundf(x * k), oy + (int)lroundf(y * k), r, helix);
+    }
+  }
+  const int bw = (int)lroundf(MARK_BASE_W * k);
+  const int br = bw / 2;
+  for (int i = 0; i < 3; ++i) {
+    const MarkBase &b = MARK_BASES[i];
+    const uint32_t c = rgb(mix(mix(b.colour, C_PAPER, 0.5f), b.colour, lift[i]));
+    const int x = ox + (int)lroundf(b.x * k);
+    const int y = oy + (int)lroundf(b.y * k);
+    const int h = (int)lroundf(b.h * k);
+    canvas.fillCircle(x + br, y + br, br, c);
+    canvas.fillCircle(x + br, y + h - br, br, c);
+    canvas.fillRect(x, y + br, bw, h - 2 * br, c);
+  }
+}
+
 static void splash() {
   canvas.fillSprite(rgb(C_PAPER));
-  // the Erbgut mark: four bases on a strand, a dimension line over the run of two
-  const int bx = 116, by = 74;
-  const uint32_t bars[4] = {C_AUDIT, C_COST, C_GAIN, C_GAIN};  // A, C, G, G
+  // the Erbgut mark, centred over where the wordmark sits
   const float t = millis() / 600.0f;
-  for (int i = 0; i < 4; ++i) {
-    const float lift = 0.5f + 0.5f * sinf(t - i * 0.6f);
-    canvas.fillRect(bx + i * 24, by, 16, 46, rgb(mix(mix(bars[i], C_PAPER, 0.45f), bars[i], lift)));
-  }
-  canvas.fillRect(bx - 6, by + 46, 112, 4, rgb(C_INK));
-  canvas.fillRect(bx + 48, by - 16, 46, 2, rgb(C_INK));
-  canvas.fillRect(bx + 48, by - 22, 2, 14, rgb(C_INK));
-  canvas.fillRect(bx + 92, by - 22, 2, 14, rgb(C_INK));
+  float lift[3];
+  for (int i = 0; i < 3; ++i) lift[i] = 0.5f + 0.5f * sinf(t - i * 0.7f);
+  drawMark(103, 18, 1.7f, lift);
   canvas.setFont(&fonts::FreeSansBold18pt7b);
   canvas.setTextSize(1);
   canvas.setTextColor(rgb(C_INK), rgb(C_PAPER));

@@ -110,14 +110,15 @@
 
   /* ------------------------------------------------------------ logo mark */
 
+  /* marketing/logo/erbgut-mark-small.svg, inlined so the tokens in deck.css can
+     paint it. Same 64x64 box as before, so every .mark size rule still holds. */
   const MARK =
     '<svg class="mark" viewBox="0 0 64 64" aria-hidden="true">' +
-    '<rect class="tile" width="64" height="64" rx="14"/>' +
-    '<path class="strand s1" d="M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54" fill="none" stroke-width="3.4" stroke-linecap="round"/>' +
-    '<path class="strand s2" d="M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54" fill="none" stroke-width="3.4" stroke-linecap="round"/>' +
-    '<line class="rung r1" x1="24" y1="16" x2="40" y2="16" stroke-width="3" stroke-linecap="round"/>' +
-    '<line class="rung r2" x1="27" y1="30" x2="37" y2="30" stroke-width="3" stroke-linecap="round"/>' +
-    '<line class="rung r3" x1="24" y1="48" x2="40" y2="48" stroke-width="3" stroke-linecap="round"/>' +
+    '<path class="strand s1" d="M1.5 32C11.56 13.04 23.77 8 32 8C40.23 8 52.44 13.04 62.5 32" fill="none" stroke-width="9" stroke-linecap="round"/>' +
+    '<path class="strand s2" d="M1.5 32C11.56 50.96 23.77 56 32 56C40.23 56 52.44 50.96 62.5 32" fill="none" stroke-width="9" stroke-linecap="round"/>' +
+    '<rect class="base b1" x="10.5" y="18" width="10.5" height="28" rx="5.25"/>' +
+    '<rect class="base b2" x="26.75" y="11" width="10.5" height="42" rx="5.25"/>' +
+    '<rect class="base b3" x="43" y="18" width="10.5" height="28" rx="5.25"/>' +
     '</svg>';
 
   /* ------------------------------------------------------------ slide 1: ribbon */

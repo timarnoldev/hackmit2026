@@ -37,12 +37,12 @@ html[data-theme="dark"] {
   --tint-gain: rgba(57, 255, 110, 0.18);
   --tint-ink: rgba(230, 236, 234, 0.06);
   --shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 26px rgba(57, 255, 110, 0.07);
-  /* logo mark, inverted for dark backgrounds (logo-dark.svg) */
-  --mark-tile: #EAFFF3;
-  --mark-a: #10A6C4;
-  --mark-c: #C41477;
-  --mark-g: #0E9C55;
-  --mark-line: #08130B;
+  /* logo mark (marketing/logo/erbgut-mark-small.svg). The helix and the base
+     pairs read on either background, so these do not invert with the theme. */
+  --mark-helix: #32C7DB;
+  --mark-a: #FEC746;
+  --mark-c: #FC68D6;
+  --mark-g: #5BD67C;
   color-scheme: dark;
 }
 
@@ -66,11 +66,10 @@ html[data-theme="light"] {
   --tint-gain: rgba(14, 156, 85, 0.12);
   --tint-ink: rgba(8, 19, 11, 0.05);
   --shadow: 0 24px 50px rgba(19, 27, 32, 0.12);
-  --mark-tile: #08130B;
-  --mark-a: #39E6FF;
-  --mark-c: #FF2E9C;
-  --mark-g: #39FF6E;
-  --mark-line: #EAFFF3;
+  --mark-helix: #32C7DB;
+  --mark-a: #FEC746;
+  --mark-c: #FC68D6;
+  --mark-g: #5BD67C;
   color-scheme: light;
 }
 
@@ -249,11 +248,10 @@ html.results-broken .load-error { display: block; }
 
 /* ---------------------------------------------------------------- building blocks */
 
-.mark .tile { fill: var(--mark-tile); }
-.mark .s1 { stroke: var(--mark-a); }
-.mark .s2 { stroke: var(--mark-c); }
-.mark .r1, .mark .r3 { stroke: var(--mark-g); }
-.mark .r2 { stroke: var(--mark-t); }
+.mark .strand { stroke: var(--mark-helix); }
+.mark .b1 { fill: var(--mark-a); }
+.mark .b2 { fill: var(--mark-c); }
+.mark .b3 { fill: var(--mark-g); }
 
 /* nucleotides */
 .seq {

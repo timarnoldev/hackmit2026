@@ -198,7 +198,7 @@ p { margin: 0; }
   letter-spacing: -.03em;
   font-size: 19px;
 }
-.brand img { display: block; border-radius: 7px; }
+.brand img { display: block; }  /* the mark has no tile to round off */
 .top nav { display: flex; gap: 22px; }
 .top nav a {
   color: var(--muted);
@@ -413,10 +413,12 @@ html:not(.js) .cue { display: none; }
 /* ── close ────────────────────────────────────────────────────────────── */
 
 .wordmark {
+  /* the full lockup is nearly square (434x380), so it is sized by height here
+     rather than by width, or it swallows the close scene */
   display: block;
-  width: min(330px, 72vw);
+  width: min(232px, 60vw);
   height: auto;
-  margin-bottom: 34px;
+  margin-bottom: 26px;
 }
 .asks {
   display: flex;
