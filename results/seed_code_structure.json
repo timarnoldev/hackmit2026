@@ -1,0 +1,50 @@
+{
+  "n_strands": 1239,
+  "n_chunks": 953,
+  "codecs": {
+    "rules on, seed screened (standard)": {
+      "mean_degree": 9.83131557707829,
+      "min_coverage": 3,
+      "mean_coverage": 12.78174186778594,
+      "degree_1_strands": 25,
+      "seed_space": 4294967296
+    },
+    "rules on, payload only": {
+      "mean_degree": 10.366424535916062,
+      "min_coverage": 5,
+      "mean_coverage": 13.477439664218258,
+      "degree_1_strands": 22,
+      "seed_space": 4294967296
+    },
+    "rules on, constraint-satisfying seeds": {
+      "mean_degree": 10.250201775625504,
+      "min_coverage": 4,
+      "mean_coverage": 13.326337880377755,
+      "degree_1_strands": 33,
+      "seed_space": 2087378872
+    },
+    "rules off": {
+      "mean_degree": 11.966908797417272,
+      "min_coverage": 6,
+      "mean_coverage": 15.558237145855195,
+      "degree_1_strands": 29,
+      "seed_space": 4294967296
+    }
+  },
+  "null": {
+    "replicates": 300,
+    "mean_degree_mean": 10.244985203120796,
+    "mean_degree_sd": 0.83290280734062,
+    "mean_degree_p05": 9.035270379338177,
+    "mean_degree_p95": 11.593946731234867,
+    "min_coverage_mean": 3.736666666666667,
+    "min_coverage_sd": 1.1187018675457685,
+    "min_coverage_p05": 2.0,
+    "min_coverage_p95": 5.050000000000011
+  },
+  "seed_code": {
+    "valid_blocks": 2087378872,
+    "plain_blocks": 4294967296,
+    "bits_lost": 1.0409546637971552
+  }
+}

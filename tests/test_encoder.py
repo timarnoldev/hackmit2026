@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import time
 
 import numpy as np
 import pytest
 
 from dnacodec.encoder import (
+    SeedCodedSettings,
+    _Layout,
+    _seed_code_params,
+    _seed_rank,
+    _seed_unrank,
     encode,
     gc_fraction,
     max_run_length,
     payload_bits_per_base,
     recover,
     rule_scorer,
+    seed_code_bits_lost,
+    seed_code_size,
 )
 from dnacodec.seeds import train_seed
 from dnacodec.types import EncoderSettings, FileMeta
@@ -314,3 +322,126 @@ def test_through_simulated_channel():
     exact = np.mean([a == b for a, b in zip(decoded, enc.strands)])
     assert exact < 1.0  # the channel really corrupted or lost strands
     assert recover(decoded, enc.meta) == data
+
+
+# ------------------------------------------------- constraint-satisfying seed encoding
+
+
+SEED_CODED = SeedCodedSettings()
+
+
+def _check_seed_blocks(strands, settings):
+    """The seed block alone satisfies the rules, which is the whole point of the encoding."""
+    for s in strands:
+        block = s[: settings.seed_bases]
+        if settings.max_homopolymer is not None:
+            assert max_run_length(block) <= settings.max_homopolymer
+        if settings.gc_min is not None:
+            assert gc_fraction(block) >= settings.gc_min
+        if settings.gc_max is not None:
+            assert gc_fraction(block) <= settings.gc_max
+
+
+def test_seed_code_counts_match_brute_force():
+    """The DP has to count exactly the set a brute-force enumeration finds, and rank/unrank
+    has to be a bijection onto it, in lexicographic order."""
+    for n, max_run, gc_min, gc_max in [(6, 3, 0.4, 0.6), (5, 2, None, None), (4, 3, 0.5, 0.5)]:
+        settings = SeedCodedSettings(
+            strand_length=n + 20, seed_bases=n, max_homopolymer=max_run, gc_min=gc_min, gc_max=gc_max
+        )
+        params = _seed_code_params(settings)
+        valid = sorted(
+            "".join(t)
+            for t in itertools.product("ACGT", repeat=n)
+            if max_run_length("".join(t)) <= max_run
+            and (gc_min is None or gc_fraction("".join(t)) >= gc_min)
+            and (gc_max is None or gc_fraction("".join(t)) <= gc_max)
+        )
+        assert seed_code_size(settings) == len(valid)
+        assert [_seed_unrank(i, *params) for i in range(len(valid))] == valid
+        assert [_seed_rank(s, *params) for s in valid] == list(range(len(valid)))
+        # total and exact: every other string of that length is rejected, never mis-ranked
+        others = {"".join(t) for t in itertools.product("ACGT", repeat=n)} - set(valid)
+        assert all(_seed_rank(s, *params) is None for s in others)
+
+
+def test_seed_code_16mers_are_valid_and_roundtrip():
+    params = _seed_code_params(SEED_CODED)
+    size = seed_code_size(SEED_CODED)
+    assert size == 2_087_378_872  # 16-mers with no run > 3 and GC in [0.4, 0.6]
+    assert 1.0 < seed_code_bits_lost(SEED_CODED) < 1.1  # ~1.04 bits of the 32 given up
+    rng = np.random.default_rng(train_seed(31))
+    for index in rng.integers(0, size, 300).tolist():
+        block = _seed_unrank(int(index), *params)
+        assert len(block) == 16
+        assert max_run_length(block) <= SEED_CODED.max_homopolymer
+        assert SEED_CODED.gc_min <= gc_fraction(block) <= SEED_CODED.gc_max
+        assert _seed_rank(block, *params) == index
+
+
+def test_seed_code_roundtrips_and_obeys_the_rules():
+    data = _random_bytes(20_000, 32)
+    enc = encode(data, SEED_CODED)
+    _check_constraints(enc.strands, SEED_CODED)
+    _check_seed_blocks(enc.strands, SEED_CODED)
+    assert len(set(enc.strands)) == len(enc.strands)
+    assert recover(enc.strands, enc.meta) == data
+
+
+def test_seed_code_survives_dropout_and_corruption():
+    data = _random_bytes(20_000, 33)
+    enc = encode(data, SEED_CODED)
+    rng = np.random.default_rng(train_seed(34))
+    keep = [s for s in enc.strands if rng.random() > 0.15]
+    assert recover(keep, enc.meta) == data
+    # corrupted strands must be dropped, not decoded into a wrong file
+    broken = list(enc.strands)
+    for i in rng.choice(len(broken), 40, replace=False).tolist():
+        pos = int(rng.integers(0, len(broken[i])))
+        broken[i] = broken[i][:pos] + "ACGT"[(("ACGT".index(broken[i][pos])) + 1) % 4] + broken[i][pos + 1 :]
+    assert recover(broken, enc.meta) == data
+
+
+def test_seed_code_with_the_rules_off_is_the_plain_base4_seed():
+    """Degenerate case: with no rules every seed block is valid and the lexicographic rank is
+    the base-4 value, so the codec reproduces the standard one strand for strand."""
+    off = dict(max_homopolymer=None, gc_min=None, gc_max=None)
+    data = _random_bytes(5_000, 35)
+    assert (
+        encode(data, SeedCodedSettings(**off)).strands == encode(data, EncoderSettings(**off)).strands
+    )
+
+
+def test_seed_code_does_not_change_the_default_codec():
+    """seed_code defaults to off for plain EncoderSettings: every existing number reproduces."""
+    data = _random_bytes(5_000, 36)
+    assert encode(data, SeedCodedSettings(seed_code=False)).strands == encode(data, DEFAULT).strands
+
+
+def test_seed_code_counter_is_a_bijection_onto_the_seed_space():
+    layout = _Layout(SeedCodedSettings(strand_length=40, seed_bases=6))
+    assert sorted(layout.seed_from_counter(c) for c in range(layout.seed_space)) == list(
+        range(layout.seed_space)
+    )
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        SeedCodedSettings(strand_length=140, seed_bases=12),
+        SeedCodedSettings(strand_length=111, seed_bases=13, max_homopolymer=2),
+        SeedCodedSettings(strand_length=60, seed_bases=10, redundancy=0.0, gc_min=0.45, gc_max=0.55),
+    ],
+)
+def test_seed_code_other_settings(settings):
+    data = _random_bytes(5_000, 37)
+    enc = encode(data, settings)
+    _check_constraints(enc.strands, settings)
+    _check_seed_blocks(enc.strands, settings)
+    assert recover(enc.strands, enc.meta) == data
+
+
+def test_seed_code_impossible_constraints_raise_clearly():
+    with pytest.raises(ValueError, match="valid seed block"):
+        encode(b"hello", SeedCodedSettings(strand_length=40, seed_bases=4,
+                                           gc_min=0.6, gc_max=0.6))

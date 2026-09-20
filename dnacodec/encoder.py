@@ -32,6 +32,7 @@ import math
 import re
 import zlib
 from bisect import bisect_left
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Sequence
 
@@ -76,6 +77,13 @@ def _scramble(counter: int, bits: int) -> int:
         x = (x * (mult | 1)) & mask  # odd multiplier: bijective mod 2**bits
         x ^= x >> shift  # xorshift right: bijective
     return x
+
+
+def _to_bases(value: int, nbits: int, pad: int) -> Strand:
+    """Little helper: nbits (even) of value as nbits // 2 bases, via whole hex digits."""
+    h = format(value << pad, f"0{(nbits + pad) // 4}x")
+    s = "".join(map(_HEX_TO_BASES.__getitem__, h))
+    return s[: nbits // 2] if pad else s
 
 
 def _mask_bits(seed: int, nbits: int) -> int:
@@ -124,6 +132,163 @@ def _neighbors(seed: int, n_chunks: int) -> list[int]:
     return sorted(chosen)
 
 
+# ------------------------------------------------- constraint-satisfying seed encoding
+#
+# Standard construction: the seed is written into the first seed_bases bases as a plain base-4
+# number, so those bases have to pass the sequence rules like any other bases, and a droplet
+# whose seed happens to spell GGGG is thrown away. That screens the seed space, which is the
+# structural caveat documented in docs/LEARNED_RULES.md.
+#
+# seed_code=True replaces the base-4 writing with a rank/unrank over the set of seed_bases-mers
+# that satisfy the rules *by construction* (no run longer than max_homopolymer, GC fraction of
+# the block inside [gc_min, gc_max]). Every seed index then spells a legal seed block, so no
+# droplet is ever rejected for its seed, while the payload still gets the full benefit of the
+# rules. The price is seed space: the valid set is smaller than 4**seed_bases.
+#
+# With both rules off the valid set is all of 4**seed_bases and the lexicographic rank is exactly
+# the base-4 value, so seed_code=True then reproduces the standard strands bit for bit.
+
+
+@dataclass(frozen=True)
+class SeedCodedSettings(EncoderSettings):
+    """EncoderSettings plus the constraint-satisfying seed encoding switch.
+
+    It lives here and not in types.py because types.py is a shared interface this agent does not
+    own. Everything that reads settings uses getattr(settings, "seed_code", False), so plain
+    EncoderSettings keeps the old behaviour and every existing number reproduces.
+    """
+
+    seed_code: bool = True
+
+
+def _gc_window(n: int, settings: EncoderSettings) -> tuple[int, int]:
+    """GC counts in 0..n whose fraction passes the GC rule, as an inclusive range."""
+    lo, hi = 0, n
+    while lo <= hi and settings.gc_min is not None and lo / n < settings.gc_min:
+        lo += 1
+    while lo <= hi and settings.gc_max is not None and hi / n > settings.gc_max:
+        hi -= 1
+    return lo, hi
+
+
+def _seed_code_params(settings: EncoderSettings) -> tuple[int, int, int, int]:
+    n = settings.seed_bases
+    max_run = n if settings.max_homopolymer is None else min(settings.max_homopolymer, n)
+    if max_run < 1:
+        raise ValueError("max_homopolymer must be >= 1 or None")
+    lo, hi = _gc_window(n, settings)
+    return n, max_run, lo, hi
+
+
+@lru_cache(maxsize=16)
+def _seed_code_table(n: int, max_run: int, gc_lo: int, gc_hi: int) -> tuple:
+    """tab[i][l][r][g]: how many ways positions i..n-1 can be filled so the whole block is valid,
+    given the previous base l (4 = none), the current run length r and the GC count g so far.
+
+    tab[0][4][0][0] is the number of valid blocks. Exact integer DP, ~5k states."""
+    tab = [
+        [[[0] * (n + 1) for _ in range(max_run + 1)] for _ in range(5)] for _ in range(n + 1)
+    ]
+    for l in range(5):
+        for r in range(max_run + 1):
+            for g in range(n + 1):
+                tab[n][l][r][g] = 1 if gc_lo <= g <= gc_hi else 0
+    for i in range(n - 1, -1, -1):
+        nxt = tab[i + 1]
+        for l in range(5):
+            for r in range(max_run + 1):
+                for g in range(n + 1):
+                    total = 0
+                    for b in range(4):
+                        if b == l:
+                            r2 = r + 1
+                            if r2 > max_run:
+                                continue
+                        else:
+                            r2 = 1
+                        g2 = g + (1 if b in (1, 2) else 0)  # C and G in "ACGT"
+                        if g2 <= n:
+                            total += nxt[b][r2][g2]
+                    tab[i][l][r][g] = total
+    return tuple(tuple(tuple(tuple(g) for g in r) for r in l) for l in tab)
+
+
+def seed_code_size(settings: EncoderSettings) -> int:
+    """How many distinct seeds the constraint-satisfying seed encoding can express."""
+    n, max_run, gc_lo, gc_hi = _seed_code_params(settings)
+    return _seed_code_table(n, max_run, gc_lo, gc_hi)[0][4][0][0]
+
+
+def seed_code_bits_lost(settings: EncoderSettings) -> float:
+    """Seed space given up against the plain base-4 seed, in bits."""
+    size = seed_code_size(settings)
+    if size <= 0:
+        raise ValueError("no seed block satisfies the constraints")
+    return 2 * settings.seed_bases - math.log2(size)
+
+
+def _seed_unrank(index: int, n: int, max_run: int, gc_lo: int, gc_hi: int) -> Strand:
+    """The index-th valid block in lexicographic order over ACGT. Inverse of _seed_rank."""
+    tab = _seed_code_table(n, max_run, gc_lo, gc_hi)
+    out: list[str] = []
+    l, r, g = 4, 0, 0
+    for i in range(n):
+        nxt = tab[i + 1]
+        for b in range(4):
+            if b == l:
+                r2 = r + 1
+                if r2 > max_run:
+                    continue
+            else:
+                r2 = 1
+            g2 = g + (1 if b in (1, 2) else 0)
+            if g2 > n:
+                continue
+            count = nxt[b][r2][g2]
+            if index < count:
+                out.append("ACGT"[b])
+                l, r, g = b, r2, g2
+                break
+            index -= count
+        else:
+            raise ValueError("seed index out of range for the constraint-satisfying seed code")
+    return "".join(out)
+
+
+def _seed_rank(block: str, n: int, max_run: int, gc_lo: int, gc_hi: int) -> int | None:
+    """Index of a valid block, or None if the block violates the constraints. Total and exact."""
+    tab = _seed_code_table(n, max_run, gc_lo, gc_hi)
+    index = 0
+    l, r, g = 4, 0, 0
+    for i, ch in enumerate(block):
+        base = "ACGT".find(ch)
+        if base < 0:
+            return None
+        nxt = tab[i + 1]
+        for b in range(base):
+            if b == l:
+                r2 = r + 1
+                if r2 > max_run:
+                    continue
+            else:
+                r2 = 1
+            g2 = g + (1 if b in (1, 2) else 0)
+            if g2 <= n:
+                index += nxt[b][r2][g2]
+        if base == l:
+            r += 1
+            if r > max_run:
+                return None
+        else:
+            r, l = 1, base
+        g += 1 if base in (1, 2) else 0
+        if g > n:
+            return None
+    if not gc_lo <= g <= gc_hi:
+        return None
+    return index
+
+
 class _Layout:
     """Bit layout derived from settings."""
 
@@ -144,7 +309,32 @@ class _Layout:
         self.chunk_bytes = (self.chunk_bits + 7) // 8
         self.total_bits = 2 * L
         self.hex_pad = (-self.total_bits) % 4  # pad so the bit string is whole hex digits
+        self.payload_pad = (-self.payload_bits) % 4
         self.seed_bytes = (self.seed_field_bits + 7) // 8
+        self.seed_coded = bool(getattr(settings, "seed_code", False))
+        if self.seed_coded:
+            self.seed_params = _seed_code_params(settings)
+            size = _seed_code_table(*self.seed_params)[0][4][0][0]
+            if size < 2:
+                raise ValueError(
+                    f"the constraints leave {size} valid seed blocks of {sb} bases: "
+                    "relax them or raise seed_bases"
+                )
+            self.seed_space = min(size, 1 << MAX_SEED_BITS)
+            self.seed_bits = min(self.seed_space.bit_length(), MAX_SEED_BITS)
+            self.walk_bits = max(1, (self.seed_space - 1).bit_length())
+        else:
+            self.seed_space = 1 << self.seed_bits
+            self.walk_bits = self.seed_bits
+
+    def seed_from_counter(self, counter: int) -> int:
+        """Bijection from a running counter onto the seed space, so consecutive strands get
+        unrelated seeds. Cycle walking keeps it a bijection when the space is not a power of
+        two, which is the normal case for the constraint-satisfying code."""
+        seed = _scramble(counter, self.walk_bits)
+        while seed >= self.seed_space:  # cycle walking, a bijection on [0, seed_space)
+            seed = _scramble(seed, self.walk_bits)
+        return seed
 
     def n_chunks(self, n_bytes: int) -> int:
         return max(1, math.ceil((n_bytes + FILE_CRC_BYTES) * 8 / self.chunk_bits))
@@ -157,6 +347,10 @@ class _Layout:
 
     def to_strand(self, seed: int, chunk: int) -> Strand:
         payload = ((chunk << CRC_BITS) | self.crc(seed, chunk)) ^ _mask_bits(seed, self.payload_bits)
+        if self.seed_coded:
+            return _seed_unrank(seed, *self.seed_params) + _to_bases(
+                payload, self.payload_bits, self.payload_pad
+            )
         x = ((seed << self.payload_bits) | payload) << self.hex_pad
         h = format(x, f"0{(self.total_bits + self.hex_pad) // 4}x")
         s = "".join(map(_HEX_TO_BASES.__getitem__, h))
@@ -168,11 +362,19 @@ class _Layout:
             return None
         if not _VALID.fullmatch(strand):
             return None
-        x = int(strand.translate(_TO_DIGITS), 4)
-        seed = x >> self.payload_bits
-        if seed >> self.seed_bits:
-            return None  # seed field larger than any seed we emit
-        payload = (x & ((1 << self.payload_bits) - 1)) ^ _mask_bits(seed, self.payload_bits)
+        if self.seed_coded:
+            sb = self.strand_length - self.payload_bits // 2
+            seed = _seed_rank(strand[:sb], *self.seed_params)
+            if seed is None or seed >= self.seed_space:
+                return None  # the seed block is not one this encoding can emit
+            raw = int(strand[sb:].translate(_TO_DIGITS), 4)
+        else:
+            x = int(strand.translate(_TO_DIGITS), 4)
+            seed = x >> self.payload_bits
+            if seed >> self.seed_bits:
+                return None  # seed field larger than any seed we emit
+            raw = x & ((1 << self.payload_bits) - 1)
+        payload = raw ^ _mask_bits(seed, self.payload_bits)
         chunk, crc = payload >> CRC_BITS, payload & ((1 << CRC_BITS) - 1)
         if self.crc(seed, chunk) != crc:
             return None
@@ -279,7 +481,7 @@ def encode(data: bytes, settings: EncoderSettings, scorer: Scorer | None = None)
         )
     homo_re = _homopolymer_re(settings)
     max_tries = max(MIN_TRIES_PER_STRAND, TRIES_PER_CANDIDATE * k)
-    seed_space = 1 << layout.seed_bits
+    seed_space = layout.seed_space
 
     def next_seed() -> int:
         nonlocal counter
@@ -287,7 +489,7 @@ def encode(data: bytes, settings: EncoderSettings, scorer: Scorer | None = None)
             raise ValueError(
                 f"seed space exhausted ({seed_space} seeds): increase seed_bases or relax constraints"
             )
-        seed = _scramble(counter, layout.seed_bits)
+        seed = layout.seed_from_counter(counter)
         counter += 1
         return seed
 

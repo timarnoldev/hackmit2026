@@ -20,6 +20,7 @@ results/*
 !results/run6/
 !results/rule_recovery_curve_*.json
 !results/tier2_recovery_curve_*.json
+!results/seed_code_*.json
 !results/decoder_real_heldout.json
 .DS_Store
 /.claude/worktrees
