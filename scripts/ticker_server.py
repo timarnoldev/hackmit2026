@@ -126,21 +126,32 @@ def load_source(source: str, max_bytes: int) -> tuple[bytes, str]:
 # ---------------------------------------------------------------- decoder
 
 
-class DecodeBackend:
-    """Classic draft plus, when available, the learned correction on top of it.
+# The accurate PolishDecoder variant (see docs/MODELS.md and scripts/polish_experiments.py).
+# Accuracy and visible fixes matter more than throughput here: the ticker decodes a handful
+# of clusters per second, not a benchmark.
+POLISH_KWARGS = dict(
+    rounds=2,
+    drafts=3,
+    select="confidence",
+    mode="gain",
+    thresholds={"low_max_reads": 3, "low": (0.5, -0.5), "high": (0.0, -1.0)},
+    escalate=-0.001,
+)
 
-    Always exposes the draft, so the stream can show what the model changed. Without the
-    model the draft is the answer and `has_model` is False.
+
+class DecodeBackend:
+    """Classic majority vote, plus the learned polisher on top of it when it is available.
+
+    Both answers are kept per cluster, so the stream can show exactly what the model changed
+    on top of the classic decoder. Without a checkpoint the classic answer is the answer and
+    `has_model` is False.
     """
 
     def __init__(self, checkpoint: str | None = None) -> None:
         self.has_model = False
         self.name = "majority vote"
         self.note = ""
-        self._model = None
-        self._thresholds = None
-        self._device = None
-        self._polish = None
+        self._decoder = None
         paths = [Path(checkpoint)] if checkpoint else list(DEFAULT_CHECKPOINTS)
         found = next((p for p in paths if p.exists()), None)
         if found is None:
@@ -149,15 +160,13 @@ class DecodeBackend:
                          "decodes and the fixes shown are the read errors the vote resolved.")
             return
         try:
-            from dnacodec.model import polish as polish_mod
+            from dnacodec.model.polish import PolishDecoder
 
-            self._polish = polish_mod
-            self._model, ckpt = polish_mod.load_checkpoint(found, "cpu")
-            self._model.eval()
-            self._thresholds = ckpt.get("thresholds") or polish_mod.DEFAULT_THRESHOLDS
+            self._decoder = PolishDecoder(found, **POLISH_KWARGS)
             self.has_model = True
-            self.name = "polish (classic draft plus CNN)"
-            self.note = f"Polish checkpoint loaded from {found}."
+            self.name = "polish (majority vote plus CNN)"
+            self.note = (f"Polish checkpoint loaded from {found.name}. The fixes shown are the "
+                         "edits the model made to the classic majority vote answer.")
         except Exception as exc:  # noqa: BLE001  torch missing, bad checkpoint, anything
             self.note = (f"Polish checkpoint at {found} could not be loaded "
                          f"({type(exc).__name__}: {exc}), so the classic majority vote decodes "
@@ -168,7 +177,11 @@ class DecodeBackend:
         return "model" if self.has_model else "vote"
 
     def decode_one(self, cluster: Cluster, strand_length: int) -> tuple[str | None, str | None]:
-        """(classic draft, final strand). Both None for an empty cluster."""
+        """(classic majority vote answer, final strand). Both None for an empty cluster.
+
+        The classic answer is what dnacodec.baseline.MajorityVoteDecoder returns for this
+        cluster, so the difference between the two is exactly what the model contributed.
+        """
         if not any(cluster):
             return None, None
         draft = _classic_draft(cluster, strand_length)
@@ -176,8 +189,7 @@ class DecodeBackend:
             return None, None
         if not self.has_model:
             return draft, draft
-        probs = self._polish.predict_probs(self._model, [cluster], strand_length, 1, self._device)
-        final = self._polish.edits_from_probs(1, probs, strand_length, self._thresholds)[0]
+        final = self._decoder.decode([cluster], strand_length)[0]
         return draft, (final if final is not None else draft)
 
 
@@ -504,12 +516,15 @@ class ReplayEngine:
             self.set_rate(float(kwargs["rate"]))
 
     def hello(self) -> dict[str, Any]:
-        for e in self.events:
-            if e.get("t") == "hello":
-                out = dict(e)
-                out["replay"] = str(self.path.name)
-                return out
-        return {"t": "hello", "v": PROTOCOL_VERSION, "replay": str(self.path.name)}
+        """The recorded hello, with the pacing text corrected to this replay's own clock."""
+        out = next((dict(e) for e in self.events if e.get("t") == "hello"),
+                   {"t": "hello", "v": PROTOCOL_VERSION})
+        rate = self.rate or 4.0
+        out["replay"] = str(self.path.name)
+        out["rate"] = rate
+        out["paced"] = (f"Replaying a recorded decode at {rate:g} strands per second. The events "
+                        "are exactly the ones a live run produced; only the clock is new.")
+        return out
 
     def run(self) -> None:
         while not self.stop.is_set():
@@ -521,7 +536,7 @@ class ReplayEngine:
                 out = dict(event)
                 out.pop("dt", None)
                 if out.get("t") == "hello":
-                    out["replay"] = self.path.name
+                    out = self.hello()
                 if "st" in out:
                     self.last_stats = out["st"]
                 self.emit(out)
@@ -589,6 +604,10 @@ class Hub:
         self._lock = threading.Lock()
         self._history: list[dict] = []
         self._backlog = backlog
+        self.engine: Any = None  # set once the engine exists, for late subscribers
+
+    def engine_hello(self) -> dict:
+        return self.engine.hello() if self.engine is not None else {"t": "hello", "v": PROTOCOL_VERSION}
 
     def subscribe(self, maxsize: int = 200) -> queue.Queue:
         q: queue.Queue = queue.Queue(maxsize=maxsize)
@@ -603,7 +622,7 @@ class Hub:
 
     def publish(self, event: dict) -> None:
         with self._lock:
-            if event.get("t") in ("hello", "pass"):
+            if event.get("t") == "pass":  # hello is rebuilt live for every new subscriber
                 self._history = [e for e in self._history if e.get("t") != event.get("t")]
                 self._history.append(event)
                 self._history = self._history[-8:]
@@ -644,7 +663,8 @@ class SerialSender:
     The decode never waits for the box: if the write would block, the event is dropped.
 
     The box may send single characters back: 'p' pause, 'r' resume, '+' faster, '-' slower,
-    '?' resend the hello event.
+    '?' resend the hello event, and '.' once a second as a heartbeat. The heartbeat is the
+    only proof that the firmware is running and reading, so it is tracked but never acted on.
     """
 
     RECONNECT_SECONDS = 1.5
@@ -661,7 +681,8 @@ class SerialSender:
         self.port: str | None = None
         self.connected = False
         self.last_error = ""
-        self._rx = b""
+        self.last_rx: float = 0.0  # when the box last said anything
+        self.beats = 0
 
     # -------------------------------------------------- port handling
 
@@ -738,8 +759,17 @@ class SerialSender:
                 return
 
     def _handshake(self) -> None:
-        """Tell the box a stream is starting, and resend the last hello and pass events."""
+        """Tell the box a stream is starting, then send it what it needs to draw a header."""
         self._write_line({"t": "hi", "v": PROTOCOL_VERSION})
+        self._resend()
+
+    def _resend(self) -> None:
+        """The hello and the current pass again, for a box that just asked with '?'.
+
+        Deliberately without the "hi" line: the box answers "hi" with '?', so replying to a
+        '?' with another "hi" would bounce the two forever.
+        """
+        self._write_line(compact_event(self.hub.engine_hello(), self.visible))
         for event in self.hub.history():
             self._write_line(compact_event(event, self.visible))
 
@@ -774,8 +804,12 @@ class SerialSender:
             return
         if not chunk:
             return
+        self.last_rx = time.monotonic()
         for byte in chunk:
             ch = chr(byte)
+            if ch == ".":
+                self.beats += 1
+                continue
             if ch in "pr+-?":
                 try:
                     self.control(ch)
@@ -965,6 +999,10 @@ class App:
                 "connected": bool(self.sender and self.sender.connected),
                 "port": (self.sender.port if self.sender else None),
                 "error": (self.sender.last_error if self.sender else ""),
+                # the box heartbeats once a second; silence for three means it is not running
+                "box_alive": bool(self.sender and self.sender.last_rx
+                                  and time.monotonic() - self.sender.last_rx < 3.0),
+                "beats": (self.sender.beats if self.sender else 0),
             },
         }
 
@@ -1006,7 +1044,7 @@ class App:
         elif ch == "-":
             self.control({"action": "speed", "rate": self.engine.config.rate / 1.5})
         elif ch == "?" and self.sender is not None:
-            self.sender._handshake()
+            self.sender._resend()
 
 
 # ---------------------------------------------------------------- entry point
@@ -1017,9 +1055,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8777)
     p.add_argument("--channel", default="nanopore_budget", help=f"one of {list_profiles()}")
-    p.add_argument("--reads", type=float, default=6.0, help="reads per strand (profile coverage_mean)")
-    p.add_argument("--rate", type=float, default=4.0, help="strands per second released to the stream")
-    p.add_argument("--file", default="message", help="'message', 'image', or a path to a file")
+    p.add_argument("--reads", type=float, default=TickerConfig.reads_per_strand, help="reads per strand (profile coverage_mean)")
+    p.add_argument("--rate", type=float, default=TickerConfig.rate, help="strands per second released to the stream")
+    p.add_argument("--file", default=TickerConfig.source, help="'message', 'image', or a path to a file")
     p.add_argument("--max-bytes", type=int, default=4096)
     p.add_argument("--checkpoint", default=None, help="polish checkpoint; default looks in checkpoints/polish/")
     p.add_argument("--serial-port", default=None, help="default: the first /dev/cu.usbmodem*")
@@ -1069,6 +1107,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if engine.backend.note:
             print(f"  {engine.backend.note}")
 
+    hub.engine = engine
     app = App(engine, hub, None, verbose=args.verbose)
     sender = None
     if not args.no_serial:

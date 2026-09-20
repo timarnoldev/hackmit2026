@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Erbgut live decode</title>
 <meta name="description" content="A live ticker of a real DNA decode: noisy reads in, corrected strands out.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23E6ECEA'/%3E%3Crect x='5' y='10' width='4' height='12' fill='%233A3FC2'/%3E%3Crect x='11' y='10' width='4' height='12' fill='%23B02A63'/%3E%3Crect x='17' y='10' width='4' height='12' fill='%230B7465'/%3E%3Crect x='23' y='10' width='4' height='12' fill='%230B7465'/%3E%3Crect x='4' y='22' width='24' height='2' fill='%23131B20'/%3E%3C/svg%3E">
 <style>
 /* Erbgut live decode ticker. Self contained, dark, built for a projector.
    Fonts come from the deck when this page is served by scripts/ticker_server.py
@@ -42,8 +43,9 @@
   --tint-gain: rgba(79, 214, 181, 0.13);
   --sans: "SA Sans", "Instrument Sans", system-ui, -apple-system, sans-serif;
   --mono: "SA Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --gutter: 132px;
-  --cell: clamp(9px, calc((100vw - var(--gutter) - 72px) / 38), 40px);
+  --gutter: 118px;
+  --verdict: 300px;  /* room for the verdict beside the strand */
+  --cell: clamp(9px, calc((100vw - var(--gutter) - var(--verdict) - 56px) / 38), 40px);
   color-scheme: dark;
 }
 
@@ -103,7 +105,8 @@ header {
   letter-spacing: -0.005em;
 }
 .stat.ok .v { color: var(--sa-gain); }
-.stat.fix .v { color: var(--sa-cost); }
+.stat.err .v { color: var(--sa-cost); }
+.stat.fix .v { color: var(--sa-gain); }
 .stat.reads .v { color: var(--sa-audit); }
 
 .progress { height: 4px; background: var(--sa-rule); border-radius: 2px; overflow: hidden; }
@@ -135,7 +138,7 @@ main::after {
   to { opacity: 1; transform: none; }
 }
 
-.line { display: flex; align-items: center; gap: 10px; height: calc(var(--cell) * 1.34); }
+.line { display: flex; align-items: center; gap: 10px; height: calc(var(--cell) * 1.3); }
 .rl {
   width: var(--gutter); flex: none; text-align: right;
   font-family: var(--mono); font-size: clamp(9px, 0.76vw, 14px); color: var(--sa-muted);
@@ -179,7 +182,8 @@ main::after {
 .verdict.n { color: var(--sa-cost); }
 .verdict.t { color: var(--sa-tbd); }
 
-.gap { color: var(--sa-muted); font-family: var(--mono); font-size: clamp(9px, 0.7vw, 13px); margin-left: 10px; }
+.gap { color: var(--sa-muted); font-family: var(--mono); font-size: clamp(9px, 0.7vw, 13px);
+  margin-left: 10px; white-space: nowrap; }
 
 /* ---------------------------------------------------------------- footer */
 
@@ -217,6 +221,7 @@ body.hover .controls { opacity: 1; }
     <div class="badges">
       <span class="badge" id="b-file">no file yet</span>
       <span class="badge" id="b-channel">channel</span>
+      <span class="badge" id="b-files">0 files back</span>
       <span class="badge model" id="b-decoder">decoder</span>
       <span class="badge down" id="b-link">connecting</span>
     </div>
@@ -224,9 +229,9 @@ body.hover .controls { opacity: 1; }
   <div class="stats">
     <div class="stat"><div class="v" id="s-done">0</div><div class="k">strands decoded</div></div>
     <div class="stat ok"><div class="v" id="s-acc">0<span class="u">%</span></div><div class="k">exactly right</div></div>
-    <div class="stat fix"><div class="v" id="s-fix">0</div><div class="k" id="k-fix">read errors corrected</div></div>
+    <div class="stat err"><div class="v" id="s-err">0</div><div class="k">errors in the reads shown</div></div>
+    <div class="stat fix"><div class="v" id="s-fix">0</div><div class="k" id="k-fix">fixes the model applied</div></div>
     <div class="stat reads"><div class="v" id="s-reads">0</div><div class="k">reads per strand</div></div>
-    <div class="stat"><div class="v" id="s-files">0</div><div class="k" id="k-files">files brought back exactly</div></div>
   </div>
   <div class="progress" id="prog"><i></i></div>
 </header>
@@ -257,7 +262,7 @@ body.hover .controls { opacity: 1; }
    the first letters that fit a 320 x 240 screen, which is what the footer note says. */
 
 const VISIBLE = 38;      // letters per line, the same window the box shows
-const MAX_BLOCKS = 9;    // strands kept in the DOM; older ones are removed
+const MAX_BLOCKS = 8;    // strands kept in the DOM; older ones are removed
 const params = new URLSearchParams(location.search);
 const BASE = params.get("server") || "";
 
@@ -308,11 +313,11 @@ function addStrand(e) {
       html += `<div class="line"><div class="rl">read ${j + 1}</div>` +
               `<div class="seq">${seqHtml(r.s, r.m)}</div></div>`;
     });
-    const extra = e.nr > e.reads.length ? `<span class="gap">+${e.nr - e.reads.length} more reads</span>` : "";
+    const extra = e.nr > e.reads.length ? `<span class="gap">+${e.nr - e.reads.length} reads</span>` : "";
     const verdict = e.ok
       ? `<span class="verdict y">exact</span>`
-      : `<span class="verdict n">wrong, the checksum catches it</span>`;
-    const fixes = e.nfix > 0 ? `<span class="gap">${e.nfix} model fix${e.nfix === 1 ? "" : "es"}</span>` : "";
+      : `<span class="verdict n">wrong, caught</span>`;
+    const fixes = e.nfix > 0 ? `<span class="gap">${e.nfix} fix${e.nfix === 1 ? "" : "es"}</span>` : "";
     html += `<div class="line cons"><div class="rl">strand ${no}</div>` +
             `<div class="seq">${seqHtml(e.cons, e.fix)}</div>${verdict}${fixes}${extra}</div>`;
     block.innerHTML = html;
@@ -330,9 +335,11 @@ function setStats(st) {
   if (!st) return;
   el("s-done").textContent = fmt(st.done);
   el("s-acc").innerHTML = Math.round((st.acc || 0) * 100) + '<span class="u">%</span>';
-  el("s-fix").textContent = fmt(layer === "model" ? (st.mfix || 0) + (st.rfix || 0) : st.rfix);
+  el("s-err").textContent = fmt(st.rfix);
+  el("s-fix").textContent = fmt(st.mfix);
   el("s-reads").textContent = (st.rps || 0).toFixed(1);
-  el("s-files").textContent = fmt(st.rec);
+  el("b-files").textContent = fmt(st.rec) + (st.rec === 1 ? " file back exactly" : " files back exactly");
+  el("b-files").className = "badge" + (st.rec > 0 ? " live" : "");
   const bar = el("prog");
   bar.firstElementChild.style.width = Math.round((st.prog || 0) * 100) + "%";
   bar.classList.toggle("done", (st.prog || 0) >= 0.999);
@@ -347,11 +354,10 @@ function onEvent(e) {
       el("b-decoder").textContent = "decoder: " + (e.decoder || "?");
       el("b-channel").textContent = (e.channel || "") + " · " + (e.reads_per_strand || 0) + " reads per strand";
       el("k-fix").textContent = layer === "model"
-        ? "errors the vote and the model fixed"
-        : "read errors the vote corrected";
-      const replay = e.replay ? `Replaying a recorded run (${e.replay}). ` : "";
-      el("note").textContent = replay + (e.paced || "") + " " + (e.trimmed || "") +
-        (e.note ? " " + e.note : "");
+        ? "fixes the model applied"
+        : "model fixes, no checkpoint loaded";
+      el("note").textContent = [e.paced, e.trimmed, e.note].filter(Boolean).join(" ");
+      el("b-link").title = e.replay ? "replaying " + e.replay : "live";
       state.rate = e.rate || state.rate;
       break;
     }
