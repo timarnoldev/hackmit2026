@@ -254,37 +254,66 @@ The deck self-hosts both as woff2 in `marketing/deck/fonts/`, so it works with n
 
 ### Logo
 
-The mark lives in a 64 unit square: a tile with `rx="14"`, two strands stroked at 3.4 with round caps, two rungs stroked at 3.
+The artwork is a DNA double helix drawn as two crossing cyan ribbons, with four base pairs
+held in the middle lens as rounded capsules, letters in black: **A/T** yellow, **G/C**
+green, **C/G** pink, **T/A** green. Two more capsule pairs, pink and yellow, sit under the
+crossings at each end without letters. Binary digits scatter above and below the centre,
+because the point of the whole project is data written into a strand. The wordmark
+**erbgut**, lowercase, sits underneath.
+
+The master is `marketing/logo/erbgut-logo-source.jpeg`. Everything shipped is vector,
+rebuilt from it by `marketing/logo/build_logo.py`, which is where the geometry lives:
 
 ```
-strand A  M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54
-strand C  M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54
-rungs G   x 24 to 40, at y 16 and y 48
+helix        two ribbons, stroke 25, crossing at x 115 and x 319 of a 434 unit box
+             half separation 64.5 at the centre lobe, 52.8 at the two end lobes
+base pairs   rounded capsules 22.5 to 23 wide, fully rounded ends
+type         Instrument Sans, outlined: 700 for the base letters and the binary,
+             600 at -0.05em for the wordmark
 ```
 
-**The tile always contrasts with the page, and the strands invert with it:**
+| Role | Value |
+|---|---|
+| Helix | `#32C7DB` |
+| A/T capsule | `#FEC746` |
+| G/C and T/A capsules | `#5BD67C` |
+| C/G capsule | `#FC68D6` |
+| Base letters | `#101418` |
+| Binary, light background | `#101418` |
+| Binary, dark background | `#E6F6F8` |
+| Wordmark, light background | `#4F4F4F` |
+| Wordmark, dark background | `#F2F7F6` |
 
-| On | Tile | Strand A | Strand C | Rungs G |
-|---|---|---|---|---|
-| A dark page | `#EAFFF3` | `#10A6C4` | `#C41477` | `#0E9C55` |
-| A light page | `#08130B` | `#39E6FF` | `#FF2E9C` | `#39FF6E` |
+**The mark does not invert.** The helix and the capsules carry their own colours on any
+background; only the binary and the wordmark change, which is the whole difference between
+`erbgut-logo.svg` and `erbgut-logo-dark.svg`.
 
-The wordmark is Instrument Sans 600 at 0.89 of the mark's height, tracking -0.03em, with a gap of 0.22 of the mark's height between them, cap height centered on the mark. In the SVG files it is converted to outlines from the deck's own font file, so it renders the same through an `<img>` tag, offline, and in print.
+The wordmark is Instrument Sans 600 at tracking -0.05em, optically centred on the helix. In
+every SVG it is converted to outlines from the repository's own font file, so it renders the
+same through an `<img>` tag, offline, and in print.
 
 | File | Use |
 |---|---|
-| `logo.svg` | Full logo, mark plus wordmark, on light backgrounds |
-| `logo-dark.svg` | Full logo on dark backgrounds |
-| `logo-mark.svg` | Mark only: favicons, avatars, the ESP32-S3-BOX-3 splash screen |
+| `logo/erbgut-logo.svg` | Full lockup on light backgrounds. The primary asset |
+| `logo/erbgut-logo-dark.svg` | Full lockup on dark backgrounds |
+| `logo/erbgut-mark.svg` | One lens with its four lettered base pairs. Avatars, the deck footer, anywhere at 48 px and up |
+| `logo/erbgut-mark-small.svg` | One lens, three fatter capsules, no letters. Favicons, the site header, the ESP32-S3-BOX-3 splash |
+| `logo.svg`, `logo-dark.svg`, `logo-mark.svg` | Copies at the old paths, so existing links keep working |
+| `site/assets/logo.svg`, `mark.svg`, `favicon.svg` | The site's copies |
 
 ### Usage rules
 
-- **Clear space:** at least half the mark's height on every side.
-- **Minimum size:** mark 24 px (below that the crossover blurs into a blob; it still reads as a colored tile at 16 px). Full logo 120 px wide.
-- **Backgrounds:** `logo.svg` on paper, surface or white. `logo-dark.svg` on `--sa-paper` dark or any background darker than `#1B4A2E`. Never on photos, busy gradients or a mid-tone.
-- **Don't** recolor the strands, swap which strand is on top, rotate or stretch the mark, add a glow or a drop shadow, or set the wordmark in another face.
-- **Pending values** are always Tbd colored and dashed, never styled like a real number.
-- **Verdict colors** (Cost, Gain) are only used for verdicts and data, never as decoration.
+- **Clear space:** at least half the helix's stroke width on every side of the lockup.
+- **Minimum size:** the lettered mark holds down to about 48 px; below that the base letters
+  close up, so use `erbgut-mark-small.svg`, which is drawn for 16 to 32 px. Full lockup 180 px
+  wide.
+- **Backgrounds:** paper, surface, white, or anything darker than `#1B4A2E` with the dark
+  lockup. Never on photos, busy gradients or a mid-tone.
+- **Don't** recolour the helix or the capsules, reorder the base pairs, rotate or stretch the
+  artwork, add a glow or a drop shadow, or set the wordmark in another face.
+- **Placeholders** are always Tbd coloured and dashed, never styled like a real number.
+- **Verdict colours** (Cost, Gain) are only used for verdicts and data, never as decoration.
+  The logo's four capsule colours are the logo's, not verdict colours.
 
 ### Iconography
 

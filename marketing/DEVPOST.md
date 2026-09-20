@@ -8,8 +8,7 @@ One section per Devpost form field. Every number comes from
 **Elevator pitch (max 200 characters):** We built a tool that measures whether a DNA coding rule
 actually pays off on your channel, and tunes the codec accordingly.
 
-**Thumbnail:** `logo-mark.svg` exported to PNG at 512 px, or a dashboard screenshot of the rule
-audit view.
+**Thumbnail:** `logo/erbgut-mark.svg` exported to PNG at 512 px, or a dashboard screenshot of the rule audit view.
 
 ## Inspiration
 

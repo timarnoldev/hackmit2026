@@ -1,9 +1,11 @@
 /* Beat 10 — close. The ask.
  *
- * The mark draws itself: two strands crossing, the Audit strand over the Cost
- * strand, held by two Gain rungs. Geometry and colours are quoted verbatim from
- * marketing/BRAND.md section 9 ("Logo"), including the inversion rule: on a
- * light page the tile is ink and the strands take the bright deck values.
+ * The mark draws itself: the two strands of the helix sweep out from the left
+ * and right crossings, then the four base pairs drop in between them, then
+ * their letters. Geometry and colours are quoted verbatim from
+ * marketing/logo/erbgut-mark.svg, which is generated from the source artwork;
+ * see marketing/BRAND.md section 9 ("Logo"). The mark does not invert, so the
+ * same values serve on a light page and a dark one.
  *
  * Then the wordmark, then the links. The team slot is a placeholder, so it is
  * Tbd coloured and dashed, exactly as the brand requires, until a human fills it
@@ -22,14 +24,36 @@ const AUDIT = '#0B6E82';
 const TBD_INK = '#6E6200';
 const TBD_LINE = '#A9B81C';
 
-/* the mark, on a light page (BRAND.md section 9, "Logo") */
-const TILE = '#08130B';
-const STRAND_A = '#39E6FF';
-const STRAND_C = '#FF2E9C';
-const RUNG_G = '#39FF6E';
+/* the mark (BRAND.md section 9, "Logo"), quoted from erbgut-logo.svg. This is
+ * the whole helix, not the square crop: the close scene has the width for it,
+ * and the binary and the wordmark are the only parts left out. */
+const HELIX = '#32C7DB';
+const BASE_LETTER = '#101418';
 
-const PATH_A = 'M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54';
-const PATH_C = 'M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54';
+const MARK_W = 434;          /* the lockup's full width */
+const MARK_H = 154;          /* outer edge of the ribbon, top to bottom */
+const MARK_TOP = 76.25;      /* where that outer edge sits in lockup coords */
+const MARK_AXIS = 153.25;    /* the helix centre line */
+const MARK_SW = 25;
+
+const STRAND_1 = 'M0 206.05C31.05 206.05 77.05 194.96 115 153.25C148.66 102.29 189.46 88.75 217 88.75C244.54 88.75 285.34 102.29 319 153.25C356.95 194.96 402.95 206.05 434 206.05';
+const STRAND_2 = 'M0 100.45C31.05 100.45 77.05 111.54 115 153.25C148.66 204.21 189.46 217.75 217 217.75C244.54 217.75 285.34 204.21 319 153.25C356.95 111.54 402.95 100.45 434 100.45';
+
+/* x, y, width, height, fill, upper letter, lower letter. The two pairs under
+ * each crossing carry no letters, exactly as the artwork has them. */
+const BASES = [
+  [17, 101, 22.5, 89, '#FC68D6', '', ''],
+  [53.5, 105.5, 22.5, 72, '#FEC746', '', ''],
+  [159, 119, 22.5, 86, '#FEC746', 'A', 'T'],
+  [195, 103.5, 23, 114.5, '#5BD67C', 'G', 'C'],
+  [231.5, 104, 23, 113.5, '#FC68D6', 'C', 'G'],
+  [267.5, 120.5, 23, 85, '#5BD67C', 'T', 'A'],
+  [365.5, 105.5, 23, 76, '#FC68D6', '', ''],
+  [400, 101, 22.5, 90, '#FEC746', '', ''],
+];
+const LETTER_SIZE = 28.5;   /* cap height 20.5, as in the file */
+const LETTER_TOP = 148.75;
+const LETTER_BOT = 185.75;
 
 const SANS = "'Instrument Sans','Erbgut Sans',system-ui,-apple-system,'Segoe UI',sans-serif";
 const MONO = "'JetBrains Mono','Erbgut Mono',ui-monospace,SFMono-Regular,Menlo,monospace";
@@ -63,16 +87,17 @@ function layout(mode) {
   if (mode === 'narrow') {
     return {
       vw: 720, vh: 900, narrow: true,
-      markSize: 176, markX: 360, markY: 200,
-      wordSize: 72, wordY: 464,
+      /* markSize is the mark's drawn width; its height follows MARK_H / MARK_W */
+      markSize: 470, markX: 360, markY: 214,
+      wordSize: 72, wordY: 456,
       linkSize: 19, linkY: 566,
       teamSize: 15, teamY: 636,
     };
   }
   return {
     vw: 1200, vh: 700, narrow: false,
-    markSize: 196, markX: 600, markY: 112,
-    wordSize: 80, wordY: 394,
+    markSize: 512, markX: 600, markY: 118,
+    wordSize: 80, wordY: 386,
     linkSize: 21, linkY: 480,
     teamSize: 16, teamY: 552,
   };
@@ -90,32 +115,45 @@ function build() {
   e('stop', { offset: '1', 'stop-color': AUDIT, 'stop-opacity': '0' }, halo);
 
   const glow = e('ellipse', {
-    cx: L.markX, cy: L.markY + L.markSize / 2,
-    rx: L.markSize * 1.5, ry: L.markSize * 1.5,
+    cx: L.markX, cy: L.markY + (L.markSize * MARK_H) / (2 * MARK_W),
+    rx: L.markSize * 1.3, ry: L.markSize * 1.3,
     fill: 'url(#eg-close-halo)', opacity: '0',
   }, svg);
 
-  /* the mark, drawn in its own 64 unit square and scaled */
-  const k = L.markSize / 64;
+  /* the mark, drawn in the lockup's coordinates and scaled to markSize */
+  const k = L.markSize / MARK_W;
   const mark = e('g', {
     transform: 'translate(' + (L.markX - L.markSize / 2) + ',' + L.markY + ') scale(' + k + ')',
   }, svg);
-  const tile = e('rect', { x: 0, y: 0, width: 64, height: 64, rx: 14, fill: TILE, opacity: '0' }, mark);
-  const strandC = e('path', {
-    d: PATH_C, fill: 'none', stroke: STRAND_C, 'stroke-width': 3.4,
-    'stroke-linecap': 'round', pathLength: '1',
-    'stroke-dasharray': '1 2', 'stroke-dashoffset': '1',
-  }, mark);
+  const crop = e('g', { transform: 'translate(0,' + (-MARK_TOP) + ')' }, mark);
   const strandA = e('path', {
-    d: PATH_A, fill: 'none', stroke: STRAND_A, 'stroke-width': 3.4,
-    'stroke-linecap': 'round', pathLength: '1',
-    'stroke-dasharray': '1 2', 'stroke-dashoffset': '1',
-  }, mark);
-  const rungs = [16, 48].map((y) => e('line', {
-    x1: 24, y1: y, x2: 40, y2: y, stroke: RUNG_G, 'stroke-width': 3,
-    'stroke-linecap': 'round', pathLength: '1',
-    'stroke-dasharray': '1 2', 'stroke-dashoffset': '1',
-  }, mark));
+    d: STRAND_1, fill: 'none', stroke: HELIX, 'stroke-width': MARK_SW,
+    pathLength: '1', 'stroke-dasharray': '1 2', 'stroke-dashoffset': '1',
+  }, crop);
+  const strandC = e('path', {
+    d: STRAND_2, fill: 'none', stroke: HELIX, 'stroke-width': MARK_SW,
+    pathLength: '1', 'stroke-dasharray': '1 2', 'stroke-dashoffset': '1',
+  }, crop);
+
+  /* each base pair is one group, so the capsule and its two letters arrive
+   * together and can be scaled about the helix centre line */
+  const bases = BASES.map(([x, y, w, h, fill, top, bot]) => {
+    const cx = x + w / 2;
+    const g = e('g', {
+      opacity: '0',
+      transform: 'translate(' + cx + ',' + MARK_AXIS + ') scale(1,0) translate(' + (-cx) + ',' + (-MARK_AXIS) + ')',
+    }, crop);
+    e('rect', { x: x, y: y, width: w, height: h, rx: w / 2, fill: fill }, g);
+    for (const [ch, base] of [[top, LETTER_TOP], [bot, LETTER_BOT]]) {
+      if (!ch) continue;
+      const t = e('text', {
+        x: cx, y: base, 'text-anchor': 'middle', 'font-family': SANS,
+        'font-size': LETTER_SIZE, 'font-weight': '700', fill: BASE_LETTER,
+      }, g);
+      t.textContent = ch;
+    }
+    return { g: g, cx: cx };
+  });
 
   /* wordmark */
   const word = e('text', {
@@ -159,7 +197,7 @@ function build() {
     stroke: TBD_LINE, 'stroke-width': 1.6, 'stroke-dasharray': '5 5',
   }, teamG);
 
-  S.parts = { glow, mark, tile, strandA, strandC, rungs, word, links, anchors, teamG };
+  S.parts = { glow, mark, strandA, strandC, bases, word, links, anchors, teamG };
 
   /* hover feedback without touching global styles */
   for (const { a, t } of anchors) {
@@ -172,11 +210,17 @@ function render(p) {
   const P = S.parts;
   if (!P) return;
 
-  P.tile.setAttribute('opacity', smooth(seg(p, 0.0, 0.14)));
-  P.strandA.setAttribute('stroke-dashoffset', 1 - smooth(seg(p, 0.06, 0.36)));
-  P.strandC.setAttribute('stroke-dashoffset', 1 - smooth(seg(p, 0.10, 0.40)));
-  P.rungs[0].setAttribute('stroke-dashoffset', 1 - smooth(seg(p, 0.30, 0.44)));
-  P.rungs[1].setAttribute('stroke-dashoffset', 1 - smooth(seg(p, 0.34, 0.48)));
+  P.strandA.setAttribute('stroke-dashoffset', 1 - smooth(seg(p, 0.02, 0.34)));
+  P.strandC.setAttribute('stroke-dashoffset', 1 - smooth(seg(p, 0.06, 0.38)));
+
+  /* the base pairs drop in left to right once the strands are most of the way */
+  P.bases.forEach((b, i) => {
+    const t = smooth(seg(p, 0.24 + i * 0.030, 0.42 + i * 0.030));
+    b.g.setAttribute('opacity', t.toFixed(3));
+    b.g.setAttribute('transform',
+      'translate(' + b.cx + ',' + MARK_AXIS + ') scale(1,' + t.toFixed(3) + ') translate('
+      + (-b.cx) + ',' + (-MARK_AXIS) + ')');
+  });
 
   const wordIn = smooth(seg(p, 0.40, 0.60));
   P.word.setAttribute('opacity', wordIn);

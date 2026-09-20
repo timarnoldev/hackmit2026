@@ -10,10 +10,12 @@ Tagline: **Measure the rule. Keep what pays.**
 
 | File | What it is | Use it for |
 |---|---|---|
-| `BRAND.md` | Brand guide: name, taglines, positioning, audiences, key messages, voice and tone, messaging hierarchy, color tokens, typography, iconography, logo rules | The source of truth. Read it before writing anything public |
-| `logo.svg` | Full logo (mark plus wordmark) for light backgrounds | Slides, Devpost header, README |
-| `logo-dark.svg` | Full logo for dark backgrounds | Dark slides, dark dashboard header |
-| `logo-mark.svg` | Mark only | Favicon, avatars, Devpost thumbnail, ESP32 splash screen |
+| `BRAND.md` | Brand guide: name candidates and recommendation, taglines, positioning, audiences, key messages, voice and tone, messaging hierarchy, color tokens, typography, iconography, logo rules, placeholder convention | The source of truth. Read it before writing anything public |
+| `logo/` | The logo: the source artwork, the four SVGs built from it, and the script that builds them | Anything that needs the real asset |
+| `logo.svg` | Full lockup for light backgrounds, a copy of `logo/erbgut-logo.svg` | Slides, Devpost header, README |
+| `logo-dark.svg` | Full lockup for dark backgrounds | Dark slides, dark dashboard header |
+| `logo-mark.svg` | One lens with its four lettered base pairs | Avatars, Devpost thumbnail, anything at 48 px and up |
+| `logo/erbgut-mark-small.svg` | One lens, three capsules, no letters | Favicons, the site header, the ESP32 splash screen |
 | `ONE_PAGER.md` | One-page overview for judges and sponsors | Print it, or paste it into a sponsor form |
 | `PITCH.md` | The 3-minute pitch with timing marks, a 60-second version, and judge questions with honest answers | Rehearsal and Q&A prep |
 | `DEVPOST.md` | Devpost submission text, section by section | Paste into the Devpost form |
@@ -26,7 +28,11 @@ Tagline: **Measure the rule. Keep what pays.**
 
 **The landing page** lives in [`site/`](../site/) and is what GitHub Pages publishes, together with `deck/`. It is not in this folder.
 
-**Logos:** the mark is the deck's double helix and the wordmark is already converted to outlines from the deck's own Instrument Sans file, so the SVGs render identically through an `<img>` tag, offline and in print. `BRAND.md` section 8 has the geometry and the two color sets.
+**Logos:** the artwork is a DNA double helix with four lettered base pairs and binary written through it, above the `erbgut` wordmark. Everything shipped is vector, rebuilt from `logo/erbgut-logo-source.jpeg` by `logo/build_logo.py`; the wordmark and the base letters are Instrument Sans converted to outlines, so the SVGs render identically through an `<img>` tag, offline and in print. The mark does not invert: only the binary and the wordmark change between the light and dark lockups. `BRAND.md` section 9 has the geometry and the colours.
+
+```bash
+uv run --with fonttools --with brotli python marketing/logo/build_logo.py
+```
 
 **Social card:** re-render it after editing `social/social-preview.html`:
 
