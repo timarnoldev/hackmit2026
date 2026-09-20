@@ -74,7 +74,7 @@
 // strand's 110 letters, at 12 px per cell, is what fits between the margins while the
 // letters stay readable from two metres. The browser view shows a wider window.
 #define VISIBLE_LETTERS 22
-#define MAX_READ_LANES 2   // two read lanes above the decoded strand; three would crowd the panel
+#define MAX_READ_LANES 3   // three read lanes above the decoded strand
 #define MAX_BLOCKS 1       // the tape holds one strand at a time, plus one pending
 #define LINE_BUFFER 1024
 
@@ -102,15 +102,20 @@
 // The flowing tape. Letters run right to left through a fixed decode head, one column per
 // strand position, with the reads above the decoded strand and everything column aligned.
 #define CELL_W 20          // one column: one letter position of one strand
-#define HEAD_X 100         // the decode head, about a third in from the left
+#define TAPE_X0 26         // the tape starts here; left of it is the lane icon gutter
+#define ICON_CX 13         // centre of the icon column, inside the margin
+#define HEAD_X 106         // the decode head, about a third in from the left
 #define COLS 44            // ring buffer of columns, more than fit on screen
 
+// Three read lanes and the hero line fit without shrinking any type: the tape used to stop
+// at y 190 and leave 42 px of panel unused underneath.
 #define LABEL_Y 106        // the strand label strip, scrolls with the tape
-#define LANE1_Y 120        // first read
-#define LANE2_Y 138        // second read
-#define CONS_Y 160         // the decoded strand, the hero line
-#define LANE_TOP 116       // where the head marker starts
-#define LANE_BOTTOM 190    // where it ends
+#define LANE1_Y 118
+#define LANE2_Y 136
+#define LANE3_Y 154
+#define CONS_Y 178         // the decoded strand, the hero line
+#define LANE_TOP 114       // where the head marker starts
+#define LANE_BOTTOM 208    // where it ends, 24 px clear below
 
 #define READ_SIZE 2        // 12 x 16 glyphs for the reads
 #define CONS_SIZE 3        // 18 x 24 glyphs for the decoded strand

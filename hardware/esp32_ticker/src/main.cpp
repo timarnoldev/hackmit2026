@@ -299,14 +299,43 @@ static void putChar(int x, int y, char c, uint32_t fg, uint32_t bg, int size) {
   canvas.write(c);
 }
 
+static const int LANE_Y[MAX_READ_LANES] = {LANE1_Y, LANE2_Y, LANE3_Y};
+
+// The lane icons, drawn in code so nothing depends on a font. A read lane gets a small
+// noisy wave, because that is what a read is. The decoded strand gets the Erbgut mark in
+// miniature: bases standing on a strand. Both are dim on purpose, so they label the lanes
+// without competing with the letters.
+static void drawReadIcon(int cy, uint32_t colour) {
+  const uint32_t c = rgb(colour);
+  int prev = cy;
+  for (int dx = 0; dx < 13; ++dx) {
+    const int y = cy + (int)lroundf(2.2f * sinf(dx * 0.9f));
+    canvas.drawLine(ICON_CX - 6 + dx - 1, prev, ICON_CX - 6 + dx, y, c);
+    prev = y;
+  }
+}
+
+static void drawStrandIcon(int cy, uint32_t colour) {
+  const uint32_t c = rgb(colour);
+  canvas.drawFastHLine(ICON_CX - 6, cy + 4, 13, c);   // the strand
+  for (int i = 0; i < 3; ++i)                          // bases standing on it
+    canvas.fillRect(ICON_CX - 5 + i * 5, cy - 3, 3, 7, c);
+}
+
+static void drawLaneIcons() {
+  for (int r = 0; r < MAX_READ_LANES; ++r) drawReadIcon(LANE_Y[r] + 8, C_RULE);
+  drawStrandIcon(CONS_Y + 11, C_MUTED);
+}
+
 // The tape. Columns flow right to left. A column is undecided until it reaches the head:
 // the reads look clean and the strand shows the letter the classic decoder produced. As it
 // crosses the head it resolves, the read errors light up, and a corrected position flashes
 // cost magenta on the wrong letter and then gain teal as the corrected letter takes its
 // place. Behind the head the trail keeps its final state and fades as it leaves.
 static void drawTape() {
-  canvas.setClipRect(0, TICKER_TOP, LCD_WIDTH, TICKER_BOTTOM - TICKER_TOP);
   canvas.fillRect(0, TICKER_TOP, LCD_WIDTH, TICKER_BOTTOM - TICKER_TOP, rgb(C_PAPER));
+  drawLaneIcons();  // outside the clip, so the tape never draws over them
+  canvas.setClipRect(TAPE_X0, TICKER_TOP, LCD_WIDTH - TAPE_X0, TICKER_BOTTOM - TICKER_TOP);
 
   // the resolve zone, a faint band the letters pass through
   for (int dx = 0; dx < CELL_W; ++dx) {
@@ -317,11 +346,11 @@ static void drawTape() {
 
   for (int i = 0; i < ringCount; ++i) {
     const Col &c = colAt(i);
-    const int x = (int)(i * CELL_W - flowPx);
-    if (x <= -CELL_W || x >= LCD_WIDTH) continue;
+    const int x = (int)(TAPE_X0 + i * CELL_W - flowPx);
+    if (x <= TAPE_X0 - CELL_W || x >= LCD_WIDTH) continue;
 
     float fade = 0.0f;
-    if (x < HEAD_X) fade = clamp01((float)(HEAD_X - x) / (HEAD_X + CELL_W)) * 0.62f;
+    if (x < HEAD_X) fade = clamp01((float)(HEAD_X - x) / (HEAD_X - TAPE_X0 + CELL_W)) * 0.62f;
     if (x > LCD_WIDTH - 70) fade = fmaxf(fade, clamp01((float)(x - (LCD_WIDTH - 70)) / 70.0f) * 0.75f);
 
     if (c.kind == 2) continue;  // an idle gap draws nothing, the tape just keeps moving
@@ -357,7 +386,7 @@ static void drawTape() {
     canvas.setFont(&fonts::Font0);
     for (int r = 0; r < MAX_READ_LANES; ++r) {
       if (!c.r[r]) continue;
-      const int ly = (r == 0) ? LANE1_Y : LANE2_Y;
+      const int ly = LANE_Y[r];
       uint32_t fg = mix(C_MUTED, C_PAPER, fmaxf(fade, resolved ? 0.0f : 0.35f));
       uint32_t bg = C_PAPER;
       if (resolved) {
@@ -620,12 +649,13 @@ static void step(float dt) {
     --ringCount;
   }
   // keep the right hand edge fed
-  while (ringCount < COLS && (ringCount * CELL_W - flowPx) < LCD_WIDTH + CELL_W) appendColumn();
+  while (ringCount < COLS && (TAPE_X0 + ringCount * CELL_W - flowPx) < LCD_WIDTH + CELL_W)
+    appendColumn();
 
   // a column resolves the moment its middle reaches the head, and ages from there
   for (int i = 0; i < ringCount; ++i) {
     Col &c = colAt(i);
-    const float x = i * CELL_W - flowPx;
+    const float x = TAPE_X0 + i * CELL_W - flowPx;
     if (c.age == 0) {
       if (c.kind != 2 && x + CELL_W * 0.5f <= HEAD_X) c.age = 1;
     } else if (c.age < 60000) {

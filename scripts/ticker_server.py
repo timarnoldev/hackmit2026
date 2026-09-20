@@ -82,12 +82,12 @@ VISIBLE_LETTERS = 38
 VISIBLE_READS = 3
 
 # The box's window is narrower. Its panel is 320 x 240 with a 14 px margin on every side and
-# the decoded strand drawn at 12 px per letter, so 22 letters and 2 reads is what fits while
+# the decoded strand drawn at 18 px per letter, so 22 letters and 3 reads is what fits while
 # the letters stay readable from two metres. The trim happens in compact_event(), so the
 # browser keeps the wider view. Must match VISIBLE_LETTERS and MAX_READS in
 # hardware/esp32_ticker/src/board_config.h.
 BOX_LETTERS = 22
-BOX_READS = 2
+BOX_READS = 3
 
 PROTOCOL_VERSION = 1
 
