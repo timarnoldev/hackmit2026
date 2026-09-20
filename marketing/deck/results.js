@@ -45,6 +45,9 @@
  *                                    (tuned for Nanopore) or "illumina"
  *   crossover.summary    optional one-line outcome; otherwise computed if the pattern is
  *                        "wins at home, loses its edge away", else shown as a placeholder
+ *   firewall.ab          the same tier 2 change measured on Simulator A and on Simulator B,
+ *                        rows[] per decoder with { rules, learned, diff, ci } for each simulator
+ *                        (docs/NUMBERS.md section 5)
  *   firewall.<test>      { status: "holds" | "does not hold" | null, note: short text }
  *                        tests: simAHeldout, simB, real
  *   headline.imageDemo   one sentence about the image round trip at 6 reads per strand
@@ -283,6 +286,41 @@ window.RESULTS = {
     "summary": "Each tuned codec wins at home and loses away, and the Illumina codec never recovers the file on Nanopore at all."
   },
   "firewall": {
+    "ab": {
+      "metric": "Strand failures at six reads per strand, Nanopore, 32 candidates per slot",
+      "rows": [
+        {
+          "decoder": "Classic majority vote",
+          "a": {
+            "rules": 51.96,
+            "learned": 48.01,
+            "diff": -3.95,
+            "ci": "-4.18 to -3.72"
+          },
+          "b": {
+            "rules": 50.92,
+            "learned": 46.76,
+            "diff": -4.16,
+            "ci": "-4.37 to -3.96"
+          }
+        },
+        {
+          "decoder": "With the learned polisher",
+          "a": {
+            "rules": 44.64,
+            "learned": 41.88,
+            "diff": -2.76,
+            "ci": "-2.97 to -2.55"
+          },
+          "b": {
+            "rules": 44.78,
+            "learned": 41.93,
+            "diff": -2.85,
+            "ci": "-3.02 to -2.68"
+          }
+        }
+      ]
+    },
     "simAHeldout": {
       "status": "holds",
       "note": "6 vs 5.5 reads per strand"

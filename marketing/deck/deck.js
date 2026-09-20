@@ -254,7 +254,7 @@
     bar.style.transform = `scaleX(${clamp(p, 0, 1)})`;
   }
 
-  /* ------------------------------------------------------------ black, theme, motion, fullscreen */
+  /* ------------------------------------------------------------ black, motion, fullscreen */
 
   function setBlack(v, silent) {
     black = !!v;
@@ -263,25 +263,15 @@
     updatePresenter();
   }
 
-  function setTheme(t, silent) {
-    t = t === 'light' ? 'light' : 'dark';
-    root.setAttribute('data-theme', t);
-    store.set('sa-theme', t);
-    postToPreview({ type: 'prefs', theme: t, motion: motionOn() });
-    if (!silent) {
-      send('prefs', { theme: t, motion: motionOn() });
-      toast(t === 'light' ? 'Light theme' : 'Dark theme');
-    }
-  }
   function motionOn() {
     return !root.classList.contains('reduce-motion');
   }
   function setMotion(on, silent) {
     root.classList.toggle('reduce-motion', !on);
     store.set('sa-motion', on ? 'on' : 'off');
-    postToPreview({ type: 'prefs', theme: root.getAttribute('data-theme'), motion: on });
+    postToPreview({ type: 'prefs', motion: on });
     if (!silent) {
-      send('prefs', { theme: root.getAttribute('data-theme'), motion: on });
+      send('prefs', { motion: on });
       toast(on ? 'Motion on' : 'Motion reduced to fades');
     }
     updatePresenter();
@@ -365,7 +355,6 @@
       ['Presenter layout in this window', 'S'],
       ['Timer start or pause / reset', 'Z / Shift+Z'],
       ['Notes text size', '+ / -'],
-      ['Light or dark theme', 'T'],
       ['Motion on or off', 'M'],
       ['This help', '?'],
     ];
@@ -478,10 +467,6 @@
       case 's':
       case 'S':
         if (!PRESENTER) setPresenterLayout(!presenterLayout);
-        break;
-      case 't':
-      case 'T':
-        setTheme(root.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
         break;
       case 'm':
       case 'M':
@@ -607,7 +592,6 @@
         if (!!p.black !== black) setBlack(p.black, true);
         break;
       case 'prefs':
-        if (p.theme && p.theme !== root.getAttribute('data-theme')) setTheme(p.theme, true);
         if (typeof p.motion === 'boolean' && p.motion !== motionOn()) setMotion(p.motion, true);
         break;
       case 'timer':
@@ -620,7 +604,7 @@
       case 'hello':
         // the audience window is the authority on position; presenters only share the timer
         if (!PRESENTER) send('state', snapshot());
-        send('prefs', { theme: root.getAttribute('data-theme'), motion: motionOn() });
+        send('prefs', { motion: motionOn() });
         if (timer.changedAt) send('timer', timer);
         break;
       case 'ping':
@@ -635,7 +619,6 @@
     if (!d || d.__saEmbed !== 1) return;
     if (d.type === 'goto') go(d.i, d.f, { instant: true, silent: true });
     if (d.type === 'prefs') {
-      if (d.theme) root.setAttribute('data-theme', d.theme === 'light' ? 'light' : 'dark');
       if (typeof d.motion === 'boolean') root.classList.toggle('reduce-motion', !d.motion);
     }
   }
@@ -774,7 +757,7 @@
     P.now = $('.p-now', P.bar);
     P.planlab.innerHTML = `<span>0:00</span><span>plan ${mmss(total * 1000)}</span>`;
 
-    const qs = `?embed${SAMPLE ? '&sample' : ''}&theme=${root.getAttribute('data-theme')}&motion=${motionOn() ? 'on' : 'off'}`;
+    const qs = `?embed${SAMPLE ? '&sample' : ''}&motion=${motionOn() ? 'on' : 'off'}`;
     const n = Math.min(cur.i + 1, slides.length - 1);
     P.iframe.src = `${location.pathname}${qs}#/${n + 1}/end`;
     P.iframe.addEventListener('load', () => {

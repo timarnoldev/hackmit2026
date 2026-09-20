@@ -33,11 +33,10 @@ Before you go on stage: open the deck once, check no **SAMPLE DATA** badge and n
 | S | Presenter layout in this window |
 | Z / Shift+Z | Timer start or pause / reset (also buttons in the presenter view) |
 | + / - | Notes text size |
-| T | Light or dark theme (dark is the default, better on projectors) |
 | M | Motion on or off. Off shortens every animation to a fade. `prefers-reduced-motion` turns it off by default |
 | ? | Help |
 
-Clickers send PageDown and PageUp, which step through the builds of a slide before moving on. The URL hash (`#/5/2` = slide 5, build 2) keeps your place on reload. Theme, motion, black screen and timer are shared between windows.
+Clickers send PageDown and PageUp, which step through the builds of a slide before moving on. The URL hash (`#/5/2` = slide 5, build 2) keeps your place on reload. Motion, black screen and timer are shared between windows. The deck is light, always: there is no theme to get wrong on stage.
 
 ## Slides
 

@@ -1,21 +1,19 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Erbgut pitch</title>
 <meta name="description" content="Erbgut pitch deck, HackMIT 2026. Measure the rule. Keep what pays.">
-<meta name="color-scheme" content="dark light">
+<meta name="color-scheme" content="light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M1.5 32C11.56 13.04 23.77 8 32 8C40.23 8 52.44 13.04 62.5 32' fill='none' stroke='%2332C7DB' stroke-width='9' stroke-linecap='round'/%3E%3Cpath d='M1.5 32C11.56 50.96 23.77 56 32 56C40.23 56 52.44 50.96 62.5 32' fill='none' stroke='%2332C7DB' stroke-width='9' stroke-linecap='round'/%3E%3Crect x='10.5' y='18' width='10.5' height='28' rx='5.25' fill='%23FEC746'/%3E%3Crect x='26.75' y='11' width='10.5' height='42' rx='5.25' fill='%23FC68D6'/%3E%3Crect x='43' y='18' width='10.5' height='28' rx='5.25' fill='%235BD67C'/%3E%3C/svg%3E">
 <script>
-  /* set theme and motion before first paint, so nothing flashes */
+  /* motion and the embed flags before first paint, so nothing flashes.
+     The deck is light, always, and there is no theme to choose. */
   (function () {
     var p = new URLSearchParams(location.search), d = document.documentElement, m = null;
     try { m = localStorage.getItem('sa-motion'); } catch (e) {}
-    // Forced to light for now, regardless of any stored preference. Pass ?theme=dark to preview dark.
-    var t = p.get('theme') || 'light';
     m = p.get('motion') || m;
-    d.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
     var reduce = m ? m === 'off' : (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
     if (reduce) d.classList.add('reduce-motion');
     if (p.has('embed')) d.classList.add('embed');
@@ -464,32 +462,22 @@
 </section>
 
 <!-- ================================================================ 13. What we have not shown -->
-<section class="slide" id="s-honest" data-title="What we have not shown" data-plan="220-240" data-steps="4"
-  data-labels="The simulator against real reads|The firewall|What we retracted|What we have not shown">
-  <p class="kicker">Evidence we don't fake</p>
-  <h2 class="title sm">No wet lab, so everything is built to catch us out</h2>
-  <div class="hgrid">
-    <div>
-      <div class="calchart" id="calchart"></div>
-    </div>
-    <div class="hcol">
-      <div class="fw" id="firewall"></div>
-      <div class="retract frag fade" data-f="3">
-        <h3>We publish our own retractions</h3>
-        <p><b>"Both hand rules are harmful on Nanopore."</b> Our own rerun disproved it. The standard limit of 3 wins.</p>
-        <p><b>"6 reads against 8."</b> Winner's curse in an early run. We quote the one with a margin check.</p>
-      </div>
-    </div>
-  </div>
-  <div class="footline">
-    <span class="pill2 tbd frag fade" data-f="4">Not shown: that ranking candidates by the model lowers failures on real DNA. That needs synthesis</span>
-  </div>
+<section class="slide" id="s-honest" data-title="The firewall" data-plan="220-240" data-steps="4"
+  data-labels="What we tune on|What we never tune on|The same change, measured on both|Reproduced with the learned decoder">
+  <p class="kicker">The firewall</p>
+  <h2 class="title sm">Every number is checked on a channel we never tune on</h2>
+  <div class="fwgrid" id="fwgrid"></div>
+  <div class="fwres" id="fwres"></div>
+  <div class="footline" id="fwfoot"></div>
   <aside class="notes">
-    <p>We have no wet lab, so the evidence is built to catch us out.</p>
-    <p><i class="cue"></i> The simulator is calibrated on real reads. Here it is against real held-out reads at every read count: within about three points everywhere, and where it is off it is slightly harder than reality, which is the safe direction.</p>
-    <p><i class="cue"></i> Then the firewall. Every gain has to survive held-out seeds and a structurally different second simulator that is never optimized on. <span class="res" data-say="firewall"></span></p>
-    <p><i class="cue"></i> And two claims in this project were killed by our own reruns. Both corrections are written up with the wrong version kept visible. If a number survived that, you can lean on it.</p>
-    <p><i class="cue"></i> The limit, out loud: we have shown the model's ranking transfers to real reads. We have not shown that selecting candidates by it lowers failures on real DNA. That needs strands synthesized and sequenced, and we have not done that.</p>
+    <p>We have no wet lab. So the thing that keeps us honest is a second simulator, and this slide is only about that.</p>
+    <p><i class="cue"></i> Simulator A is the one we tune on. It is fit on real published Nanopore reads: rates, a 5 letter context table, dropout, coverage.</p>
+    <p><i class="cue"></i> Simulator B is built from different mechanisms, top to bottom. Errors inside a read are bursty instead of independent, homopolymers shorten by a run level event instead of a per base multiplier, shared errors come in damaged segments, substitutions favour transitions, and the context table is fit on a different dataset, DNAformer's reads instead of Microsoft's. Nothing is ever tuned, trained or chosen against it. It only ever evaluates.</p>
+    <p><i class="cue"></i> So here is the tier 2 change measured on both. Same codec, same redundancy, same decoder, same seeds, and the only thing that changes is which model ranks the candidates. On Simulator A strand failures go from 51.96 to 48.01 percent, 3.95 points. On the simulator we never touched, 50.92 to 46.76, 4.16 points. The gain is not an artefact of the channel we fit.</p>
+    <p><i class="cue"></i> And run 6 repeats the whole thing with the learned decoder in place, which is the harder test, because a better decoder repairs some of what the risk model steers around. Smaller, as you would expect, 2.76 points on A and 2.85 on B, and still clearly separated from zero on both.</p>
+    <p class="aside">The limit, out loud, and it must not be softened: we have shown the risk model's ranking transfers to real reads. We have not shown that selecting candidates by it lowers failures on real DNA. That needs strands synthesized and sequenced, and we have not done that.</p>
+    <p class="aside">If asked about the simulator against reality: Simulator A is compared with real held-out reads at every read count and sits within about three points everywhere, and where it is off it is slightly harder than reality, which is the safe direction.</p>
+    <p class="aside">If asked what we retracted: "Both hand rules are harmful on Nanopore" was our own early claim, and our own rerun disproved it, the standard limit of 3 wins. "6 reads against 8" was winner's curse in an early run; we quote the one with a margin check. Both corrections are written up with the wrong version kept visible.</p>
     <p class="aside">If asked where it runs: both models fit on the microcontroller on the table. The 0.8M polisher runs there quantized to int8, the 63k risk model in float32, and on 300 real clusters the on-device polisher gets 229 strands exactly right against 230 for the same model in float and 211 for the classic majority vote. No laptop, no network.</p>
   </aside>
 </section>
