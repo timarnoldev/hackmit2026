@@ -1989,6 +1989,7 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
 #s-question .vreads { font-size: 21px; color: var(--sa-muted); font-family: var(--mono); margin-top: 6px; }
 
 /* --- 15. what we have not shown */
+#s-honest .footline { right: 880px; bottom: 150px; }
 #s-honest .hgrid { position: absolute; left: 120px; right: 120px; top: 288px; display: grid; grid-template-columns: 980px 1fr; gap: 60px; align-items: start; }
 #s-honest .calchart { position: relative; }
 #s-honest .calchart .line { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: var(--len); stroke-dashoffset: var(--len); transition: stroke-dashoffset 1.5s var(--ease-out); }
