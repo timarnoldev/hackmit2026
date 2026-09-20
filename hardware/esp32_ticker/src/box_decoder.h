@@ -44,6 +44,20 @@ int reconstruct(const Cluster &c, int strandLength, int iterations, char *out, s
 // difference between this and the consensus as the corrections the vote made.
 int pickDraft(const Cluster &c, int strandLength, char *out, size_t outCap);
 
+// The vote columns of one draft against a cluster, which is what the learned polisher takes
+// as its input. Same three arrays dnacodec.baseline._votes builds, flattened.
+struct VoteView {
+  const int32_t *base = nullptr;     // [pos * 5 + b], b 0..3 are A C G T, 4 is "missing"
+  const int32_t *ins = nullptr;      // [pos], reads with an extra base in the gap before pos
+  const int32_t *insBase = nullptr;  // [pos * 4 + b], the first inserted base in that gap
+  int nPos = 0;
+  int nReads = 0;
+};
+
+// Vote columns for an explicit draft. The buffer is static and reused, so the view is valid
+// until the next call.
+void computeVotes(const char *draft, int nd, const Cluster &c, VoteView &out);
+
 // Levenshtein distance, exposed for the verifier.
 int editDistance(const char *a, int na, const char *b, int nb);
 

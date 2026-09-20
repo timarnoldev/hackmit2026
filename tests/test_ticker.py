@@ -16,8 +16,11 @@ import time
 import pytest
 
 from scripts.ticker_server import (
+    BOX_LETTERS,
+    BOX_READS,
     PROTOCOL_VERSION,
     VISIBLE_LETTERS,
+    DecodeBackend,
     Engine,
     ReplayEngine,
     TickerConfig,
@@ -25,6 +28,7 @@ from scripts.ticker_server import (
     fix_marks,
     pack_marks,
     read_marks,
+    dump_box_dataset,
     read_recording,
     record_stream,
     unpack_marks,
@@ -271,3 +275,58 @@ def test_rate_is_clamped(rate, expected):
     engine = Engine(short_config(), lambda e: None)
     engine.set_rate(rate)
     assert engine.config.rate == expected
+
+
+# ---------------------------------------------------------------- the box's own dataset
+
+
+def test_box_dataset_carries_what_the_device_needs(tmp_path):
+    """The frozen run must hold full reads and references, not just the display fields.
+
+    The box decodes for itself, so a record that only carried the Mac's answer would make the
+    device replay rather than decode, which is the thing the firmware must never do.
+    """
+    path = tmp_path / "box_data.h"
+    out, n, size = dump_box_dataset(short_config(source="message"), 12, path)
+    assert out.exists() and n == 12 and size > 0
+    text = out.read_text()
+    assert "#define BOX_DATA_STRANDS 12" in text
+    assert "#define BOX_DATA_STRAND_LENGTH" in text
+
+    records = [line for line in text.split("\n") if line.strip().startswith('"i|')]
+    assert len(records) == 12
+    for rec in records:
+        body = rec.strip().strip(",").strip('"')
+        lines = body.split("\\n")
+        kinds = [ln[0] for ln in lines if ln]
+        assert kinds[0] == "i"
+        assert "x" in kinds, "every record needs the true reference to judge correctness"
+        head = lines[0].split("|")
+        assert len(head) == 5, "index, ok, nreads and the untrimmed fix count"
+        n_reads = int(head[3])
+        if n_reads:
+            full = [ln for ln in lines if ln.startswith("f|")]
+            assert full, "a strand with reads must carry them in full for the decoder"
+            for ln in full:
+                assert set(ln[2:]) <= set("ACGT")
+            shown = [ln for ln in lines if ln.startswith("r|")]
+            assert len(shown) <= BOX_READS
+            for ln in shown:
+                assert len(ln[2:].split("|")[0]) <= BOX_LETTERS
+
+
+def test_box_dataset_is_decoded_by_the_classic_vote():
+    """The frozen run must never claim a result the box could not produce on its own."""
+    backend = DecodeBackend("/nonexistent-on-purpose.pt")
+    assert not backend.has_model
+    assert backend.fix_layer == "vote"
+
+
+def test_serial_trim_matches_the_firmware_window():
+    """The box draws a fixed window; the server must not send more than it can show."""
+    for e in [x for x in collect(12) if x["t"] == "s"]:
+        c = compact_event(e)
+        assert len(c["r"]) <= BOX_READS
+        assert len(c["c"]) <= BOX_LETTERS
+        for r in c["r"]:
+            assert len(r["s"]) <= BOX_LETTERS

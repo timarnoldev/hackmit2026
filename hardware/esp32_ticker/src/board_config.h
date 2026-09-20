@@ -134,7 +134,10 @@
 // read a letter as it crosses the head. Touching the left or right third changes it.
 #define FLOW_MIN 1.5f
 #define FLOW_MAX 14.0f
-#define FLOW_DEFAULT 5.0f
+// 3.5 letters per second is about 6.6 seconds per strand, which stays ahead of the learned
+// polisher's 5 seconds of inference on this chip. Faster than that and the tape outruns the
+// decoder and shows gaps, which is honest but ugly.
+#define FLOW_DEFAULT 3.5f
 #define TWEEN 0.22f        // how fast a counter closes on its new value, per frame
 #define SCROLL_TWEEN 0.28f // how fast the ticker settles after a new strand
 #define FLASH_FRAMES 14    // a changed number stays lit this long
