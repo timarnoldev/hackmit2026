@@ -148,7 +148,6 @@
   <div class="ben-stats">
     <div class="ben-stat card enter" style="--d:0.1">
       <div class="n">~215<small>PB per gram</small></div>
-      <div class="d">The often-cited theoretical density of DNA as a storage medium: millions of times denser than flash or tape.</div>
       <div class="ben-compare">
         <div class="ben-cmp-item">
           <svg class="ben-cmp-dna" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="5" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="5" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="4" stroke-linecap="round"/></svg>
@@ -193,7 +192,6 @@
     </div>
     <div class="ben-stat card enter" style="--d:0.2">
       <div class="n">500+<small>years</small></div>
-      <div class="d">Cold, dry, dark storage and DNA's own decay rate point to centuries of stability, no power or refresh cycle needed. Hard drives and tape need refreshing every 5 to 10 years.</div>
       <div class="ben-bars">
         <div class="ben-bar-row"><span class="ben-bar-lbl">SSD</span><div class="ben-bar" style="width:67px"></div><span class="ben-bar-val">~5 yr</span></div>
         <div class="ben-bar-row"><span class="ben-bar-lbl">HDD</span><div class="ben-bar" style="width:87px"></div><span class="ben-bar-val">~8 yr</span></div>
@@ -207,22 +205,18 @@
     <div class="ben-case card enter" style="--d:0.35">
       <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 7l2-3h14l2 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       <h4>Cold archives</h4>
-      <p>Data you must keep, but rarely touch</p>
     </div>
     <div class="ben-case card enter" style="--d:0.4">
       <svg class="ico" viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><line x1="8" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="1.8"/></svg>
       <h4>Scientific &amp; genomic records</h4>
-      <p>Long-horizon research data, kept as long as it's needed</p>
     </div>
     <div class="ben-case card enter" style="--d:0.45">
       <svg class="ico" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <h4>Compliance records</h4>
-      <p>Multi-decade retention, without a refresh cycle</p>
     </div>
     <div class="ben-case card enter" style="--d:0.5">
       <svg class="ico" viewBox="0 0 24 24"><path d="M12 21s7-7.2 7-12a7 7 0 0 0-14 0c0 4.8 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
       <h4>Disaster-resilient backups</h4>
-      <p>A tiny physical footprint, easy to keep off-site</p>
     </div>
   </div>
   <aside class="notes">
@@ -334,52 +328,38 @@
 </section>
 
 <!-- ================================================================ 6. One real blind spot -->
-<section class="slide appx" id="a-cctt" data-title="One real blind spot" data-plan="82-108">
-  <p class="kicker">One real blind spot</p>
-  <h2 class="title sm">One real pattern, learned on both sides</h2>
-  <div class="layout two">
-    <div class="box card">
-      <h3>What the channel actually does</h3>
-      <p>On real Nanopore reads, the base right after a <span class="mono">CCCT</span> run is deleted far more often than elsewhere &mdash; measured directly from the 5-mer context table fit on real train reads, and one of the leading hot-spot families in <b>two independent datasets</b> (Microsoft and DNAformer).</p>
-      <div class="ccex">
-        <span class="seq"><span class="nt nt-G">G</span><span class="nt nt-A">A</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-T">T</span><span class="hi-motif"><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-T">T</span></span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-T">T</span><span class="nt nt-G">G</span></span>
-        <span class="cclab">deletions land right after this run</span>
-      </div>
-      <p class="callout-line">The hand rule doesn't catch it: "no run longer than 3" allows <span class="mono">CCC</span> outright, since it's exactly the limit. No hand-written rule ever looks at this pattern.</p>
-    </div>
-    <div class="box card">
-      <h3>Two learned models, the same discovery</h3>
-      <p><b>The risk model steers the encoder around it.</b> Where an equally valid alternate seed exists, it scores a candidate that ends a slot in <span class="mono">CCCT</span> as riskier, and the encoder keeps the other one instead &mdash; for free, since trying another seed costs no density.</p>
-      <div class="pair">
-        <div class="prow bad"><span class="ptag">discarded</span><span class="seq mono small">&hellip;GA<span class="hi-motif">CCCT</span>GTC&hellip;</span></div>
-        <div class="prow good"><span class="ptag">kept</span><span class="seq mono small">&hellip;GATGACAGTC&hellip;</span><span class="psame">same data, different seed</span></div>
-      </div>
-      <p><b>The polisher learned the same thing from the decoding side.</b> Its roughly 65-position receptive field lets it down-weight the base right after <span class="mono">CCCT</span> even when the majority vote disagrees, because training on real reads taught it that position fails more than most.</p>
-      <p class="callout-line">Neither model was told about <span class="mono">CCCT</span>. One found it from decoder failures, the other from correcting reads &mdash; independently, from a real channel property no fixed rulebook could have written down in advance.</p>
-    </div>
+<section class="slide" id="a-cctt" data-title="One real blind spot" data-plan="82-108">
+  <p class="kicker">Real blind spots</p>
+  <h2 class="title">Nanopore is error-prone.</h2>
+  <div class="hotlist">
+    <div class="hitem"><span class="seq" data-seq="CGGG"></span><span class="htag">substitutions</span></div>
+    <div class="hitem"><span class="seq" data-seq="CCCG"></span><span class="htag">substitutions</span></div>
+    <div class="hitem"><span class="seq" data-seq="CCCT"></span><span class="htag">deletions</span></div>
+    <div class="hitem"><span class="seq" data-seq="GGGA"></span><span class="htag">deletions</span></div>
+    <div class="hitem"><span class="seq" data-seq="CGAA"></span><span class="htag">insertions</span></div>
   </div>
+  <p class="bridge">So something has to catch this that isn't a fixed rule.</p>
   <aside class="notes">
     <p>This is where the previous slide's complaint stops being abstract.</p>
-    <p><i class="cue"></i> On real Nanopore reads, the base right after a CCCT run gets deleted more than elsewhere. It's measured, it shows up in two independent datasets, and the hand rule never catches it because CCC is exactly the legal limit of 3.</p>
-    <p><i class="cue"></i> Two things learned this independently. The risk model steers the encoder to a different seed when one is available, for free. The polisher, on the decoding side, learned to distrust that position too.</p>
-    <p><i class="cue"></i> That's the strongest version of the tier two claim: not "the model found some pattern", but this specific, checkable, real one, confirmed twice.</p>
+    <p><i class="cue"></i> Nanopore is error-prone, and not evenly. These specific short patterns are measured hot spots on real reads.</p>
+    <p><i class="cue"></i> None of them are covered by any hand-written rule.</p>
+    <p><i class="cue"></i> So something else has to catch this. That's exactly what the next slide shows.</p>
   </aside>
 </section>
 
 <!-- ================================================================ 7. Where rules come in -->
 <section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="108-121"
-  data-labels="Several candidates per slot|Rules reject some|A scorer keeps one">
+  data-labels="Several candidates per slot|Rules reject some|The risk model scores what's left, and picks the safest">
   <p class="kicker">Where the rules come in</p>
   <h2 class="title sm">The encoder picks one of several candidate strands</h2>
   <div class="layout">
     <div>
-      <div class="src">One chunk of the file <span class="chip">slot 17</span> encoded with 8 different seeds <span style="font-size:21px">(shortened to 20 letters)</span></div>
+      <div class="src"><span class="chip">slot 17</span> 8 seeds &middot; 20 letters</div>
       <div class="cands" id="cands"></div>
     </div>
     <div class="side">
       <div class="box card frag" data-f="3">
-        <h4>A scorer keeps one</h4>
-        <p>By default every candidate that passes the rules is equally good. In tier 2, a risk model ranks them.</p>
+        <h4>The risk model picks the safest</h4>
       </div>
     </div>
   </div>
@@ -387,7 +367,8 @@
     <p>So where do the rules come in?</p>
     <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
     <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
-    <p><i class="cue"></i> A scorer keeps one. By default, any candidate that passes is as good as any other. In tier two, a risk model ranks them instead.</p>
+    <p><i class="cue"></i> By default, any candidate that passes is as good as any other. But watch this one: it passes every hand rule, and it's still carrying a real deletion hot spot from real Nanopore reads.</p>
+    <p><i class="cue"></i> That's exactly what the risk model is for. It scores every survivor, catches the one the hand rules missed, and keeps the one that's actually safest.</p>
   </aside>
 </section>
 

@@ -139,38 +139,65 @@
 
   /* ------------------------------------------------------------ slide 4: candidates */
 
-  // Same chunk, eight seeds. Rule checks below are computed, not typed in.
+  // Same chunk, eight seeds. Rule checks and risk scores below are computed, not typed in.
+  // #6 passes every hand rule (run of 3 is legal) but carries the real CCCT deletion hot spot
+  // from docs/ERRORS.md, so the risk model, not the hand rule, is what catches it.
   const CANDS = [
     'ATACACGTCAGCACGAAACT',
     'TTCGTACCTTGGGGGTCGTT',
     'ACCACTCTGTTCCCACGAGC',
     'GGCATTTCTGGATGGCCAGC',
     'ATTGTGCTTGTTCAATTCTT',
-    'CCGTCCACCTAACGTGAAGT',
+    'AGTCACCCTGATGCAGTCAG',
     'GGCTCCGACGAATTTTTAAT',
     'GCACGGAGTGGTTAGGCTTG',
   ];
-  const KEPT = 5;
+  // Real hot-spot families measured on Nanopore reads (docs/ERRORS.md, docs/NUMBERS.md).
+  const HOT_MOTIFS = ['CGGG', 'CCCG', 'CCCT', 'GGGA'];
+  function riskOf(s) {
+    const dev = Math.abs(gcShare(s) - 0.5);
+    let score = 5 + Math.round(dev * 60);
+    const hit = HOT_MOTIFS.find((m) => s.includes(m));
+    if (hit) score += 34;
+    return { score: Math.min(score, 96), hit };
+  }
 
   function buildCandidates() {
     const host = document.getElementById('cands');
     if (!host) return;
     const W = 27;
-    host.innerHTML = CANDS.map((s, i) => {
+    const meta = CANDS.map((s) => {
       const run = maxRun(s);
       const gc = gcShare(s);
       const runFail = run.len > 3;
       const gcFail = gc < 0.4 || gc > 0.6;
       const fail = runFail || gcFail;
+      return { s, run, gc, runFail, gcFail, fail, risk: fail ? null : riskOf(s) };
+    });
+    let bestIdx = -1;
+    let bestScore = Infinity;
+    meta.forEach((m, i) => {
+      if (!m.fail && m.risk.score < bestScore) {
+        bestScore = m.risk.score;
+        bestIdx = i;
+      }
+    });
+    host.innerHTML = meta.map((m, i) => {
+      const { s, run, gc, runFail, gcFail, fail, risk } = m;
       const why = runFail ? `run of ${run.len}` : gcFail ? `GC ${Math.round(gc * 100)}%, outside 40 to 60%` : 'passes';
+      const isBest = i === bestIdx;
+      const isHot = !fail && !!risk.hit;
       return (
-        `<div class="cand ${fail ? 'fail' : 'pass'}${i === KEPT ? ' kept' : ''}" style="--i:${i}">` +
+        `<div class="cand ${fail ? 'fail' : 'pass'}${isBest ? ' kept' : ''}${isHot ? ' airisk' : ''}" style="--i:${i}">` +
         `<span class="no">#${i + 1}</span>` +
         `<span class="seqwrap"><span class="seq">${seqHTML(s)}</span>` +
         (runFail ? `<span class="runmark" style="left:${run.start * W + 3}px;width:${run.len * W - 6}px"></span>` : '') +
         `<span class="strike"></span></span>` +
-        `<span class="why ${fail ? 'bad' : 'ok'}">${icon(fail ? 'cross' : 'check')}${why}</span>` +
-        (i === KEPT ? '<span class="keep">kept</span>' : '') +
+        `<span class="why ${fail ? 'bad' : 'ok'}"><span class="why-txt">${icon(fail ? 'cross' : 'check')}${why}</span>` +
+        (!fail ? `<span class="risk">${risk.score}%</span>` : '') +
+        (isHot ? `<span class="hotflag">${icon('cross')}${risk.hit}</span>` : '') +
+        `</span>` +
+        (isBest ? '<span class="keep">kept</span>' : '') +
         `</div>`
       );
     }).join('');

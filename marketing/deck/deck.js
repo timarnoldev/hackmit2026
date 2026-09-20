@@ -132,7 +132,7 @@
       s.dataset.num = appx ? `A${appNo - 1}` : String(mainNo);
       const foot = document.createElement('div');
       foot.className = 'foot';
-      foot.innerHTML = `${window.SlideHooks.markSVG}<span class="name">Erbgut</span><span class="num">${label}</span>`;
+      foot.innerHTML = `${window.SlideHooks.markSVG}<span class="num">${label}</span>`;
       s.appendChild(foot);
       const ov = document.createElement('span');
       ov.className = 'ovnum';
