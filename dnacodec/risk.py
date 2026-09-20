@@ -811,3 +811,149 @@ def _no_runs(rng: np.random.Generator, n: int, length: int) -> np.ndarray:
         bad = (seqs[:, j] == seqs[:, j - 1]) & (seqs[:, j - 1] == seqs[:, j - 2])
         seqs[bad, j] = (seqs[bad, j] + rng.integers(1, 4, size=int(bad.sum()))) % 4
     return seqs
+
+
+# --------------------------------------------------------------------------------------
+# 4. Real-read analysis (additions, firewall test 3)
+#
+# Everything below is about *real* clusters, not the simulator. It is separate from the
+# simulated training path above: nothing here changes how the simulator-trained risk model
+# is built. It exists to answer two questions:
+#   - does the simulator-trained risk model rank real decoder failures, once coverage is
+#     held fixed (real failure is dominated by how many reads a cluster has), and
+#   - can a risk model trained on *real* decoder failures do better?
+# --------------------------------------------------------------------------------------
+
+
+def subsample_reads(reads: Sequence[str], k: int, rng: np.random.Generator) -> list[str]:
+    """k reads drawn without replacement, in their original order. Fewer than k: all of them."""
+    if len(reads) <= k:
+        return list(reads)
+    idx = np.sort(rng.choice(len(reads), k, replace=False))
+    return [reads[i] for i in idx.tolist()]
+
+
+def _real_chunk(args: tuple) -> tuple[np.ndarray, np.ndarray]:
+    decoder, refs, read_sets, repeats = args
+    fails = np.zeros(len(refs), dtype=np.int64)
+    valid = np.zeros(len(refs), dtype=np.int64)
+    by_len: dict[int, list[int]] = {}
+    for i, ref in enumerate(refs):
+        by_len.setdefault(len(ref), []).append(i)
+    for strand_length, idx in by_len.items():
+        flat = [(i, r) for i in idx for r in range(repeats) if read_sets[i][r]]
+        if not flat:
+            continue
+        decoded = decoder.decode([read_sets[i][r] for i, r in flat], strand_length)
+        for (i, _), guess in zip(flat, decoded):
+            valid[i] += 1
+            fails[i] += guess != refs[i]
+    return fails, valid
+
+
+def real_failure_rates(
+    references: Sequence[Strand],
+    read_sets: Sequence[Sequence[str]],
+    decoder: Decoder,
+    coverage: int,
+    repeats: int = 4,
+    seed: int = 0,
+    workers: int | None = None,
+    heldout: bool = False,
+) -> np.ndarray:
+    """Failure rate of `decoder` on real clusters at exactly `coverage` reads per cluster.
+
+    For each cluster, `repeats` independent subsamples of `coverage` reads are decoded and
+    compared to the reference; the label is the fraction decoded wrongly. Averaging over
+    subsamples cuts the label noise the same way K simulations do for simulated strands.
+    Clusters with fewer than `coverage` reads keep all their reads (filter them out yourself
+    if you want a clean coverage stratum). NaN if a cluster has no reads at all.
+
+    Seed discipline as everywhere else: heldout=True requires a held-out seed.
+    """
+    _check_seed(seed, heldout)
+    references = list(references)
+    read_sets = [list(r) for r in read_sets]
+    if len(references) != len(read_sets):
+        raise ValueError(f"{len(references)} references but {len(read_sets)} clusters")
+    sampled: list[list[list[str]]] = []
+    for i, reads in enumerate(read_sets):
+        rng = np.random.default_rng(_derived_seed(seed, 7, coverage, i))
+        sampled.append([subsample_reads(reads, coverage, rng) for _ in range(repeats)])
+
+    chunk = LABEL_CHUNK
+    tasks = [
+        (decoder, references[a : a + chunk], sampled[a : a + chunk], repeats)
+        for a in range(0, len(references), chunk)
+    ]
+    workers = (os.cpu_count() or 1) if workers is None else workers
+    if workers <= 1 or len(tasks) <= 1 or getattr(decoder, "main_process_only", False):
+        results = [_real_chunk(t) for t in tasks]
+    else:
+        with ProcessPoolExecutor(max_workers=min(workers, len(tasks))) as pool:
+            results = list(pool.map(_real_chunk, tasks, chunksize=1))
+    if not results:
+        return np.zeros(0, dtype=np.float64)
+    fails = np.concatenate([r[0] for r in results])
+    valid = np.concatenate([r[1] for r in results])
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(valid > 0, fails / np.maximum(valid, 1), np.nan)
+
+
+def context_risk(
+    strands: Sequence[Strand], profile: SituationProfile, kind: str = "total", agg: str = "mean"
+) -> np.ndarray:
+    """Per-strand risk read straight off the simulator's 5-mer context table.
+
+    This is the hand-computable baseline the learned risk model has to beat: it uses the
+    very error-rate-given-context table the simulator was calibrated with, with no learning
+    on top. kind is "sub", "ins", "del" or "total" (the mean of the three); agg is "mean",
+    "max" or "top5" (mean of the five worst positions). Zeros if the profile has no table.
+    """
+    from .simulator import context_multipliers
+
+    strands = list(strands)
+    if not strands:
+        return np.zeros(0, dtype=np.float64)
+    out = np.zeros(len(strands), dtype=np.float64)
+    order = {"sub": 0, "ins": 1, "del": 2}
+    by_len: dict[int, list[int]] = {}
+    for i, s in enumerate(strands):
+        by_len.setdefault(len(s), []).append(i)
+    for length, idx in by_len.items():
+        codes = np.stack([_codes(strands[i]) for i in idx])
+        mult = context_multipliers(codes, profile)
+        if mult is None:
+            return out
+        per_pos = mult.mean(axis=0) if kind == "total" else mult[order[kind]]
+        if agg == "mean":
+            value = per_pos.mean(axis=1)
+        elif agg == "max":
+            value = per_pos.max(axis=1)
+        else:
+            value = np.sort(per_pos, axis=1)[:, -5:].mean(axis=1)
+        out[np.asarray(idx)] = value
+    return out
+
+
+def stratified_auc(failed: np.ndarray, score: np.ndarray, strata: np.ndarray) -> tuple[float, list[dict]]:
+    """AUC inside each stratum, plus one pooled number.
+
+    The pooled value weights each stratum by its number of positive-negative pairs, which is
+    the AUC you would get if you only ever compared clusters inside the same stratum.
+    Returns (pooled, per-stratum rows).
+    """
+    failed = np.asarray(failed, dtype=bool)
+    score = np.asarray(score, dtype=np.float64)
+    strata = np.asarray(strata)
+    rows: list[dict] = []
+    num = den = 0.0
+    for value in sorted(set(strata.tolist())):
+        sel = strata == value
+        pos, neg = float(failed[sel].sum()), float((~failed[sel]).sum())
+        auc = roc_auc(failed[sel], score[sel]) if pos and neg else float("nan")
+        rows.append({"stratum": value, "n": int(sel.sum()), "positives": int(pos), "auc": auc})
+        if pos and neg:
+            num += auc * pos * neg
+            den += pos * neg
+    return (num / den if den else float("nan")), rows
