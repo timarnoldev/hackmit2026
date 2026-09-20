@@ -372,6 +372,9 @@ html.results-broken .load-error { display: block; }
   right: 150px;
 }
 #s-title .brandrow { display: flex; align-items: center; gap: 44px; }
+#s-title .brandrow .lockup { width: auto; height: 340px; flex: none; }
+/* the wordmark is inside the artwork, so the heading is there for screen readers only */
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #s-title .brandrow .mark { width: 196px; height: 196px; flex: none; }
 /* the lettered lens is wider than it is tall, so it keeps its own ratio */
 #s-title .brandrow .mark--full { width: 250px; height: 196px; }
