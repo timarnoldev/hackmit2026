@@ -197,6 +197,14 @@ def _bytes_from_chunks(chunks: Sequence[int], layout: _Layout, n_bytes: int) -> 
 
 
 def _passes(strand: Strand, settings: EncoderSettings, homo_re: re.Pattern | None) -> bool:
+    # The seed sits in the first seed_bases letters. Screening it against the sequence rules
+    # also filters the seed space, which biases which data chunks a droplet combines and leaves
+    # some chunks covered by far fewer strands (see docs/LEARNED_RULES.md). constrain_seed=False
+    # applies the rules to the payload only, so no droplet is ever rejected for its seed.
+    if not settings.constrain_seed:
+        strand = strand[settings.seed_bases:]
+        if not strand:
+            return True
     if homo_re is not None and homo_re.search(strand):
         return False
     if settings.gc_min is not None or settings.gc_max is not None:

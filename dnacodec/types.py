@@ -35,6 +35,7 @@ class EncoderSettings:
     gc_min: float | None = 0.4  # hard constraint on GC fraction, None disables it
     gc_max: float | None = 0.6
     risk_threshold: float | None = None  # reject candidates the scorer rates above this, None disables
+    constrain_seed: bool = True  # False applies the hard rules to the payload only, not the seed bases
 
 
 @dataclass(frozen=True)
