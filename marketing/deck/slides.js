@@ -139,70 +139,75 @@
     track.innerHTML = html;
   }
 
-  /* ------------------------------------------------------------ slide 4: candidates */
+  /* ------------------------------------------------------------ slide 7: rules against the model
+   * One real slot of the encoder's candidate search. Strands, rule verdicts and risk scores all
+   * come from results.js ruleCase, which scripts/rule_vs_model_case.py computes with the trained
+   * model, so the builder only lays out what it is given.
+   */
 
-  // Same chunk, eight seeds. Rule checks and risk scores below are computed, not typed in.
-  // #6 passes every hand rule (run of 3 is legal) but carries the real CCCT deletion hot spot
-  // from docs/ERRORS.md, so the risk model, not the hand rule, is what catches it.
-  const CANDS = [
-    'ATACACGTCAGCACGAAACT',
-    'TTCGTACCTTGGGGGTCGTT',
-    'ACCACTCTGTTCCCACGAGC',
-    'GGCATTTCTGGATGGCCAGC',
-    'ATTGTGCTTGTTCAATTCTT',
-    'AGTCACCCTGATGCAGTCAG',
-    'GGCTCCGACGAATTTTTAAT',
-    'GCACGGAGTGGTTAGGCTTG',
-  ];
-  // Real hot-spot families measured on Nanopore reads (docs/ERRORS.md, docs/NUMBERS.md).
-  const HOT_MOTIFS = ['CGGG', 'CCCG', 'CCCT', 'GGGA'];
-  function riskOf(s) {
-    const dev = Math.abs(gcShare(s) - 0.5);
-    let score = 5 + Math.round(dev * 60);
-    const hit = HOT_MOTIFS.find((m) => s.includes(m));
-    if (hit) score += 34;
-    return { score: Math.min(score, 96), hit };
-  }
-
-  function buildCandidates() {
-    const host = document.getElementById('cands');
+  function buildRuleCase(R) {
+    const host = document.getElementById('rvm');
     if (!host) return;
-    const W = 27;
-    const meta = CANDS.map((s) => {
-      const run = maxRun(s);
-      const gc = gcShare(s);
-      const runFail = run.len > 3;
-      const gcFail = gc < 0.4 || gc > 0.6;
-      const fail = runFail || gcFail;
-      return { s, run, gc, runFail, gcFail, fail, risk: fail ? null : riskOf(s) };
-    });
-    let bestIdx = -1;
-    let bestScore = Infinity;
-    meta.forEach((m, i) => {
-      if (!m.fail && m.risk.score < bestScore) {
-        bestScore = m.risk.score;
-        bestIdx = i;
-      }
-    });
-    host.innerHTML = meta.map((m, i) => {
-      const { s, run, gc, runFail, gcFail, fail, risk } = m;
-      const why = runFail ? `run of ${run.len}` : gcFail ? `GC ${Math.round(gc * 100)}%, outside 40 to 60%` : 'passes';
-      const isBest = i === bestIdx;
-      const isHot = !fail && !!risk.hit;
-      return (
-        `<div class="cand ${fail ? 'fail' : 'pass'}${isBest ? ' kept' : ''}${isHot ? ' airisk' : ''}" style="--i:${i}">` +
-        `<span class="no">#${i + 1}</span>` +
-        `<span class="seqwrap"><span class="seq">${seqHTML(s)}</span>` +
-        (runFail ? `<span class="runmark" style="left:${run.start * W + 3}px;width:${run.len * W - 6}px"></span>` : '') +
-        `<span class="strike"></span></span>` +
-        `<span class="why ${fail ? 'bad' : 'ok'}"><span class="why-txt">${icon(fail ? 'cross' : 'check')}${why}</span>` +
-        (!fail ? `<span class="risk">${risk.score}%</span>` : '') +
-        (isHot ? `<span class="hotflag">${icon('cross')}${risk.hit}</span>` : '') +
-        `</span>` +
-        (isBest ? '<span class="keep">kept</span>' : '') +
-        `</div>`
-      );
+    const C = (R && R.ruleCase) || {};
+    const rows = Array.isArray(C.candidates) ? C.candidates : [];
+    const foot = document.getElementById('rvmfoot');
+    if (!rows.length) {
+      host.innerHTML = `<div class="pending-box" style="left:0;right:0;top:40px">${ph('a real slot of candidates with rule verdicts and risk scores')}</div>`;
+      if (foot) foot.innerHTML = '';
+      return;
+    }
+    const ours = rows.find((r) => r.n === C.oursN) || rows.find((r) => r.passes);
+    const best = rows.reduce((x, y) => (y.risk < x.risk ? y : x), rows[0]);
+    const handed = rows.find((r) => r.rulesPick);
+    const pct = (v) => Math.max(2, Math.min(100, v * 100));
+
+    const letters = (r) => {
+      const run = maxRun(r.seq);
+      if (r.passes || run.len <= 3) return esc(r.seq);
+      return esc(r.seq.slice(0, run.start)) +
+        `<b>${esc(r.seq.slice(run.start, run.start + run.len))}</b>` +
+        esc(r.seq.slice(run.start + run.len));
+    };
+
+    const left = rows.map((r, i) =>
+      `<div class="rrow ${r.passes ? 'pass' : 'cut'}${r.rulesPick ? ' picked' : ''} frag fade" data-f="1" style="--i:${i}">` +
+      `<span class="no">${r.n}</span>` +
+      `<span class="seqwrap"><span class="seq">${letters(r)}</span><span class="strike"></span></span>` +
+      `<span class="why">${r.passes ? '' : esc(r.why)}</span>` +
+      (r.rulesPick ? '<span class="handed">handed over</span>' : '') +
+      `</div>`).join('');
+
+    const right = rows.map((r, i) => {
+      const cls = r.rulesPick ? 'cost' : (ours && r.n === ours.n ? 'gain' : (r.passes ? '' : 'cut'));
+      const tag = r.rulesPick ? 'riskier than average'
+        : (ours && r.n === ours.n ? 'what we keep'
+        : (best && r.n === best.n ? 'safest of the six, and cut' : ''));
+      return `<div class="mrow ${cls} frag fade" data-f="3" style="--i:${i}">` +
+        `<span class="no">${r.n}</span>` +
+        `<span class="track"><i style="width:${pct(r.risk)}%"></i></span>` +
+        `<span class="val">${r.risk.toFixed(2)}</span>` +
+        (tag ? `<span class="mtag">${tag}</span>` : '') +
+        `</div>`;
     }).join('');
+
+    const mean = isNum(C.mean)
+      ? `<span class="meanline frag fade" data-f="3" style="left:${pct(C.mean)}%"><i></i><em>average candidate ${C.mean.toFixed(2)}</em></span>`
+      : '';
+
+    host.innerHTML =
+      `<div class="pan frag fade" data-f="1"><h3>The hand rules<em>a yes or no</em></h3><div class="rows">${left}</div>` +
+      `<p class="pfoot frag fade" data-f="2">the encoder takes the first survivor` +
+      (isNum(C.from) && isNum(C.to) && isNum(C.length) ? `<em>letters ${C.from} to ${C.to} of ${C.length}</em>` : '') +
+      `</p></div>` +
+      `<div class="pan mod frag fade" data-f="3"><h3>Our risk model<em>a number for every candidate</em></h3>` +
+      `<div class="rows bars">${mean}${right}</div>` +
+      `<p class="pfoot frag fade" data-f="3">predicted chance the whole strand fails on this channel</p></div>`;
+
+    if (foot) {
+      foot.innerHTML =
+        (handed ? `<span class="pill2 cost frag fade" data-f="4"><span>The rules hand over <b>${handed.risk.toFixed(2)}</b>${isNum(C.mean) ? `, above the average candidate at ${C.mean.toFixed(2)}` : ''}</span></span>` : '') +
+        (ours ? `<span class="pill2 gain frag fade" data-f="4"><span>We keep <b>${ours.risk.toFixed(2)}</b>, the safest strand the rules allow</span></span>` : '');
+    }
   }
 
   /* ------------------------------------------------------------ slide 5: rule audit */
@@ -1007,7 +1012,7 @@
       });
       expandSeqs(document);
       buildRibbon();
-      buildCandidates();
+      buildRuleCase(R);
       buildAudit(R);
       buildTier2();
       buildArchitecture();

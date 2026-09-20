@@ -847,96 +847,67 @@ html.results-broken .load-error { display: block; }
 #s-pipeline .flow-arrow { position: absolute; top: 330px; width: 44px; height: 44px; color: var(--sa-muted); opacity: 0; transition: opacity 0.4s; }
 #s-pipeline.s3 .fa1, #s-pipeline.s4 .fa2 { opacity: 0.8; }
 
-/* ---------------------------------------------------------------- slide 4: candidates */
-
-#s-rules .layout {
-  position: absolute;
-  left: 120px;
-  right: 120px;
-  top: 292px;
-  display: grid;
-  grid-template-columns: 1080px 1fr;
-  gap: 60px;
+/* ---------------------------------------------------------------- slide 7: rules vs model
+   the rules against the model: one real slot, two ways of judging it.
+   Left is the hand rules, a verdict. Right is our model, a number. Magenta is what the rules
+   hand over, green is what we keep, and the rows line up so the same candidate sits at the
+   same height in both panels. */
+.rvm {
+  position: absolute; left: 120px; right: 120px; top: 268px;
+  display: grid; grid-template-columns: 830px 1fr; gap: 46px; align-items: start;
 }
-#s-rules .src { display: flex; align-items: center; gap: 18px; font-size: 26px; color: var(--sa-muted); margin-bottom: 18px; }
-#s-rules .src .chip { font-family: var(--mono); font-weight: 600; color: var(--sa-ink); border: 2px solid var(--sa-rule); border-radius: 10px; padding: 4px 14px; font-size: 24px; background: var(--sa-surface); }
-#s-rules .cands { display: grid; gap: 8px; }
-#s-rules .cand {
-  display: grid;
-  grid-template-columns: 60px 560px 1fr;
-  align-items: center;
-  gap: 18px;
-  height: 60px;
-  padding: 0 18px;
-  border-radius: 14px;
-  border: 2px solid transparent;
-  opacity: 0;
-  transform: translateX(-30px);
-  transition: opacity 0.45s var(--ease-out), transform 0.6s var(--ease-out), background-color 0.4s, border-color 0.4s;
-  transition-delay: calc(var(--i) * 70ms);
-  position: relative;
+.rvm .pan h3 {
+  margin: 0 0 18px; font-size: 30px; font-weight: 600; letter-spacing: -0.01em;
+  display: flex; align-items: baseline; gap: 14px;
 }
-#s-rules.s1 .cand { opacity: 1; transform: none; }
-#s-rules .cand .no { font-family: var(--mono); font-size: 22px; color: var(--sa-muted); }
-#s-rules .cand .seq { font-size: 36px; position: relative; }
-#s-rules .cand .seq .nt { width: 27px; }
-#s-rules .cand .why { font-size: 25px; font-weight: 600; display: flex; align-items: center; gap: 16px; opacity: 0; transition: opacity 0.4s; }
-#s-rules .cand .why-txt { display: flex; align-items: center; gap: 10px; }
-#s-rules .cand .why-txt svg { width: 30px; height: 30px; }
-#s-rules .cand .why.bad .why-txt { color: var(--sa-cost); }
-#s-rules .cand .why.ok .why-txt { color: var(--sa-gain); }
-#s-rules .cand .seqwrap { position: relative; display: inline-block; }
-#s-rules .cand .strike {
-  position: absolute; left: -6px; right: -6px; top: 50%; height: 4px; border-radius: 2px; background: var(--sa-cost);
-  transform: scaleX(0); transform-origin: 0 50%; transition: transform 0.5s var(--ease-out);
+.rvm .pan h3 em { font-style: normal; font-size: 22px; color: var(--sa-muted); font-weight: 400; }
+.rvm .pan.mod h3 { color: var(--sa-audit); }
+.rvm .rows { display: grid; gap: 10px; position: relative; }
+.rvm .pfoot { margin: 56px 0 0; font-size: 21px; color: var(--sa-muted); }
+.rvm .pfoot em { font-style: normal; font-size: 18px; opacity: 0.8; margin-left: 14px; }
+#s-rules .pill2 b { font-weight: 700; }
+.rvm .no {
+  font-family: var(--mono); font-size: 20px; color: var(--sa-muted); width: 26px; flex: none;
 }
-#s-rules .cand .runmark {
-  position: absolute; top: -3px; bottom: -3px; border: 3px solid var(--sa-cost); border-radius: 9px; background: var(--tint-cost);
-  opacity: 0; transition: opacity 0.3s;
+.rvm .rrow, .rvm .mrow { display: flex; align-items: center; gap: 16px; height: 54px; }
+.rvm .rrow .seqwrap { position: relative; display: inline-block; }
+.rvm .rrow .seq { font-family: var(--mono); font-size: 21px; letter-spacing: 0.055em; color: var(--sa-ink); }
+.rvm .rrow .seq b { font-weight: 700; color: var(--sa-cost); }
+.rvm .rrow .strike {
+  position: absolute; left: -4px; right: -4px; top: 50%; height: 3px; background: var(--sa-cost);
+  transform: scaleX(0); transform-origin: left; border-radius: 2px;
 }
-#s-rules .cand .risk {
-  font-family: var(--mono); font-weight: 600; font-size: 21px; color: var(--sa-muted);
-  opacity: 0; transform: translateX(-6px);
-  transition: opacity 0.4s, transform 0.4s var(--ease-out), color 0.5s;
-  transition-delay: calc(0.35s + var(--i) * 110ms);
+.rvm .rrow .why { font-size: 21px; color: var(--sa-cost); font-weight: 600; opacity: 0; transition: opacity 0.35s; }
+.rvm .rrow .handed {
+  font-size: 19px; font-weight: 600; padding: 3px 12px; border-radius: 999px;
+  border: 2px solid var(--sa-rule); color: var(--sa-muted); opacity: 0; transition: opacity 0.35s;
 }
-
-#s-rules.s2 .cand .why { opacity: 1; transition-delay: calc(0.2s + var(--i) * 90ms); }
-#s-rules.s2 .cand.fail .strike { transform: scaleX(1); transition-delay: calc(0.25s + var(--i) * 90ms); }
-#s-rules.s2 .cand.fail .runmark { opacity: 1; transition-delay: calc(0.1s + var(--i) * 90ms); }
-#s-rules.s2 .cand.fail .seq { opacity: 0.4; transition: opacity 0.5s calc(0.3s + var(--i) * 90ms); }
-
-#s-rules.s3 .cand .risk { opacity: 1; transform: none; }
-#s-rules.s3 .cand.fail { opacity: 0.3; }
-#s-rules.s3 .cand.pass:not(.kept) { opacity: 0.55; transition-delay: 1.9s; }
-#s-rules.s3 .cand.kept {
-  border-color: var(--sa-audit); background: var(--tint-audit);
-  transition-delay: 0s, 0s, 1.9s, 1.9s;
+#s-rules.s2 .rrow.cut .strike { transform: scaleX(1); transition: transform 0.45s var(--ease-out) calc(var(--i) * 80ms); }
+#s-rules.s2 .rrow.cut .seq { opacity: 0.4; transition: opacity 0.4s calc(var(--i) * 80ms); }
+#s-rules.s2 .rrow .why, #s-rules.s2 .rrow .handed { opacity: 1; transition-delay: calc(0.15s + var(--i) * 80ms); }
+.rvm .mrow .track {
+  position: relative; flex: 1; height: 26px; border-radius: 999px; background: var(--sa-surface);
+  border: 2px solid var(--sa-rule); overflow: hidden;
 }
-#s-rules .cand .keep { font-size: 25px; font-weight: 600; color: var(--sa-audit); position: absolute; right: 18px; opacity: 0; transition: opacity 0.4s; transition-delay: 2s; }
-#s-rules.s3 .cand.kept .keep { opacity: 1; }
-#s-rules.s3 .cand.kept .why { opacity: 0; transition-delay: 1.9s; }
-
-#s-rules.s3 .cand.airisk {
-  border-color: var(--sa-cost); border-style: dashed; background: var(--tint-cost);
-  transition-delay: 0s, 0s, 1.3s, 1.3s;
+.rvm .mrow .track i {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--sa-audit);
+  transform: scaleX(0); transform-origin: left; transition: transform 0.6s var(--ease-out);
 }
-#s-rules.s3 .cand.airisk .risk {
-  color: var(--sa-cost);
-  transition-delay: calc(0.35s + var(--i) * 110ms), calc(0.35s + var(--i) * 110ms), 1.3s;
+#s-rules.s3 .mrow .track i { transform: none; transition-delay: calc(0.1s + var(--i) * 70ms); }
+.rvm .mrow.cut .track i { background: var(--sa-rule); }
+.rvm .mrow.cost .track i { background: var(--sa-cost); }
+.rvm .mrow.gain .track i { background: var(--sa-gain); }
+.rvm .mrow .val { font-family: var(--mono); font-size: 23px; font-weight: 600; width: 62px; text-align: right; }
+.rvm .mrow.cost .val { color: var(--sa-cost); }
+.rvm .mrow.gain .val { color: var(--sa-gain); }
+.rvm .mrow .mtag { font-size: 19px; color: var(--sa-muted); width: 238px; line-height: 1.2; }
+.rvm .mrow.cost .mtag, .rvm .mrow.gain .mtag { font-weight: 600; color: var(--sa-ink); }
+.rvm .meanline { position: absolute; top: -6px; bottom: -40px; margin-left: 42px; width: 0; }
+.rvm .meanline i { position: absolute; top: 0; bottom: 28px; border-left: 2px dashed var(--sa-muted); }
+.rvm .meanline em {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  font-style: normal; font-size: 18px; color: var(--sa-muted); white-space: nowrap;
 }
-#s-rules .cand .hotflag {
-  font-size: 18px; font-weight: 600; color: var(--sa-cost);
-  display: flex; align-items: center; gap: 6px; opacity: 0; transform: translateX(8px);
-  transition: opacity 0.4s, transform 0.4s var(--ease-back); transition-delay: 1.5s;
-}
-#s-rules .cand .hotflag svg { width: 20px; height: 20px; flex: none; }
-#s-rules.s3 .cand.airisk .hotflag { opacity: 1; transform: none; }
-
-#s-rules .side { display: grid; gap: 24px; align-content: start; padding-top: 62px; }
-#s-rules .side .box { padding: 26px 30px; }
-#s-rules .side .box h4 { margin: 0 0 10px; font-size: 30px; font-weight: 600; display: flex; align-items: center; gap: 14px; }
-#s-rules .side .box p { margin: 0; font-size: 25px; line-height: 1.4; color: var(--sa-muted); }
 
 /* ---------------------------------------------------------------- slide 5: rule audit */
 

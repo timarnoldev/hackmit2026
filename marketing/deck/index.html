@@ -345,27 +345,19 @@
 </section>
 
 <!-- ================================================================ 7. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="108-121"
-  data-labels="Several candidates per slot|Rules reject some|The risk model scores what's left, and picks the safest">
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="108-121" data-steps="4"
+  data-labels="One slot, six candidates|The hand rules cross four out|Our model scores all six|What each one hands over">
   <p class="kicker">Where the rules come in</p>
-  <h2 class="title sm">The encoder picks one of several candidate strands</h2>
-  <div class="layout">
-    <div>
-      <div class="src"><span class="chip">slot 17</span> 8 seeds &middot; 20 letters</div>
-      <div class="cands" id="cands"></div>
-    </div>
-    <div class="side">
-      <div class="box card frag" data-f="3">
-        <h4>The risk model picks the safest</h4>
-      </div>
-    </div>
-  </div>
+  <h2 class="title sm">The rules give a verdict. The model gives a number.</h2>
+  <div class="rvm" id="rvm"></div>
+  <div class="footline" id="rvmfoot"></div>
   <aside class="notes">
-    <p>So where do the rules come in?</p>
-    <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
-    <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
-    <p><i class="cue"></i> By default, any candidate that passes is as good as any other. But watch this one: it passes every hand rule, and it's still carrying a real deletion hot spot from real Nanopore reads.</p>
-    <p><i class="cue"></i> That's exactly what the risk model is for. It scores every survivor, catches the one the hand rules missed, and keeps the one that's actually safest.</p>
+    <p>So where do the rules come in? The encoder does not write one strand per slot. It builds several candidates for the same data and keeps one. This is a real slot from the real encoder.</p>
+    <p><i class="cue"></i> Six candidates. Same data, different seeds, so the letters are different every time.</p>
+    <p><i class="cue"></i> The hand rules are a yes or no. Four of these are crossed out for a run of four or five identical letters, and the encoder takes the first survivor. That is the whole decision. A rule cannot tell you that one survivor is more dangerous than another, because it does not have a number.</p>
+    <p><i class="cue"></i> Our model gives every candidate a number: its predicted chance of failing on this channel, learned from where the decoder actually fails. Now look at the same six. The strand the rules handed over scores 0.62, well above the average candidate at 0.51. The one we keep scores 0.52.</p>
+    <p><i class="cue"></i> And the sharpest part is the one the rules threw away: 0.45, the safest strand in the slot, rejected for a run of four. The hard rule still vetoes it, and whether that veto is worth its price is exactly what the audit measures per channel rather than assumes. Our own rerun says the run rule earns its place on Nanopore, so it stays.</p>
+    <p class="aside">Provenance, if asked: the candidates come from the encoder's own seed schedule on the real test file with the run settings, and the scores are the trained Nanopore risk model's. The search that found this slot is committed as scripts/rule_vs_model_case.py, and its output is in results/rule_vs_model_case.json. Nothing on this slide is hand-written. The letters shown are bases 17 to 56 of a 110 base strand, the first 40 after the seed; each score is the model's score for the whole strand.</p>
   </aside>
 </section>
 
