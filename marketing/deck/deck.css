@@ -1238,7 +1238,7 @@ html.results-broken .load-error { display: block; }
 
 #a-cctt .hotlist {
   display: flex; justify-content: center; flex-wrap: wrap; gap: 40px;
-  margin: 96px auto 0; max-width: 1680px;
+  margin: 260px auto 0; max-width: 1680px;
 }
 #a-cctt .hitem {
   display: flex; flex-direction: column; align-items: center; gap: 20px;
@@ -1503,7 +1503,7 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
 }
 #s-overview.s4 .ov-shift { transform: translate(460px, 0); }
 
-#s-overview .ov-lettertext { opacity: 0; transition: opacity 0.5s var(--ease-out); }
+#s-overview .ov-lettertext { position: relative; top: -14px; opacity: 0; transition: opacity 0.5s var(--ease-out); }
 #s-overview .ov-lettertext .seq { font-size: 42px; }
 #s-overview .ov-lettertext .seq .nt { width: 31px; }
 #s-overview.s3 .ov-lettertext { opacity: 1; }
