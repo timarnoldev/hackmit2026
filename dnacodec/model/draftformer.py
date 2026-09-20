@@ -169,26 +169,71 @@ def collate(packs: Sequence[Pack], device: torch.device | str = "cpu") -> dict:
 # ---------------------------------------------------------------- blocks
 
 
+class _Attn(nn.Module):
+    """Multi-head attention on ``F.scaled_dot_product_attention``.
+
+    ``nn.MultiheadAttention`` falls back to the math path as soon as a key padding mask is
+    given in training mode, which materializes a (batch, heads, T, S) weight tensor. With
+    one sequence per read (batch * 16) that tensor alone was gigabytes and made a step 100
+    times slower than its FLOPs. SDPA keeps it fused, and a cache makes autoregressive
+    decoding linear instead of quadratic in the strand length.
+    """
+
+    def __init__(self, d: int, heads: int, dropout: float, d_kv: int | None = None):
+        super().__init__()
+        if d % heads:
+            raise ValueError(f"d={d} must be divisible by heads={heads}")
+        self.heads, self.hd, self.dropout = heads, d // heads, dropout
+        self.q = nn.Linear(d, d)
+        self.k = nn.Linear(d_kv or d, d)
+        self.v = nn.Linear(d_kv or d, d)
+        self.o = nn.Linear(d, d)
+
+    def _split(self, x: torch.Tensor) -> torch.Tensor:
+        b, t, _ = x.shape
+        return x.view(b, t, self.heads, self.hd).transpose(1, 2)
+
+    def forward(self, x, kv=None, key_padding_mask=None, causal=False, cache=None, key=None):
+        """key_padding_mask: (B, S) bool, True = padding. cache: dict for incremental decoding."""
+        q = self._split(self.q(x))
+        if cache is not None and key is not None and kv is not None and f"{key}_k" in cache:
+            k, v = cache[f"{key}_k"], cache[f"{key}_v"]  # cross-attention: memory never changes
+        else:
+            src = x if kv is None else kv
+            k, v = self._split(self.k(src)), self._split(self.v(src))
+            if cache is not None and key is not None:
+                if kv is None and f"{key}_k" in cache:  # self-attention: append this step
+                    k = torch.cat([cache[f"{key}_k"], k], dim=2)
+                    v = torch.cat([cache[f"{key}_v"], v], dim=2)
+                cache[f"{key}_k"], cache[f"{key}_v"] = k, v
+        mask = None
+        if key_padding_mask is not None:
+            mask = ~key_padding_mask[:, None, None, :]  # True = take part in attention
+        out = F.scaled_dot_product_attention(
+            q, k, v, attn_mask=mask, is_causal=causal and mask is None,
+            dropout_p=self.dropout if self.training else 0.0,
+        )
+        b, _, t, _ = out.shape
+        return self.o(out.transpose(1, 2).reshape(b, t, self.heads * self.hd))
+
+
+def _ffn(d: int, hidden: int) -> nn.Module:
+    return nn.Sequential(nn.Linear(d, hidden), nn.GELU(), nn.Linear(hidden, d))
+
+
 class _SelfBlock(nn.Module):
     """Pre-norm self-attention plus a feed-forward, the standard pair."""
 
     def __init__(self, d: int, heads: int, ffn: int, dropout: float):
         super().__init__()
         self.n1, self.n2 = nn.LayerNorm(d), nn.LayerNorm(d)
-        self.attn = nn.MultiheadAttention(d, heads, dropout=dropout, batch_first=True)
-        self.ff = nn.Sequential(nn.Linear(d, ffn), nn.GELU(), nn.Linear(ffn, d))
+        self.attn = _Attn(d, heads, dropout)
+        self.ff = _ffn(d, ffn)
         self.drop = nn.Dropout(dropout)
 
-    def forward(self, x, key_padding_mask=None, attn_mask=None, is_causal=False):
-        h = self.n1(x)
-        a, _ = self.attn(
-            h, h, h,
-            key_padding_mask=key_padding_mask,
-            attn_mask=attn_mask,
-            is_causal=is_causal,
-            need_weights=False,
-        )
-        x = x + self.drop(a)
+    def forward(self, x, key_padding_mask=None, causal=False, cache=None, key=None):
+        x = x + self.drop(self.attn(self.n1(x), key_padding_mask=key_padding_mask,
+                                    causal=causal, cache=cache, key=key))
         return x + self.drop(self.ff(self.n2(x)))
 
 
@@ -197,21 +242,37 @@ class _CrossBlock(nn.Module):
 
     def __init__(self, d: int, heads: int, ffn: int, dropout: float, d_mem: int | None = None):
         super().__init__()
-        d_mem = d_mem or d
-        self.n1, self.nm, self.n2 = nn.LayerNorm(d), nn.LayerNorm(d_mem), nn.LayerNorm(d)
-        self.attn = nn.MultiheadAttention(
-            d, heads, dropout=dropout, batch_first=True, kdim=d_mem, vdim=d_mem
-        )
-        self.ff = nn.Sequential(nn.Linear(d, ffn), nn.GELU(), nn.Linear(ffn, d))
+        self.n1, self.nm, self.n2 = nn.LayerNorm(d), nn.LayerNorm(d_mem or d), nn.LayerNorm(d)
+        self.attn = _Attn(d, heads, dropout, d_kv=d_mem)
+        self.ff = _ffn(d, ffn)
         self.drop = nn.Dropout(dropout)
 
-    def forward(self, x, mem, mem_key_padding_mask=None):
-        m = self.nm(mem)
-        a, _ = self.attn(
-            self.n1(x), m, m, key_padding_mask=mem_key_padding_mask, need_weights=False
-        )
-        x = x + self.drop(a)
+    def forward(self, x, mem, mem_key_padding_mask=None, cache=None, key=None):
+        x = x + self.drop(self.attn(self.n1(x), kv=self.nm(mem),
+                                    key_padding_mask=mem_key_padding_mask, cache=cache, key=key))
         return x + self.drop(self.ff(self.n2(x)))
+
+
+class _ReadBlock(nn.Module):
+    """Residual dilated convolution along one read, in the read's own coordinates.
+
+    A read only needs its local neighbourhood (an insertion two bases earlier, the run it
+    sits in), and there are 16 reads per cluster, so this axis is 16 times as many tokens as
+    the draft axis. A convolution is the cheap way to buy that context; attention is spent
+    where it earns its keep, across the reads and along the draft.
+    """
+
+    def __init__(self, c: int, kernel: int, dilation: int, dropout: float):
+        super().__init__()
+        pad = dilation * (kernel - 1) // 2
+        self.norm = nn.GroupNorm(4, c)
+        self.conv1 = nn.Conv1d(c, c, kernel, padding=pad, dilation=dilation)
+        self.conv2 = nn.Conv1d(c, c, 1)
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x):  # (N, C, T)
+        h = self.conv1(F.gelu(self.norm(x)))
+        return x + self.drop(self.conv2(F.gelu(h)))
 
 
 # ---------------------------------------------------------------- the model
@@ -222,8 +283,8 @@ class DraftFormerConfig:
     d_read: int = 96
     d: int = 192
     heads: int = 6
-    read_heads: int = 4
-    read_layers: int = 2
+    read_kernel: int = 5
+    read_layers: int = 3
     cross_layers: int = 2
     trunk_layers: int = 4
     dec_layers: int = 4
@@ -246,7 +307,7 @@ class DraftFormer(nn.Module):
         self.coord_emb = nn.Embedding(cfg.max_len + 1, dr)
         self.ins_emb = nn.Embedding(2, dr)
         self.read_blocks = nn.ModuleList(
-            [_SelfBlock(dr, cfg.read_heads, dr * 2, cfg.dropout) for _ in range(cfg.read_layers)]
+            [_ReadBlock(dr, cfg.read_kernel, 2**i, cfg.dropout) for i in range(cfg.read_layers)]
         )
         self.read_norm = nn.LayerNorm(dr)
         self.no_align = nn.Parameter(torch.zeros(dr))
@@ -291,19 +352,15 @@ class DraftFormer(nn.Module):
         length = draft.shape[1]
         cfg = self.cfg
 
-        pad = rbase == BASE_PAD
         h = (
             self.base_emb(rbase)
             + self.coord_emb(rcoord.clamp(0, cfg.max_len))
             + self.ins_emb(rins)
         )
-        h = h.reshape(b * r, width, cfg.d_read)
-        mask = pad.reshape(b * r, width)
-        # a fully padded read slot would make softmax nan: give it one visible token
-        mask = mask & ~(mask.all(dim=1, keepdim=True))
+        h = h.reshape(b * r, width, cfg.d_read).transpose(1, 2)  # (B*R, d_read, Lr)
         for block in self.read_blocks:
-            h = block(h, key_padding_mask=mask)
-        h = self.read_norm(h).reshape(b, r, width, cfg.d_read)
+            h = block(h)
+        h = self.read_norm(h.transpose(1, 2)).reshape(b, r, width, cfg.d_read)
 
         idx = gather.clamp(min=0).unsqueeze(-1).expand(-1, -1, -1, cfg.d_read)
         g = torch.gather(h, 2, idx)  # (B, R, L, d_read)
@@ -350,66 +407,62 @@ class DraftFormer(nn.Module):
             flip[:, 0] = False  # never touch BOS
             rand = torch.randint(0, 4, inp.shape, device=inp.device, dtype=inp.dtype)
             inp = torch.where(flip, rand, inp)
-        causal = torch.triu(
-            torch.full((length, length), float("-inf"), device=mem.device), diagonal=1
-        )
-        return self._dec_forward(mem, inp, causal)
+        return self._dec_forward(mem, inp, offset=0, causal=True)
 
-    def _dec_forward(self, mem, inp, causal):
-        length = inp.shape[1]
-        pos = torch.arange(length, device=inp.device).clamp(max=self.cfg.max_len - 1)
-        x = self.tok_emb(inp) + self.dpos_emb(pos)[None] + self.mem_gate(mem[:, :length])
-        for self_block, cross_block in zip(self.dec_self, self.dec_cross):
-            x = self_block(x, attn_mask=causal)
-            x = cross_block(x, mem)
+    def _dec_forward(self, mem, inp, offset: int = 0, causal: bool = True, cache=None):
+        """Decoder over `inp` (B, T). offset is the position of its first token."""
+        t = inp.shape[1]
+        pos = torch.arange(offset, offset + t, device=inp.device).clamp(max=self.cfg.max_len - 1)
+        x = self.tok_emb(inp) + self.dpos_emb(pos)[None] + self.mem_gate(mem[:, offset : offset + t])
+        for i, (self_block, cross_block) in enumerate(zip(self.dec_self, self.dec_cross)):
+            x = self_block(x, causal=causal, cache=cache, key=f"s{i}")
+            x = cross_block(x, mem, cache=cache, key=f"c{i}")
         return self.out_head(self.out_norm(x))
 
     @torch.no_grad()
     def generate(self, mem: torch.Tensor, length: int) -> torch.Tensor:
-        """Greedy decoding, exactly `length` tokens. Returns (B, L) base codes.
-
-        No KV cache: the prefix is re-run each step, which is O(L^2) attention but on
-        L <= 140 tokens and a 192-wide model that is a few milliseconds per batch.
-        """
-        b = mem.shape[0]
-        out = torch.zeros((b, length), dtype=torch.long, device=mem.device)
-        inp = torch.full((b, 1), BOS, dtype=torch.long, device=mem.device)
-        for t in range(length):
-            causal = torch.triu(
-                torch.full((t + 1, t + 1), float("-inf"), device=mem.device), diagonal=1
-            )
-            logits = self._dec_forward(mem, inp, causal)[:, -1]
-            nxt = logits.argmax(-1)
-            out[:, t] = nxt
-            inp = torch.cat([inp, nxt[:, None]], dim=1)
-        return out
+        """Greedy decoding, exactly `length` tokens. Returns (B, L) base codes."""
+        return self.beam(mem, length, beams=1)
 
     @torch.no_grad()
     def beam(self, mem: torch.Tensor, length: int, beams: int = 4) -> torch.Tensor:
-        """Beam search over the whole strand. Returns (B, L) base codes of the best beam."""
-        if beams <= 1:
-            return self.generate(mem, length)
+        """Beam search over the whole strand, with a key/value cache.
+
+        Returns (B, L) base codes of the best beam. beams=1 is greedy decoding. The output
+        has exactly `length` tokens: there is no end symbol and no length repair, which is
+        the structural advantage of generating a strand of known length.
+        """
         b, _, d = mem.shape
-        mem_b = mem[:, None].expand(b, beams, mem.shape[1], d).reshape(b * beams, -1, d)
+        mem_b = mem if beams == 1 else (
+            mem[:, None].expand(b, beams, mem.shape[1], d).reshape(b * beams, -1, d)
+        )
+        cache: dict = {}
         inp = torch.full((b * beams, 1), BOS, dtype=torch.long, device=mem.device)
+        tokens = torch.zeros((b * beams, length), dtype=torch.long, device=mem.device)
         scores = torch.full((b, beams), float("-inf"), device=mem.device)
         scores[:, 0] = 0.0
+        rows = torch.arange(b, device=mem.device)[:, None] * beams
         for t in range(length):
-            causal = torch.triu(
-                torch.full((t + 1, t + 1), float("-inf"), device=mem.device), diagonal=1
-            )
-            logp = self._dec_forward(mem_b, inp, causal)[:, -1].float().log_softmax(-1)
-            cand = scores.reshape(b * beams, 1) + logp  # (B*beams, 4)
-            cand = cand.reshape(b, beams * 4)
+            logits = self._dec_forward(mem_b, inp, offset=t, causal=False, cache=cache)[:, -1]
+            if beams == 1:
+                nxt = logits.argmax(-1)
+                tokens[:, t] = nxt
+                inp = nxt[:, None]
+                continue
+            logp = logits.float().log_softmax(-1)
+            cand = (scores.reshape(b * beams, 1) + logp).reshape(b, beams * 4)
             scores, flat = cand.topk(beams, dim=1)
-            which = flat // 4
-            token = flat % 4
-            base = (torch.arange(b, device=mem.device) * beams)[:, None]
-            inp = inp[(base + which).reshape(-1)]
-            inp = torch.cat([inp, token.reshape(-1, 1)], dim=1)
-        best = scores.argmax(dim=1)
-        rows = torch.arange(b, device=mem.device) * beams + best
-        return inp[rows, 1:]
+            order = (rows + flat // 4).reshape(-1)
+            token = (flat % 4).reshape(-1)
+            tokens = tokens[order]
+            tokens[:, t] = token
+            for k in cache:  # follow the beams that survived
+                cache[k] = cache[k][order]
+            inp = token[:, None]
+        if beams == 1:
+            return tokens
+        best = (rows[:, 0] + scores.argmax(dim=1))
+        return tokens[best]
 
     def forward(self, batch: dict, target: torch.Tensor, noise: float = 0.0):
         mem, op_logits, ins_logits = self.encode(batch)

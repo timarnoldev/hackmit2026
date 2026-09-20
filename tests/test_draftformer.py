@@ -38,7 +38,7 @@ def _clusters(n=8, length=110, coverage=8.0, seed=0):
 
 
 def _tiny():
-    return DraftFormer(DraftFormerConfig(d=32, d_read=16, heads=2, read_heads=2, read_layers=1,
+    return DraftFormer(DraftFormerConfig(d=32, d_read=16, heads=2, read_layers=1,
                                          cross_layers=1, trunk_layers=1, dec_layers=1))
 
 
@@ -198,3 +198,19 @@ def test_single_read_cluster():
     cut = [[r for r in c if r][:1] for c in clusters]
     out = decode_clusters(_tiny(), cut, 110, mode="greedy")
     assert all(o is None or len(o) == 110 for o in out)
+
+
+def test_cached_generation_matches_teacher_forcing():
+    """The key/value cache must produce exactly what a full re-run of the prefix produces."""
+    refs, clusters = _clusters(n=4, seed=11)
+    items = [pack_example([r for r in c if r][:6], 110, ref)
+             for ref, c in zip(refs, clusters) if any(c)]
+    items = [i for i in items if i is not None]
+    batch = collate([i[0] for i in items])
+    model = _tiny().eval()
+    with torch.no_grad():
+        mem, _, _ = model.encode(batch)
+        greedy = model.generate(mem, 110)
+        # feeding the generated strand back in as the teacher must reproduce it greedily
+        logits = model.decode_teacher(mem, greedy)
+    assert torch.equal(logits.argmax(-1), greedy)
