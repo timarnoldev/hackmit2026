@@ -86,6 +86,21 @@ Run 2's codecs re-measured with **3 blocks × 300 held-out trials** (`results/ru
 
 This also settles an earlier wobble: at 100 trials per block the Nanopore homopolymer verdict came out as "no measurable benefit", at 300 trials it is a clear 5 reads, matching run 1. Fewer trials made the test too weak, not the rule less real.
 
+### The same audit as a curve, not a threshold ✅
+
+`scripts/rule_recovery_curve.py`, 300 held-out trials per point, same decoder and file, Nanopore. Recovery rate against mean reads per strand (`results/rule_recovery_curve_nanopore_budget.json`):
+
+| codec | 12 | 14 | 16 | 18 | 20 |
+|---|---|---|---|---|---|
+| both rules (standard) | **0.807** | **0.993** | 1.000 | 1.000 | 0.993 |
+| homopolymer rule off | 0.000 | 0.287 | 0.990 | 1.000 | 1.000 |
+| GC rule off | 0.833 | 0.987 | 1.000 | 0.993 | 1.000 |
+| both rules, payload only | 0.713 | 0.997 | 0.997 | 1.000 | 1.000 |
+
+This independently confirms both verdicts above: the homopolymer rule is the difference between recovering four files in five and none at 12 reads, and the GC rule tracks the standard codec to within noise everywhere.
+
+**Why we now quote curves when two codecs are close.** The threshold metric ("fewest reads at which all 300 trials recover") is brittle near the top: the standard codec reaches 1.000 at 16 and then dips to 0.993 at 20, a single failure out of 300 well inside the region where it plainly works. An all-or-nothing rule reads that dip as failure. The threshold stays the headline, because "the file always comes back" is the promise, but comparisons ride on the curve. See [LEARNED_RULES.md](LEARNED_RULES.md) for the correction this forced.
+
 **Tier 2, measured directly** (same settings, same decoder, paired held-out trials, rule scorer vs learned risk model): ☑️
 
 | Channel | Simulator | Candidates | Strand failures, rules | with learned selection | Difference (95% CI) |
