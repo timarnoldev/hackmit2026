@@ -205,7 +205,6 @@ b, strong { font-weight: 600; }
 }
 .foot .mark { width: 34px; height: 34px; }
 .foot .name { font-weight: 600; color: var(--sa-ink); }
-.foot .line { opacity: 0.8; }
 .foot .num { margin-left: auto; font-family: var(--mono); font-size: 20px; }
 .slide.no-foot .foot { display: none; }
 
