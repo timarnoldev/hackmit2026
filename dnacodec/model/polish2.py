@@ -270,6 +270,7 @@ def load_checkpoint(path, device: torch.device | str = "cpu") -> tuple[PolishNet
 # ---------------------------------------------------------------- inference
 
 
+@torch.no_grad()
 def _forward_packed(model: PolishNet2, packed: list, batch_size: int, device):
     """Softmax outputs for a list of (cols, insb, draft, n) tuples, in input order."""
     amp = device.type == "cuda"
