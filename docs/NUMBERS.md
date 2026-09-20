@@ -141,6 +141,27 @@ Reproduce: `python scripts/risk_real_analysis.py --dataset microsoft --risk-mode
 
 **Where we are behind:** TReconLM is clearly better on raw accuracy at 2 to 10 reads, and it trains on the same split we do. Say it plainly if asked; the full table is in `docs/COMPARISON.md`.
 
+## 6c. What the risk model learned, read back out of it ✅
+
+From the trained model of the final run, probed by inserting patterns into random backgrounds
+(`scripts/what_the_model_learned.py --run-id run5`, full output in `results/run5_learned_rules.txt`):
+
+**Nanopore, response to a homopolymer run of length r:**
+
+| Run length | 1 | 3 | 4 | 5 | 6 | 8 | 10 |
+|---|---|---|---|---|---|---|---|
+| Predicted risk | 0.43 | 0.44 | 0.46 | 0.52 | 0.60 | 0.76 | **0.83** |
+
+It learned the effect by itself, and it puts the threshold at 4 to 5, not at 3 where the standard rule puts it.
+
+**Nanopore, response to GC content** (runs capped at 3, so this is GC alone): 0.453 at GC 0.2 rising to 0.489 at GC 0.8. Essentially flat, so it considers the GC rule pointless, which matches the rule audit measured independently.
+
+**Most dangerous patterns it names:** GGGGG 0.71, CCCCC 0.69, AGGGG 0.64, TCCCC 0.62, TTTTT 0.61, against a random background at 0.53. It rates G and C runs more dangerous than A and T runs, which no standard rule distinguishes.
+
+**The cross-check that makes this quotable:** our channel was calibrated on real reads, and its worst deletion contexts are GAAAG (71x) and AAAAG (13x). The risk model never saw that table, it only saw which strands the decoder got wrong. Its risk for those two patterns: **0.934 and 0.973**. For the worst substitution contexts (CCCGA, 12.8x) it stays near 0.44, which is also right: majority voting repairs substitutions, deletions are what kills a strand. **The model did not learn where errors happen, it learned where errors are fatal.**
+
+**Illumina:** every pattern gets risk 0.000. It correctly learned there is nothing to avoid on that channel.
+
 ## 7. The live demo
 
 Nanopore channel, 6 reads per strand, 5 seeds fixed in advance (the first five training seeds, never searched for a winner): ☑️
