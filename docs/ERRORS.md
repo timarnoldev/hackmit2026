@@ -75,7 +75,7 @@ What each factor stands for, and why it's there:
 | **Context multiplier** | `context_table` | Certain local sequences are systematically misread | The centered 5-mer explains 30 to 45% of the position-to-position variance in error rates, on held-apart data, in two independent datasets |
 | Shared multiplier | `position_rate_spread` | The remaining systematic errors that all reads of a strand share | Without it the simulator was 15 points too easy at 6 reads |
 | Read quality | `read_quality_spread` | Some reads are much cleaner than others | Real per-read error rates vary widely |
-| Dropout | `dropout_rate`, `gc_dropout_factor`, `decay_per_year` | Strands lost in synthesis, storage, or PCR | Set per situation |
+| Dropout | `dropout_rate`, `gc_dropout_factor`, `decay_per_year` | Strands lost in synthesis, storage, or PCR | Measured, see below; `decay_per_year` is set per situation |
 | Coverage | `coverage_mean`, `coverage_dispersion` | Uneven number of reads per strand | Shape fit on Microsoft cluster sizes |
 
 ### The context table: the learnable part
@@ -90,6 +90,43 @@ The context table is what makes this simulator useful for the project's second c
 The same families lead in both real datasets (Microsoft and DNAformer), and a table fit on one predicts the other's error hot spots with AUC 0.71 to 0.79. These are real properties of the sequencing channel, and the hand-written rules (run length, GC window) don't cover them. The risk model can learn to avoid them. Everything the simulator does *randomly* (the shared multiplier, read quality) can't be learned from sequence, on purpose.
 
 Tables live in `profiles/context/`. Bases within 2 letters of a strand end use multiplier 1.
+
+### Dropout and yield: what the real data says
+
+`scripts/analyze_dropout.py` counts, on the train splits, how many designed strands got no
+read at all, and regresses coverage and dropout on GC content and on the longest homopolymer
+run. Nothing here is guessed any more:
+
+| Dataset | Designed strands | No reads at all |
+|---|---|---|
+| Microsoft Nanopore | 8,000 | 0.150% |
+| DNAformer Nanopore (2nd flowcell) | 44,146 | 0.206% |
+| DNAformer Illumina | 44,146 | 0.057% |
+
+`dropout_rate` is set to those measured floors: 0.002 for `nanopore_budget`, 0.001 for both
+Illumina profiles. **These are a lower bound for archival dropout**: the published samples are
+fresh, so they contain no storage decay, and the count cannot separate "never synthesized"
+from "lost in handling" or "discarded by the authors' clustering". Long-term loss is modeled
+separately by `decay_per_year`, which stays an extrapolation.
+
+`gc_dropout_factor` is set to 0.002 per 0.1 of GC deviation, essentially zero, down from the
+0.05 we assumed before. Microsoft is the only dataset with a real GC range (0.33 to 0.67), and
+there neither coverage nor dropout depends on GC: strands more than 0.08 from balanced get
+26.3 reads against 26.7 for balanced ones, with dropout 0.12% against 0.24%. The steeper slope
+in the DNAformer data comes from GC-constrained designs (0.43 to 0.56), where a "per 0.1"
+figure is an extrapolation by a factor of three, and the Illumina trend there is monotone in GC
+rather than symmetric around 0.5, which looks like amplification bias, not a penalty at the
+extremes. This matters for honesty: with the old value, a GC-extreme strand lost up to 5
+percentage points of extra dropout, which was enough to make the GC rule look worthwhile on
+Illumina by assumption rather than by measurement.
+
+**Homopolymer yield, measured and deliberately not modeled.** Coverage falls by about 4.5% per
+extra base of the longest run in all three datasets (Microsoft -4.7%, DNAformer Nanopore -4.5%,
+Illumina -2.7%, all with non-overlapping-with-zero confidence intervals). We do not model it:
+there is no yield field for run length, and adding one late would change every result. The
+consequence is stated plainly: our simulator punishes long homopolymers only through reading
+errors, not through lost strands, so **the homopolymer verdict is conservative** and the real
+benefit of the run-length rule is at least what we report.
 
 ### Calibration
 
