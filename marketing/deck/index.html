@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,11 +10,12 @@
 <script>
   /* set theme and motion before first paint, so nothing flashes */
   (function () {
-    var p = new URLSearchParams(location.search), d = document.documentElement, t = null, m = null;
-    try { t = localStorage.getItem('sa-theme'); m = localStorage.getItem('sa-motion'); } catch (e) {}
-    t = p.get('theme') || t || 'dark';
+    var p = new URLSearchParams(location.search), d = document.documentElement, m = null;
+    try { m = localStorage.getItem('sa-motion'); } catch (e) {}
+    // Forced to light for now, regardless of any stored preference. Pass ?theme=dark to preview dark.
+    var t = p.get('theme') || 'light';
     m = p.get('motion') || m;
-    d.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+    d.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
     var reduce = m ? m === 'off' : (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
     if (reduce) d.classList.add('reduce-motion');
     if (p.has('embed')) d.classList.add('embed');
