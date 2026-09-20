@@ -23,6 +23,8 @@ The result is a codec tuned to that channel that reaches the same recovery targe
 
 **Reproduce the headline numbers in one command:** `scripts/reproduce.sh` (decoder against the classic baseline on real held-out reads, plus the end to end demo). Every number we quote with its provenance: [docs/NUMBERS.md](docs/NUMBERS.md).
 
+**What the model learned, in its own words:** [docs/LEARNED_RULES.md](docs/LEARNED_RULES.md). It finds the homopolymer rule by itself, moves its threshold, discards the GC rule, and ranks patterns by how much they hurt the decoder rather than by how often they go wrong.
+
 **Deep dives:** [docs/MODELS.md](docs/MODELS.md) (what the two AI models output and how they're trained) and [docs/ERRORS.md](docs/ERRORS.md) (how the error engine simulates sequencing and how the correction chain recovers files).
 
 
