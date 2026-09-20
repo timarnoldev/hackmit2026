@@ -123,7 +123,7 @@ Three numbers, counting up, nothing else:
 
 - `88.1%` against `67.2%` — exact strands at six reads, on 1,996 held-out real clusters
 - `0.8M` parameters — trained in 13 minutes
-- `$50` — the whole pipeline runs on a microcontroller
+- `229` of 300 — strands reconstructed exactly on the microcontroller itself, against 211 for the classic method
 
 ### 10. `close` — the ask
 > Erbgut

@@ -486,3 +486,9 @@ html:not(.js) .cue { display: none; }
    (--rule-strong) is 3.22 : 1 on paper, hairlines (--rule) are decoration.
    Verdict colours are never used alone: cost and audit only tint a phrase that
    already says what it means, and the placeholder is dashed as well as yellow. */
+
+/* The close scene draws its own mark, wordmark and links. The copy block below is the
+   no-JS fallback, so it is hidden once the scene is running; the dataset credit is not
+   drawn by the scene and stays. */
+html.js .scene--close .copy .wordmark,
+html.js .scene--close .copy .asks { display: none; }

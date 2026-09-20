@@ -78,13 +78,13 @@ function layoutFor(w, h) {
   const L = {
     portrait, CW, CH,
     vb: [(CW - vw) / 2, (CH - vh) / 2, vw, vh].map((v) => Math.round(v * 100) / 100).join(' '),
-    n: portrait ? 14 : 26,
+    n: portrait ? 14 : 17,
     fs: portrait ? 34 : 34,
     amp: portrait ? 58 : 52,
     strandY: CH * (portrait ? 0.60 : 0.615),
   };
-  L.x0 = CW * 0.09;
-  L.cell = (CW * 0.82) / (L.n - 1);
+  L.x0 = CW * (portrait ? 0.09 : 0.47);
+  L.cell = (CW * (portrait ? 0.82 : 0.46)) / (L.n - 1);
   return L;
 }
 

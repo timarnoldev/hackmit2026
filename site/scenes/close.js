@@ -36,7 +36,7 @@ const MONO = "'JetBrains Mono','Erbgut Mono',ui-monospace,SFMono-Regular,Menlo,m
 
 const REPO = 'https://github.com/timarnoldev/hackmit2026';
 const DECK = 'deck/';
-const TEAM_SLOT = '[TEAM: names and contact]';
+const TEAM_SLOT = '';
 
 function e(tag, attrs, parent) {
   const n = document.createElementNS(NS, tag);
