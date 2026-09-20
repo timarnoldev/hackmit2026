@@ -373,6 +373,8 @@ html.results-broken .load-error { display: block; }
 }
 #s-title .brandrow { display: flex; align-items: center; gap: 44px; }
 #s-title .brandrow .mark { width: 196px; height: 196px; flex: none; }
+/* the lettered lens is wider than it is tall, so it keeps its own ratio */
+#s-title .brandrow .mark--full { width: 250px; height: 196px; }
 #s-title .wordmark { font-size: 176px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
 #s-title .tagline {
   margin: 58px 0 0;

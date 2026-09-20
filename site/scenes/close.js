@@ -155,13 +155,13 @@ function build() {
     return { g: g, cx: cx };
   });
 
-  /* wordmark */
+  /* wordmark: lowercase, as the logotype is drawn. Running text stays capitalised. */
   const word = e('text', {
     x: L.markX, y: L.wordY, 'text-anchor': 'middle', 'font-family': SANS,
     'font-size': L.wordSize, 'font-weight': '600', 'letter-spacing': '-0.03em',
-    fill: INK, opacity: '0',
+    fill: MUTED, opacity: '0',
   }, svg);
-  word.textContent = 'Erbgut';
+  word.textContent = 'erbgut';
 
   /* links, one centred line so the browser does the measuring */
   const links = e('text', {

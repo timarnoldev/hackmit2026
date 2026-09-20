@@ -451,6 +451,15 @@ html:not(.js) .cue { display: none; }
   color: var(--muted);
   max-width: 54ch;
 }
+/* The close scene draws the lockup and the links itself, so the copy layer keeps only the
+   dataset credit. Centre it under the composition rather than leaving it against the edge,
+   and push it to the foot of the stage so it does not sit across the artwork. */
+html.js .scene--close .copy > .cb {
+  justify-content: flex-end;
+  align-items: center;
+  padding-bottom: clamp(20px, 5vh, 56px);
+}
+html.js .scene--close .credit { margin-top: 0; text-align: center; }
 
 /* ── focus ────────────────────────────────────────────────────────────── */
 

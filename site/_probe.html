@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0}iframe{width:1400px;height:820px;border:0;display:block}</style>
+<iframe id="f" src="/"></iframe>
+<script>
+const f=document.getElementById('f');
+f.onload=()=>{setTimeout(()=>{
+  const d=f.contentDocument,w=f.contentWindow;
+  const sec=d.querySelector('#hero');
+  const blocks=[...d.querySelectorAll('#hero .cb')];
+  // scroll to 60% through the hero section
+  w.scrollTo(0, sec.offsetTop + sec.offsetHeight*0.62);
+  setTimeout(()=>{
+    const info=blocks.map(b=>b.className+' op='+getComputedStyle(b).opacity+' rect='+JSON.stringify(b.getBoundingClientRect().toJSON())).join('\n');
+    d.title='probe';
+    document.title=info.slice(0,400);
+    const pre=document.createElement('pre');pre.style.cssText='position:fixed;bottom:0;left:0;background:#fff;font:11px monospace;z-index:9;padding:4px';
+    pre.textContent=info;document.body.appendChild(pre);
+  },900);
+},1200)};
+</script>
