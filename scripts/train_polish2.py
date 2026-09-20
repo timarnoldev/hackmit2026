@@ -149,6 +149,7 @@ def _train_indices(val_size: int):
     clusters = [c.reads for c in data]
     pool, val = split_train_val(refs, clusters, val_size, seed=0)
     val_refs = set(val[0])
+    val = _drop_empty(val)
     indices = [i for i, c in enumerate(data) if c.reference not in val_refs and any(c.reads)]
     return indices, val
 
@@ -205,7 +206,11 @@ def build_dataset(args):
 
 
 def _val_packed(val, coverages=EVAL_COVERAGES):
-    """Packed examples per coverage for the validation carve, built once."""
+    """Packed examples per coverage for the validation carve, built once.
+
+    Clusters without a single read are dropped here (a decoder returns None for them and they
+    count as wrong for everyone, so they only add a constant to every number).
+    """
     refs, clusters = val
     length = len(refs[0])
     out = []
@@ -214,6 +219,12 @@ def _val_packed(val, coverages=EVAL_COVERAGES):
         packed = [pack_cluster(c, length, None) for c in cut]
         out.append((k, cut, packed))
     return out
+
+
+def _drop_empty(val):
+    refs, clusters = val
+    keep = [i for i, c in enumerate(clusters) if any(c)]
+    return [refs[i] for i in keep], [clusters[i] for i in keep]
 
 
 def _val_probs(model, arch, packed, device, batch_size=512):
