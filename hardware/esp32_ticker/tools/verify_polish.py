@@ -60,7 +60,7 @@ def build(out: Path) -> Path:
     src = HERE.parent / "src"
     cmd = [cxx, "-std=c++17", "-O2", "-I", str(src), "-o", str(out),
            str(HERE / "verify_decoder.cpp"), str(src / "box_decoder.cpp"),
-           str(src / "box_polish.cpp")]
+           str(src / "box_polish.cpp"), str(src / "box_risk.cpp")]
     subprocess.run(cmd, check=True)
     return out
 

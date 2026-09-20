@@ -29,8 +29,14 @@ and says so.
 
 | | parameters | on device | verified against Python |
 |---|---|---|---|
-| polisher | 0.8M | int8 weights, int16 activations, int32 accumulate | 95.3% same strand, identical exact accuracy |
+| polisher | 0.8M | int8 weights, int16 activations, int32 accumulate | 96.7% same strand, 229 exact against 230 for the float model |
 | risk model | 63k | float32, BatchNorm folded in | 1.2e-07 largest difference, rank correlation 1.000 |
+
+All three figures come from `tools/verify_polish.py --clusters 300` and
+`tools/verify_risk.py --strands 400` on this branch, which are deterministic, so they can be
+reproduced exactly. The polisher's 229 against 230 is the point: on 300 real clusters int8
+costs one strand, inside the noise of a single cluster draw, against 211 for the classic
+majority vote.
 
 The polisher is quantized because it is thirteen times larger and its convolutions are the
 whole run time. The risk model is not, because at 6.4M multiply accumulates quantizing would
