@@ -1333,10 +1333,10 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
 
 #s-overview .ov-image {
   position: absolute;
-  left: 255px;
-  top: 451px;
-  width: 130px;
-  height: 130px;
+  left: 228px;
+  top: 424px;
+  width: 184px;
+  height: 184px;
   color: var(--sa-audit);
   opacity: 1;
   transition: opacity 0.5s var(--ease-out);
@@ -1351,8 +1351,8 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   text-align: center;
   font-family: var(--mono);
   font-weight: 600;
-  font-size: 30px;
-  color: var(--sa-tbd);
+  font-size: 38px;
+  color: var(--sa-ink);
   opacity: 0;
   transform: translate(0, 0);
   transition: opacity 0.5s var(--ease-out), transform 0.9s var(--ease-out);
@@ -1378,12 +1378,14 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   position: absolute;
   left: 170px;
   top: 522px;
+  transform: scale(1.34);
+  transform-origin: 350px 40px;
   transition: transform 1.1s var(--ease-out);
 }
-#s-overview.s4 .ov-shift { transform: translate(460px, 0); }
+#s-overview.s4 .ov-shift { transform: translate(430px, 0) scale(1.34); }
 
 #s-overview .ov-lettertext { position: relative; top: -14px; opacity: 0; transition: opacity 0.5s var(--ease-out); }
-#s-overview .ov-lettertext .seq { font-size: 42px; }
+#s-overview .ov-lettertext .seq { font-size: 44px; }
 #s-overview .ov-lettertext .seq .nt { width: 31px; }
 #s-overview.s3 .ov-lettertext { opacity: 1; }
 #s-overview.s4 .ov-lettertext { opacity: 0; }
@@ -1409,10 +1411,10 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   width: 275px;
   height: 290px;
   border-radius: 32px;
-  background: rgba(210, 236, 248, 0.8);
-  border: 1.5px solid rgba(235, 248, 253, 0.9);
+  background: rgba(120, 195, 225, 0.2);
+  border: 2px solid rgba(80, 165, 205, 0.45);
   backdrop-filter: blur(3px);
-  box-shadow: inset 0 0 30px rgba(255, 255, 255, 0.5), 0 0 26px rgba(200, 232, 248, 0.15);
+  box-shadow: inset 0 0 34px rgba(255, 255, 255, 0.55), 0 0 30px rgba(80, 165, 205, 0.16);
   opacity: 0;
   transform: scale(0.92);
   transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-back);
@@ -1427,7 +1429,7 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   width: 275px;
   height: 290px;
   border-radius: 32px;
-  background: radial-gradient(ellipse at 50% 40%, rgba(255, 250, 224, 0.6), rgba(255, 250, 224, 0) 68%);
+  background: radial-gradient(ellipse at 50% 40%, rgba(57, 230, 255, 0.42), rgba(57, 230, 255, 0) 68%);
   opacity: 0;
   transition: opacity 0.3s var(--ease-out);
 }
@@ -1502,8 +1504,8 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   text-align: center;
   font-family: var(--mono);
   font-weight: 600;
-  font-size: 30px;
-  color: var(--sa-tbd);
+  font-size: 38px;
+  color: var(--sa-ink);
   opacity: 0;
   transform: translate(var(--sx), var(--sy)) rotate(var(--srot));
   transition: opacity 0.5s var(--ease-out), transform 1s var(--ease-out);
@@ -1725,8 +1727,8 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   text-align: center;
   font-family: var(--mono);
   font-weight: 600;
-  font-size: 30px;
-  color: var(--sa-tbd);
+  font-size: 38px;
+  color: var(--sa-ink);
   opacity: 0;
   transform: translate(var(--sx), var(--sy)) rotate(var(--srot));
   transition: opacity 0.5s var(--ease-out), transform 1s var(--ease-out);
@@ -1735,7 +1737,7 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
 #s-errors.s3 .rbit { opacity: 1; transform: translate(0, 0) rotate(0deg); }
 #s-errors.s4 .rbit { opacity: 0; }
 
-#s-errors .crp-image-r { position: absolute; left: 1460px; top: 456px; width: 130px; height: 130px; opacity: 0; transition: opacity 0.5s var(--ease-out); }
+#s-errors .crp-image-r { position: absolute; left: 1433px; top: 429px; width: 184px; height: 184px; opacity: 0; transition: opacity 0.5s var(--ease-out); }
 #s-errors.s4 .crp-image-r { opacity: 1; }
 #s-errors .crp-image-r .gl { position: absolute; inset: 0; width: 100%; height: 100%; }
 #s-errors .crp-image-r .gl-main { color: var(--sa-cost); }
