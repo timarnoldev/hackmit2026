@@ -371,17 +371,17 @@
 
 <!-- ================================================================ 8. What we actually built -->
 <section class="slide archlike" id="a-arch" data-title="What we actually built" data-plan="121-145"
-  data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
-  <p class="kicker">In one diagram</p>
+  data-labels="The storage path|The learned polisher|The loop|The firewall">
+  <p class="kicker">One diagram</p>
   <h2 class="title sm">What we actually built</h2>
   <div class="arch" id="arch"></div>
   <aside class="notes">
-    <p>Zoom out for a second: here is the whole system in one diagram, before we walk through the pieces.</p>
-    <p><i class="cue"></i> The storage path. A channel profile describes one situation as JSON: error rates, the 5-letter context table, dropout, the read budget, costs. It is fit on real reads. The encoder is a Fountain code: for every slot it makes 8 to 32 candidate strands, puts a checksum in each, and a scorer keeps one. Simulator A plays the lab: dropouts, uneven coverage, per-read quality, errors every read shares, and context errors. The decoder chain gets the noisy reads back. Then a checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file.</p>
-    <p><i class="cue"></i> The one learned part in that path is the polisher. The classic baseline aligns the reads and votes a draft; a small dilated CNN, about 0.8 million parameters, looks at 17 vote features per position and says keep, substitute, delete, or insert.</p>
-    <p><i class="cue"></i> Around it runs the loop. Freeze the decoder, label strands by simulating each one 32 times to see where the decoder fails, train the risk model on those labels, search the settings, and hand the risk model back to the encoder so it keeps the safest candidate. At most three rounds.</p>
-    <p><i class="cue"></i> Everything is judged by one evaluation: 300 held-out trials, the fewest reads per strand at the recovery target, written to a result file that the dashboard, this deck and the demo all read. And Simulator B sits outside the loop, built from different mechanisms, only to check that a gain survives.</p>
-    <p class="aside">Indigo is learned, grey is classic code. Two learned models in the whole system. The rest of the deck walks through these pieces one at a time.</p>
+    <p>The whole system on one screen. Five boxes, and the arrows are the part worth watching.</p>
+    <p><i class="cue"></i> The storage path, left to right. The encoder is a Fountain code: for every slot it builds 8 to 32 candidate strands, puts a checksum in each, and keeps one. Simulator A plays the lab, and it is fit on real published reads: dropouts, uneven coverage, per-read quality, errors every read shares, context effects. The decoder gets the noisy clusters back. Then a failed checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file. Every number in this deck is 300 held-out trials of that path.</p>
+    <p><i class="cue"></i> One learned part in the path itself. The classic step aligns the reads and votes a draft, letter by letter. On top of it sits a dilated convolutional network of about 0.8 million parameters that reads 17 vote features per position and says keep, substitute, delete or insert.</p>
+    <p><i class="cue"></i> Now the arrow that makes this a loop rather than a pipeline. We freeze the decoder, simulate each strand 32 times to see where that decoder actually fails, and train a 63 thousand parameter risk model on those failures. That model goes back into the encoder and ranks the candidates before anything is written. The codec is shaped by the decoder it will be read with, and that loop runs at most three rounds.</p>
+    <p><i class="cue"></i> And the dashed lane is the firewall. Simulator B is a second channel built from different mechanisms, with its context table from a different dataset. Nothing is ever tuned on it. It only ever checks a result, which is why a gain that survives it is worth quoting.</p>
+    <p class="aside">Cyan is learned, grey is classic code. Two learned models in the whole system, 0.8 million and 63 thousand parameters. If asked about the channel profile: it is a JSON file per situation, error rates, the 5-letter context table, dropout, coverage and the read budget, fit on real reads.</p>
   </aside>
 </section>
 

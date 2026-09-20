@@ -1168,7 +1168,9 @@ html.results-broken .load-error { display: block; }
 .archlike .abox.learned { border-color: var(--sa-audit); background: var(--tint-audit); }
 .archlike .abox.learned h4 { color: var(--sa-audit); }
 .archlike .abox.learned li, .archlike .abox.learned p { color: var(--sa-ink); }
-.archlike .abox.firewall { border-style: dashed; border-color: var(--sa-muted); background: transparent; opacity: 0.85; }
+.archlike .abox.firewall { border-style: dashed; border-color: var(--sa-muted); background: transparent; }
+/* the dashed box is a fragment too, so it may only dim itself once it is on */
+.archlike .abox.firewall.on { opacity: 0.85; }
 .archlike .sub { position: relative; border-radius: 12px; border: 2px solid var(--sa-rule); padding: 8px 12px; margin-bottom: 8px; background: var(--sa-paper); }
 .archlike .sub:last-child { margin-bottom: 0; }
 .archlike .sub b { font-size: 22px; display: block; margin-bottom: 2px; }
@@ -1188,6 +1190,16 @@ html.results-broken .load-error { display: block; }
 .archlike .legend i { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--sa-rule); background: var(--sa-surface); }
 .archlike .legend i.learned { border-color: var(--sa-audit); background: var(--tint-audit); }
 .archlike .legend i.firewall { border-style: dashed; border-color: var(--sa-muted); background: transparent; }
+
+/* A0 itself: five boxes, so each one can breathe. The arrows carry the argument. */
+#a-arch .abox { display: flex; flex-direction: column; justify-content: center; padding: 16px 22px; }
+#a-arch .abox h4 { margin: 0 0 6px; font-size: 30px; }
+#a-arch .abox p { font-size: 21px; line-height: 1.28; }
+#a-arch .sub { margin-bottom: 16px; padding: 10px 14px; }
+#a-arch .sub:last-child { margin-bottom: 0; }
+#a-arch .sub b { font-size: 24px; margin-bottom: 0; }
+#a-arch .sub p { font-size: 20px; margin: 2px 0 0; }
+#a-arch svg.wires text.key { fill: var(--sa-audit); font-weight: 600; }
 
 /* ---------------------------------------------------------------- overlays */
 

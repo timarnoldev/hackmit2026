@@ -348,31 +348,24 @@
 
   // One canvas, 1680 x 700. Builds: 1 the storage path, 2 the polisher, 3 the loop, 4 evaluation
   // and the firewall. "learned" boxes are the two learned models, everything else is classic code.
+  // One canvas, 1680 x 700. Five boxes, four builds: 1 the storage path, 2 the polisher,
+  // 3 the loop that feeds the encoder, 4 the firewall. The arrows carry the argument, so the
+  // boxes carry a title and almost nothing else.
   const ARCH_BOXES = [
-    { f: 1, x: 0, y: 40, w: 290, h: 232, title: 'Channel profile',
-      text: 'Describes one situation as JSON: error rates, the 5-mer context table, dropout, coverage and the read budget, all fit on real reads.' },
-    { f: 1, x: 317, y: 40, w: 310, h: 232, title: 'Encoder',
-      text: 'A Fountain code that tries 8 to 32 candidate strands per slot, checksums each one, and keeps whichever the scorer rates safest.' },
-    { f: 1, x: 654, y: 40, w: 300, h: 232, title: 'Simulator A',
-      text: 'Turns strands into noisy read clusters: dropouts, uneven coverage, per-read quality, shared errors and 5-mer context effects.' },
-    { f: 1, x: 981, y: 12, w: 340, h: 342, title: 'Decoder chain', subs: [
-      { f: 1, title: 'Baseline', text: 'Aligns every read to a draft and votes a consensus, letter by letter.' },
-      { f: 2, learned: true, title: 'Polisher', text: 'A dilated 1D CNN corrects the draft, letter by letter: keep, substitute, delete or insert.' },
+    { f: 1, x: 0, y: 150, w: 380, h: 170, title: 'Encoder',
+      text: '8 to 32 candidates per slot' },
+    { f: 1, x: 450, y: 150, w: 340, h: 170, title: 'Simulator A',
+      text: 'the channel, fit on real reads' },
+    { f: 1, x: 860, y: 115, w: 420, h: 240, title: 'Decoder', subs: [
+      { f: 1, title: 'Majority vote' },
+      { f: 2, learned: true, title: 'Polisher', text: '0.8M parameters' },
     ] },
-    { f: 1, x: 1348, y: 40, w: 330, h: 232, title: 'Recover',
-      text: 'A failed checksum turns a wrong strand into a missing one, so the Fountain code can rebuild the file from whatever survives.' },
-    { f: 4, x: 654, y: 328, w: 300, h: 182, firewall: true, title: 'Simulator B',
-      text: 'A structurally different simulator, never optimized on, used only to check that a gain survives.' },
-    { f: 4, x: 1348, y: 346, w: 330, h: 232, title: 'Evaluation',
-      text: 'Runs 300 held-out trials, finds the fewest reads at the recovery target, and writes the result file this deck and the dashboard read.' },
-    { f: 3, x: 1020, y: 524, w: 300, h: 130, title: 'Freeze the decoder', n: '1',
-      text: 'Adapt the decoder to this channel, then freeze it.' },
-    { f: 3, x: 680, y: 524, w: 300, h: 130, title: 'Label strands', n: '2',
-      text: 'Simulate each strand 32 times to see where it fails.' },
-    { f: 3, x: 340, y: 524, w: 300, h: 130, learned: true, title: 'Train the risk model', n: '3',
-      text: 'Learn to predict each strand\u2019s failure rate here.' },
-    { f: 3, x: 0, y: 524, w: 300, h: 130, title: 'Search settings', n: '4',
-      text: 'Search for the cheapest settings that hit the target.' },
+    { f: 1, x: 1350, y: 150, w: 330, h: 170, title: 'Rebuild and score',
+      text: '300 held-out trials' },
+    { f: 3, x: 0, y: 470, w: 380, h: 150, learned: true, title: 'Risk model',
+      text: '63k parameters' },
+    { f: 4, x: 450, y: 0, w: 340, h: 100, firewall: true, title: 'Simulator B',
+      text: 'different mechanisms' },
   ];
 
   function arrow(x1, y1, x2, y2) {
@@ -538,42 +531,36 @@
     const box = (b) => {
       const cls = ['abox', b.learned ? 'learned' : '', b.firewall ? 'firewall' : '', 'frag', 'fade'].filter(Boolean).join(' ');
       const inner = b.subs
-        ? b.subs.map((s) => `<div class="sub ${s.learned ? 'learned frag fade' : ''}"${s.learned ? ` data-f="${s.f}"` : ''}><b>${s.title}</b><p>${s.text}</p>${s.learned ? '<span class="tagl">learned</span>' : ''}</div>`).join('')
+        ? b.subs.map((s) =>
+            `<div class="sub ${s.learned ? 'learned frag fade' : ''}"${s.learned ? ` data-f="${s.f}"` : ''}>` +
+            `<b>${s.title}</b>${s.text ? `<p>${s.text}</p>` : ''}${s.learned ? '<span class="tagl">learned</span>' : ''}</div>`).join('')
         : `<p>${b.text || ''}</p>`;
       return (
         `<div class="${cls}" data-f="${b.f}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px">` +
-        `<h4>${b.n ? `<span class="n">${b.n}</span>` : ''}${b.title}</h4>${inner}` +
-        (b.foot ? `<div class="afoot">${b.foot}</div>` : '') +
+        `<h4>${b.title}</h4>${inner}` +
         (b.learned && !b.subs ? '<span class="tagl">learned</span>' : '') +
         `</div>`
       );
     };
     const wire = (f, d, cls) => `<path class="frag fade ${cls || ''}" data-f="${f}" d="${d}"/>`;
-    const label = (f, x, y, text, anchor) =>
-      `<text class="frag fade" data-f="${f}" x="${x}" y="${y}"${anchor ? ` text-anchor="${anchor}"` : ''}>${text}</text>`;
+    const label = (f, x, y, text, anchor, cls) =>
+      `<text class="frag fade ${cls || ''}" data-f="${f}" x="${x}" y="${y}"${anchor ? ` text-anchor="${anchor}"` : ''}>${text}</text>`;
 
     const wires =
-      // the storage path
-      wire(1, `M292 156 H309 ${arrow(292, 156, 313, 156)}`) +
-      wire(1, `M150 34 C150 12, 804 12, 804 34 ${arrow(804, 20, 804, 34)}`) +
-      label(1, 477, 2, 'the channel, fit on real reads', 'middle') +
-      wire(1, `M631 156 H646 ${arrow(631, 156, 650, 156)}`) +
-      wire(1, `M958 156 H973 ${arrow(958, 156, 977, 156)}`) +
-      wire(1, `M1325 156 H1340 ${arrow(1325, 156, 1344, 156)}`) +
-      // the loop
-      wire(3, `M1170 358 V514 ${arrow(1170, 490, 1170, 518)}`) +
-      label(3, 1156, 440, 'decoder failures', 'end') +
-      wire(3, `M1014 589 H994 ${arrow(1014, 589, 986, 589)}`) +
-      wire(3, `M674 589 H654 ${arrow(674, 589, 646, 589)}`) +
-      wire(3, `M334 589 H314 ${arrow(334, 589, 306, 589)}`) +
-      wire(3, `M150 520 V320 H466 V286 ${arrow(466, 316, 466, 280)}`, 'learnedwire') +
-      label(3, 168, 302, 'the risk model feeds the scorer') +
-      label(3, 680, 690, 'at most 3 rounds', 'middle') +
-      // evaluation and the firewall
-      wire(4, `M804 276 V324 ${arrow(804, 300, 804, 328)}`, 'dash') +
-      label(4, 818, 306, 'firewall') +
-      wire(4, `M1513 276 V342 ${arrow(1513, 318, 1513, 346)}`) +
-      label(4, 1527, 322, 'every codec, every claim');
+      // 1. the storage path, left to right at the row's mid line
+      wire(1, `M380 235 H431 ${arrow(380, 235, 435, 235)}`) +
+      wire(1, `M790 235 H841 ${arrow(790, 235, 845, 235)}`) +
+      wire(1, `M1280 235 H1331 ${arrow(1280, 235, 1335, 235)}`) +
+      // 3. the loop: the decoder's failures train the risk model, the risk model ranks candidates
+      wire(3, `M1070 355 V545 H396 ${arrow(410, 545, 392, 545)}`) +
+      label(3, 740, 528, 'where the decoder fails', 'middle') +
+      wire(3, `M190 470 V340 ${arrow(190, 360, 190, 336)}`, 'learnedwire') +
+      label(3, 212, 408, 'ranks every candidate', null, 'key') +
+      // 4. the firewall: a second channel that only ever checks a result
+      wire(4, `M415 235 V50 H434 ${arrow(415, 50, 438, 50)}`, 'dash') +
+      label(4, 400, 132, 'firewall', 'end') +
+      wire(4, `M790 50 H1070 V97 ${arrow(1070, 80, 1070, 101)}`, 'dash') +
+      label(4, 1096, 44, 'checks a result, never tunes one');
 
     host.innerHTML =
       `<div class="legend"><span><i></i>classic code</span><span><i class="learned"></i>learned</span><span><i class="firewall"></i>firewall only</span></div>` +
