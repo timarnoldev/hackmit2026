@@ -18,6 +18,8 @@ import numpy as np
 
 from dnacodec.profiles import PROFILES_DIR, load_profile
 from dnacodec.results import RESULTS_DIR
+import pickle
+
 from dnacodec.risk import gc_probe, homopolymer_probe, load_risk_model
 
 CHECKPOINTS = Path(__file__).resolve().parents[1] / "checkpoints" / "loop"
@@ -55,7 +57,10 @@ def main() -> None:
         if not models:
             continue
         path = models[args.iteration] if args.iteration is not None else models[-1]
-        model = load_risk_model(path)
+        try:
+            model = load_risk_model(path)
+        except AttributeError:  # the loop pickles the model object itself
+            model = pickle.loads(path.read_bytes())
         name = situation_dir.name
         print(f"\n{'=' * 78}\n{name}   ({path.name})\n{'=' * 78}")
 
