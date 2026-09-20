@@ -88,7 +88,7 @@ This also settles an earlier wobble: at 100 trials per block the Nanopore homopo
 
 ### The same audit as a curve, not a threshold ✅
 
-`scripts/rule_recovery_curve.py`, 300 held-out trials per point, same decoder and file, Nanopore. Recovery rate against mean reads per strand (`results/rule_recovery_curve_nanopore_budget.json`):
+`scripts/rule_recovery_curve.py`, 300 held-out trials per point, same decoder and file, Nanopore. Recovery rate against mean reads per strand (`results/rule_recovery_curve_rules_nanopore_budget.json`):
 
 | codec | 12 | 14 | 16 | 18 | 20 |
 |---|---|---|---|---|---|

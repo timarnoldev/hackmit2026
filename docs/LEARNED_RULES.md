@@ -125,7 +125,7 @@ uv run python scripts/rule_recovery_curve.py --profile nanopore_budget --trials 
 | both rules off | 0.000 | 0.000 | 0.257 | 0.977 | 1.000 | 1.000 | 1.000 | 1.000 |
 | both rules, payload only | 0.000 | 0.713 | 0.997 | 0.997 | 1.000 | 1.000 | 1.000 | 1.000 |
 
-Full data: [`results/rule_recovery_curve_nanopore_budget.json`](../results/rule_recovery_curve_nanopore_budget.json).
+Full data: [`results/rule_recovery_curve_rules_nanopore_budget.json`](../results/rule_recovery_curve_rules_nanopore_budget.json).
 
 **The homopolymer rule pays off, clearly.** At 12 reads per strand it is the difference between
 recovering the file four times in five and never recovering it at all. That is worth roughly two
