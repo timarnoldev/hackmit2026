@@ -205,7 +205,6 @@ b, strong { font-weight: 600; }
 }
 .foot .mark { width: 34px; height: 34px; }
 .foot .name { font-weight: 600; color: var(--sa-ink); }
-.foot .line { opacity: 0.8; }
 .foot .num { margin-left: auto; font-family: var(--mono); font-size: 20px; }
 .slide.no-foot .foot { display: none; }
 
@@ -636,6 +635,82 @@ html.results-broken .load-error { display: block; }
 }
 #s-problem .bottom .muted { font-weight: 500; }
 
+/* ---------------------------------------------------------------- slide: what erbgut does */
+
+#s-system .tiers {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 300px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+#s-system .tier { padding: 40px 44px; }
+#s-system .tno {
+  display: inline-grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--tint-audit);
+  color: var(--sa-audit);
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 28px;
+  margin-bottom: 22px;
+}
+#s-system .tier h3 { margin: 0 0 14px; font-size: 34px; font-weight: 600; }
+#s-system .tier p { margin: 0; font-size: 25px; line-height: 1.42; color: var(--sa-muted); }
+#s-system .target {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 660px;
+  padding: 30px 40px;
+  border: 3px solid var(--sa-audit);
+  background: var(--tint-audit);
+}
+#s-system .target h4 { margin: 0 0 10px; font-size: 27px; font-weight: 600; color: var(--sa-audit); }
+#s-system .target p { margin: 0; font-size: 26px; line-height: 1.4; }
+
+/* ---------------------------------------------------------------- slide: what's new */
+
+#s-whatsnew .wn-table {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 336px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 32px;
+}
+#s-whatsnew .wn-h {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--sa-muted);
+  padding: 0 30px 14px;
+  border-bottom: 2px solid var(--sa-rule);
+}
+#s-whatsnew .wn-c {
+  padding: 20px 30px;
+  font-size: 25px;
+  line-height: 1.35;
+  border-bottom: 2px solid var(--sa-rule);
+}
+#s-whatsnew .wn-c.old { color: var(--sa-muted); }
+#s-whatsnew .wn-c.new { color: var(--sa-ink); font-weight: 500; }
+#s-whatsnew .bottom-note {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 862px;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+#s-whatsnew .bottom-note .muted { font-weight: 500; }
+
 /* ---------------------------------------------------------------- slide 3: pipeline */
 
 #s-pipeline .canvas {
@@ -844,10 +919,6 @@ html.results-broken .load-error { display: block; }
 #s-rules .side .box { padding: 26px 30px; }
 #s-rules .side .box h4 { margin: 0 0 10px; font-size: 30px; font-weight: 600; display: flex; align-items: center; gap: 14px; }
 #s-rules .side .box p { margin: 0; font-size: 25px; line-height: 1.4; color: var(--sa-muted); }
-#s-rules .knobs { margin-top: 6px; padding: 26px 30px; border: 3px solid var(--sa-audit); border-radius: 24px; background: var(--tint-audit); }
-#s-rules .knobs h4 { margin: 0 0 12px; font-size: 30px; color: var(--sa-audit); font-weight: 600; }
-#s-rules .knobs ul { margin: 0; padding-left: 28px; font-size: 27px; line-height: 1.45; }
-#s-rules .knobs .fix { margin-top: 14px; font-size: 24px; color: var(--sa-muted); line-height: 1.4; }
 
 /* ---------------------------------------------------------------- slide 5: rule audit */
 
@@ -1144,6 +1215,23 @@ html.results-broken .load-error { display: block; }
 .appx .chain { display: grid; gap: 12px; }
 .appx .chain .cs { display: grid; grid-template-columns: 40px 1fr; gap: 16px; align-items: start; font-size: 25px; line-height: 1.35; }
 .appx .chain .cs > div span { color: var(--sa-muted); }
+
+#a-cctt .box p { margin: 0 0 16px; }
+#a-cctt .callout-line { font-weight: 600; color: var(--sa-ink); border-top: 2px solid var(--sa-rule); padding-top: 14px; margin-top: 2px; }
+#a-cctt .ccex { margin: 4px 0 18px; padding: 18px 20px; border-radius: 14px; background: var(--sa-paper); border: 2px solid var(--sa-rule); }
+#a-cctt .ccex .seq { font-size: 32px; }
+#a-cctt .ccex .nt { width: 22px; }
+#a-cctt .hi-motif { display: inline-block; background: var(--tint-cost); border: 2px solid var(--sa-cost); border-radius: 8px; padding: 0 3px; margin: 0 2px; }
+#a-cctt .cclab { display: block; margin-top: 12px; font-size: 19px; font-weight: 600; color: var(--sa-cost); }
+#a-cctt .pair { margin: 14px 0; display: grid; gap: 8px; }
+#a-cctt .prow { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 10px; border: 2px solid var(--sa-rule); }
+#a-cctt .prow .seq.small { font-size: 22px; }
+#a-cctt .prow.bad { opacity: 0.8; }
+#a-cctt .prow .ptag { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 10px; border-radius: 999px; flex: none; }
+#a-cctt .prow.bad .ptag { color: var(--sa-cost); border: 2px solid var(--sa-cost); }
+#a-cctt .prow.good .ptag { color: var(--sa-gain); border: 2px solid var(--sa-gain); }
+#a-cctt .prow .psame { font-size: 18px; color: var(--sa-muted); margin-left: auto; }
+
 .qa { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 44px; }
 .qa .q { font-size: 28px; font-weight: 600; line-height: 1.25; margin: 0 0 8px; }
 .qa .a { font-size: 23.5px; line-height: 1.42; color: var(--sa-muted); margin: 0; }

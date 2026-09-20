@@ -333,83 +333,42 @@
   </aside>
 </section>
 
-<!-- ================================================================ 6. Pipeline -->
-<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="82-106"
-  data-labels="Bits become letters|Synthesis writes copies|Sequencing returns noisy reads|Decoder votes a consensus|Checksum marks a wrong strand missing|Fountain code rebuilds the file">
-  <p class="kicker">How DNA storage works</p>
-  <h2 class="title sm">From bits to strands, and back</h2>
-  <div class="canvas">
-    <div class="col">
-      <div class="colhead">Write</div>
-      <div class="step frag" data-f="1">
-        <div class="cap"><span class="stepno">1</span>Bits become letters</div>
-        <div class="bits">01001000 01101001 00100001<small>"Hi!"</small></div>
-        <svg class="arrow-d" viewBox="0 0 28 30" aria-hidden="true"><path d="M14 2v24M5 17l9 9 9-9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <div class="strand-big"><span class="seq strandline" data-seq="CAGACGGCAGAC"></span></div>
-        <div class="map">2 bits per letter: <span class="seq" data-seq="A"></span> 00, <span class="seq" data-seq="C"></span> 01, <span class="seq" data-seq="G"></span> 10, <span class="seq" data-seq="T"></span> 11</div>
+<!-- ================================================================ 6. One real blind spot -->
+<section class="slide appx" id="a-cctt" data-title="One real blind spot" data-plan="82-108">
+  <p class="kicker">One real blind spot</p>
+  <h2 class="title sm">One real pattern, learned on both sides</h2>
+  <div class="layout two">
+    <div class="box card">
+      <h3>What the channel actually does</h3>
+      <p>On real Nanopore reads, the base right after a <span class="mono">CCCT</span> run is deleted far more often than elsewhere &mdash; measured directly from the 5-mer context table fit on real train reads, and one of the leading hot-spot families in <b>two independent datasets</b> (Microsoft and DNAformer).</p>
+      <div class="ccex">
+        <span class="seq"><span class="nt nt-G">G</span><span class="nt nt-A">A</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-T">T</span><span class="hi-motif"><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-T">T</span></span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-T">T</span><span class="nt nt-G">G</span></span>
+        <span class="cclab">deletions land right after this run</span>
       </div>
-      <div class="step frag" data-f="2">
-        <div class="cap"><span class="stepno">2</span>Synthesis writes many copies</div>
-        <div class="tube">
-          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
-          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
-          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
-          <span class="times">&times; many</span>
-        </div>
-      </div>
+      <p class="callout-line">The hand rule doesn't catch it: "no run longer than 3" allows <span class="mono">CCC</span> outright, since it's exactly the limit. No hand-written rule ever looks at this pattern.</p>
     </div>
-    <div class="col">
-      <div class="colhead">Read</div>
-      <div class="step frag" data-f="3">
-        <div class="cap"><span class="stepno">3</span>Sequencing returns noisy reads</div>
-        <div class="reads">
-          <div class="scan" aria-hidden="true"></div>
-          <div class="read" style="--r:0"><span class="rl">read 1</span><span class="seq" data-seq="CAGA[C>T]GGCAGAC"></span></div>
-          <div class="read" style="--r:1"><span class="rl">read 2</span><span class="seq" data-seq="CAGACG[-G]CAGAC"></span></div>
-          <div class="read" style="--r:2"><span class="rl">read 3</span><span class="seq" data-seq="CAG[+T]ACGGCAGAC"></span></div>
-          <div class="read" style="--r:3"><span class="rl">read 4</span><span class="seq" data-seq="CAGACGGCA[G>A]AC"></span></div>
-          <div class="read" style="--r:4"><span class="rl">read 5</span><span class="seq" data-seq="C[-A]GACGGC[A>T]GAC"></span></div>
-        </div>
-        <div class="legend"><span><i class="l-sub"></i>wrong letter</span><span><i class="l-ins"></i>extra letter</span><span><i class="l-del"></i>missing letter</span></div>
+    <div class="box card">
+      <h3>Two learned models, the same discovery</h3>
+      <p><b>The risk model steers the encoder around it.</b> Where an equally valid alternate seed exists, it scores a candidate that ends a slot in <span class="mono">CCCT</span> as riskier, and the encoder keeps the other one instead &mdash; for free, since trying another seed costs no density.</p>
+      <div class="pair">
+        <div class="prow bad"><span class="ptag">discarded</span><span class="seq mono small">&hellip;GA<span class="hi-motif">CCCT</span>GTC&hellip;</span></div>
+        <div class="prow good"><span class="ptag">kept</span><span class="seq mono small">&hellip;GATGACAGTC&hellip;</span><span class="psame">same data, different seed</span></div>
       </div>
+      <p><b>The polisher learned the same thing from the decoding side.</b> Its roughly 65-position receptive field lets it down-weight the base right after <span class="mono">CCCT</span> even when the majority vote disagrees, because training on real reads taught it that position fails more than most.</p>
+      <p class="callout-line">Neither model was told about <span class="mono">CCCT</span>. One found it from decoder failures, the other from correcting reads &mdash; independently, from a real channel property no fixed rulebook could have written down in advance.</p>
     </div>
-    <div class="col">
-      <div class="colhead">Recover</div>
-      <div class="step frag" data-f="4">
-        <div class="cap"><span class="stepno">4</span>The decoder rebuilds the strand</div>
-        <div class="consensus"><span class="seq strandline" data-seq="CAGACGGCAGAC"></span><span class="ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>matches</span></div><div class="how">the baseline votes a draft, then the learned polisher corrects it</div>
-      </div>
-      <div class="step frag" data-f="5">
-        <div class="cap"><span class="stepno">5</span>A checksum turns a wrong strand into a missing one</div>
-        <div class="pool">
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span class="tile bad"><svg class="cross" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span class="miss">missing</span></span>
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        </div>
-      </div>
-      <div class="step frag" data-f="6">
-        <div class="cap"><span class="stepno">6</span>The Fountain code rebuilds the file</div>
-        <div class="file"><span class="doc">Hi!</span><span class="say">Any large enough set of strands works. The file comes back <b>exactly</b>, or not at all.</span></div>
-      </div>
-    </div>
-    <svg class="flow-arrow fa1" style="left:506px" viewBox="0 0 44 44" aria-hidden="true"><path d="M6 22h30M26 12l10 10-10 10" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <svg class="flow-arrow fa2" style="left:1126px" viewBox="0 0 44 44" aria-hidden="true"><path d="M6 22h30M26 12l10 10-10 10" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </div>
   <aside class="notes">
-    <p>Quick picture of how DNA storage works.</p>
-    <p><i class="cue"></i> Bits become letters, two bits per letter. <i class="cue"></i> Synthesis writes many copies of each strand.</p>
-    <p><i class="cue"></i> Sequencing reads them back noisy: wrong letters, extra letters, missing letters. Every read is different.</p>
-    <p><i class="cue"></i> The decoder takes the cluster of reads for one strand: the baseline votes a draft, and a small learned polisher corrects what is left.</p>
-    <p><i class="cue"></i> If the consensus is still wrong, a checksum catches it and marks the strand as missing.</p>
-    <p><i class="cue"></i> And the Fountain code rebuilds the file from whatever strands are left. It comes back exactly, or not at all.</p>
+    <p>This is where the previous slide's complaint stops being abstract.</p>
+    <p><i class="cue"></i> On real Nanopore reads, the base right after a CCCT run gets deleted more than elsewhere. It's measured, it shows up in two independent datasets, and the hand rule never catches it because CCC is exactly the legal limit of 3.</p>
+    <p><i class="cue"></i> Two things learned this independently. The risk model steers the encoder to a different seed when one is available, for free. The polisher, on the decoding side, learned to distrust that position too.</p>
+    <p><i class="cue"></i> That's the strongest version of the tier two claim: not "the model found some pattern", but this specific, checkable, real one, confirmed twice.</p>
   </aside>
 </section>
 
 <!-- ================================================================ 7. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="106-119"
-  data-labels="Several candidates per slot|Rules reject some|A scorer keeps one|The knobs we measure">
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="108-121"
+  data-labels="Several candidates per slot|Rules reject some|A scorer keeps one">
   <p class="kicker">Where the rules come in</p>
   <h2 class="title sm">The encoder picks one of several candidate strands</h2>
   <div class="layout">
@@ -422,42 +381,34 @@
         <h4>A scorer keeps one</h4>
         <p>By default every candidate that passes the rules is equally good. In tier 2, a risk model ranks them.</p>
       </div>
-      <div class="knobs frag" data-f="4">
-        <h4>The knobs Erbgut measures</h4>
-        <ul><li>Which rules are on</li><li>How much redundancy</li><li>How candidates are scored</li></ul>
-        <div class="fix">Same encoder, same decoder. Fixed test: a 20 KB file must come back exactly in all 300 held-out trials.</div>
-      </div>
     </div>
   </div>
   <aside class="notes">
     <p>So where do the rules come in?</p>
     <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
     <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
-    <p><i class="cue"></i> A scorer keeps one. By default, any candidate that passes is as good as any other.</p>
-    <p><i class="cue"></i> We built Erbgut to measure these knobs. One fixed test: a 20 KB file has to come back exactly in all 300 held-out trials. Same encoder, same decoder. The only things that change are the rules and the redundancy.</p>
+    <p><i class="cue"></i> A scorer keeps one. By default, any candidate that passes is as good as any other. In tier two, a risk model ranks them instead.</p>
   </aside>
 </section>
 
-<!-- ================================================================ 8. Tier 1 -->
-<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="119-146"
-  data-labels="Switch each rule off and measure|Nanopore verdicts|Illumina verdicts|Same rule, different verdict">
-  <p class="kicker">Tier 1 <span class="tag">rule audit</span></p>
-  <h2 class="title">Does this rule pay off on this channel?</h2>
-  <p class="lede">Switch one rule off. Measure the reads per strand needed so the 20 KB file comes back in all 300 held-out trials. Same encoder, same decoder.</p>
-  <div class="table" id="audit-table"></div>
-  <div class="legend" id="audit-legend"></div>
-  <div class="callout frag" data-f="4" id="audit-callout"></div>
+<!-- ================================================================ 8. What we actually built -->
+<section class="slide" id="a-arch" data-title="What we actually built" data-plan="121-145"
+  data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
+  <p class="kicker">In one diagram</p>
+  <h2 class="title sm">What we actually built</h2>
+  <div class="arch" id="arch"></div>
   <aside class="notes">
-    <p>This is tier one, the rule audit.</p>
-    <p><i class="cue"></i> We switch each rule off, one at a time, and measure what it costs and what it buys at that recovery target.</p>
-    <p><i class="cue"></i> On Nanopore, the run-length rule <span class="res" data-say="auditNanopore"></span>.</p>
-    <p><i class="cue"></i> Same rule, on Illumina: it <span class="res" data-say="auditIllumina"></span>.</p>
-    <p><i class="cue"></i> <span class="res" data-say="auditContrast"></span>. That's the point: you only know once you measure it.</p>
+    <p>Zoom out for a second: here is the whole system in one diagram, before we walk through the pieces.</p>
+    <p><i class="cue"></i> The storage path. A channel profile describes one situation as JSON: error rates, the 5-letter context table, dropout, the read budget, costs. It is fit on real reads. The encoder is a Fountain code: for every slot it makes 8 to 32 candidate strands, puts a checksum in each, and a scorer keeps one. Simulator A plays the lab: dropouts, uneven coverage, per-read quality, errors every read shares, and context errors. The decoder chain gets the noisy reads back. Then a checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file.</p>
+    <p><i class="cue"></i> The one learned part in that path is the polisher. The classic baseline aligns the reads and votes a draft; a small dilated CNN, about 0.8 million parameters, looks at 17 vote features per position and says keep, substitute, delete, or insert.</p>
+    <p><i class="cue"></i> Around it runs the loop. Freeze the decoder, label strands by simulating each one 32 times to see where the decoder fails, train the risk model on those labels, search the settings, and hand the risk model back to the encoder so it keeps the safest candidate. At most three rounds.</p>
+    <p><i class="cue"></i> Everything is judged by one evaluation: 300 held-out trials, the fewest reads per strand at the recovery target, written to a result file that the dashboard, this deck and the demo all read. And Simulator B sits outside the loop, built from different mechanisms, only to check that a gain survives.</p>
+    <p class="aside">Indigo is learned, grey is classic code. Two learned models in the whole system. The rest of the deck walks through these pieces one at a time.</p>
   </aside>
 </section>
 
 <!-- ================================================================ 9. Tier 2 -->
-<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="146-166"
+<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="145-165"
   data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
   <h2 class="title sm">Learn where the decoder fails, then steer around it</h2>
@@ -485,7 +436,7 @@
 </section>
 
 <!-- ================================================================ 10. Loop -->
-<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="166-188" data-steps="4"
+<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="165-187" data-steps="4"
   data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
   <p class="kicker">The loop</p>
   <h2 class="title sm">Alternate and freeze, then judge on the Pareto plot</h2>
@@ -503,7 +454,7 @@
 </section>
 
 <!-- ================================================================ 11. Evidence: ablation and crossover -->
-<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="188-206"
+<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="187-205"
   data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">Where the gain comes from, and where it holds</h2>
@@ -530,7 +481,7 @@
 </section>
 
 <!-- ================================================================ 12. Evidence: simulator -->
-<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="206-220"
+<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="205-219"
   data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">No wet lab, so the simulator is checked against real reads</h2>
@@ -560,7 +511,7 @@
 </section>
 
 <!-- ================================================================ 13. Results and close -->
-<section class="slide" id="s-results" data-title="Results and close" data-plan="220-234" data-steps="2"
+<section class="slide" id="s-results" data-title="Results and close" data-plan="219-233" data-steps="2"
   data-labels="Headline results|Close: tagline, team, repo">
   <p class="kicker">Results</p>
   <h2 class="title sm">What the audit measured</h2>
@@ -586,23 +537,8 @@
 </section>
 
 <!-- ================================================================ Appendix -->
-<section class="slide appx" id="a-arch" data-appendix data-title="Appendix: what we built"
-  data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
-  <p class="kicker">Appendix <span class="tag">A0</span></p>
-  <h2 class="title sm">What we actually built</h2>
-  <div class="arch" id="arch"></div>
-  <aside class="notes">
-    <p>Backup slide. When a judge asks what we actually built, jump here. 40 to 60 seconds.</p>
-    <p><i class="cue"></i> The storage path. A channel profile describes one situation as JSON: error rates, the 5-letter context table, dropout, the read budget, costs. It is fit on real reads. The encoder is a Fountain code: for every slot it makes 8 to 32 candidate strands, puts a checksum in each, and a scorer keeps one. Simulator A plays the lab: dropouts, uneven coverage, per-read quality, errors every read shares, and context errors. The decoder chain gets the noisy reads back. Then a checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file.</p>
-    <p><i class="cue"></i> The one learned part in that path is the polisher. The classic baseline aligns the reads and votes a draft; a small dilated CNN, about 0.8 million parameters, looks at 17 vote features per position and says keep, substitute, delete, or insert.</p>
-    <p><i class="cue"></i> Around it runs the loop. Freeze the decoder, label strands by simulating each one 32 times to see where the decoder fails, train the risk model on those labels, search the settings, and hand the risk model back to the encoder so it keeps the safest candidate. At most three rounds.</p>
-    <p><i class="cue"></i> Everything is judged by one evaluation: 300 held-out trials, the fewest reads per strand at the recovery target, written to a result file that the dashboard, this deck and the demo all read. And Simulator B sits outside the loop, built from different mechanisms, only to check that a gain survives.</p>
-    <p class="aside">Indigo is learned, grey is classic code. Two learned models in the whole system.</p>
-  </aside>
-</section>
-
 <section class="slide appx" id="a-sim" data-appendix data-title="Appendix: the channel simulator">
-  <p class="kicker">Appendix <span class="tag">A1</span></p>
+  <p class="kicker">Appendix <span class="tag">A0</span></p>
   <h2 class="title sm">The channel simulator, step by step</h2>
   <div class="layout two">
     <div class="box card">
@@ -634,7 +570,7 @@
 </section>
 
 <section class="slide appx" id="a-models" data-appendix data-title="Appendix: the two AI models">
-  <p class="kicker">Appendix <span class="tag">A2</span></p>
+  <p class="kicker">Appendix <span class="tag">A1</span></p>
   <h2 class="title sm">Exactly two learned models</h2>
   <div class="layout two">
     <div class="box card">
@@ -666,7 +602,7 @@
 </section>
 
 <section class="slide appx" id="a-gx10" data-appendix data-title="Appendix: the GX10 setup">
-  <p class="kicker">Appendix <span class="tag">A3</span></p>
+  <p class="kicker">Appendix <span class="tag">A2</span></p>
   <h2 class="title sm">Everything heavy runs on one ASUS Ascent GX10</h2>
   <div class="layout two">
     <div class="box card">
@@ -693,7 +629,7 @@
 </section>
 
 <section class="slide appx" id="a-qa1" data-appendix data-title="Appendix: judge questions 1">
-  <p class="kicker">Appendix <span class="tag">A4</span></p>
+  <p class="kicker">Appendix <span class="tag">A3</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">You have no wet lab. How do you know it's real?</p><p class="a">We don't synthesize or sequence anything. The simulator matches real held-out reads within about 3 points at every read count. Every gain must survive Simulator B, and the risk model's ranking is checked on real reads: <span class="res" data-key="qa.riskModelRealAuc" data-fmt="text" data-ph="RESULT: real-read AUC"></span></p></div>
@@ -705,7 +641,7 @@
 </section>
 
 <section class="slide appx" id="a-qa2" data-appendix data-title="Appendix: judge questions 2">
-  <p class="kicker">Appendix <span class="tag">A5</span></p>
+  <p class="kicker">Appendix <span class="tag">A4</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">Couldn't you buy accuracy with more redundancy?</p><p class="a">That's what we rule out. Codecs are judged on the Pareto front of bits per base against reads per strand, at a fixed recovery target.</p></div>
@@ -717,7 +653,7 @@
 </section>
 
 <section class="slide appx" id="a-qa3" data-appendix data-title="Appendix: judge questions 3">
-  <p class="kicker">Appendix <span class="tag">A6</span></p>
+  <p class="kicker">Appendix <span class="tag">A5</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">The Microsoft dataset has known issues. Does that matter?</p><p class="a">Yes, and we handle it. Its references aren't uniformly random, so we use it for calibration and benchmarks, never to learn risky motifs. Simulator B uses a context table fit on DNAformer.</p></div>
