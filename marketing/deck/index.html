@@ -366,38 +366,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 7. What Erbgut does -->
-<section class="slide" id="s-system" data-title="What Erbgut does" data-plan="108-128">
-  <p class="kicker">What we built</p>
-  <h2 class="title">Two tiers, one fixed target</h2>
-  <p class="lede">For one channel, Erbgut tunes the codec instead of assuming it.</p>
-  <div class="tiers">
-    <div class="tier card enter" style="--d:0.15">
-      <span class="tno">1</span>
-      <h3>Rule audit</h3>
-      <p>Switch each hand-written rule off, one at a time. Measure exactly what it costs and what it buys on this channel. Keep only what pays off.</p>
-    </div>
-    <div class="tier card enter" style="--d:0.3">
-      <span class="tno">2</span>
-      <h3>Learned selection</h3>
-      <p>A risk model trained on where our own decoder actually fails ranks the candidate strands the encoder already generates, and keeps the safest one. Free, since a Fountain encoder tries several seeds per strand anyway.</p>
-    </div>
-  </div>
-  <div class="target card enter" style="--d:0.45">
-    <h4>One fixed target, both tiers</h4>
-    <p>A 20&nbsp;KB file recovered exactly in all 300 held-out trials. Same encoder, same decoder: only the rules, the redundancy and which candidate gets kept ever change.</p>
-  </div>
-  <aside class="notes">
-    <p>So what did we actually build?</p>
-    <p><i class="cue"></i> Tier one, the rule audit: switch each rule off, measure what it costs and buys, keep what pays.</p>
-    <p><i class="cue"></i> Tier two, learned selection: learn from where the decoder fails what else to avoid, and pick the safest candidate strand. That costs no density at all.</p>
-    <p><i class="cue"></i> One fixed test end to end: a 20 KB file back exactly in all 300 held-out trials, same encoder, same decoder.</p>
-    <p class="aside">Stress "same encoder, same decoder". It preempts "isn't it just a better decoder".</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 8. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="128-141"
+<!-- ================================================================ 7. Where rules come in -->
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="108-121"
   data-labels="Several candidates per slot|Rules reject some|A scorer keeps one">
   <p class="kicker">Where the rules come in</p>
   <h2 class="title sm">The encoder picks one of several candidate strands</h2>
@@ -421,31 +391,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 9. What's new -->
-<section class="slide" id="s-whatsnew" data-title="What's new" data-plan="141-161">
-  <p class="kicker">What's new <span class="tag">vs existing work</span></p>
-  <h2 class="title sm">Existing work tunes one piece. We close the loop.</h2>
-  <p class="lede">Adaptive constrained coding, learned decoders and end-to-end learned codes all exist. Each tunes the rules, the redundancy or the decoder <b>in isolation</b>.</p>
-  <div class="wn-table">
-    <div class="wn-h">Existing practice</div><div class="wn-h">What Erbgut adds</div>
-    <div class="wn-c old">One fixed codec for every situation</div><div class="wn-c new">A codec tuned per situation</div>
-    <div class="wn-c old">Hand-written rules applied to every channel</div><div class="wn-c new">Each rule audited per channel, plus a risk model trained on real decoder failures</div>
-    <div class="wn-c old">AI decoders trained once</div><div class="wn-c new">A decoder fine-tuned to the specific channel</div>
-    <div class="wn-c old">Encoder and decoder designed separately</div><div class="wn-c new">Encoder and decoder adapting to each other in an alternating loop</div>
-    <div class="wn-c old">Papers with fixed parameters</div><div class="wn-c new">An interactive tool for an engineer's real constraints</div>
-  </div>
-  <p class="bottom-note">We don't claim a better encoder than DNA Fountain, or a better decoder than DNAformer. <span class="muted">The gain is entirely in how the same codec gets configured, per channel.</span></p>
-  <aside class="notes">
-    <p>So what's actually new here, against the existing DNA storage literature?</p>
-    <p><i class="cue"></i> Today it's one fixed codec for every situation. We tune a codec per situation.</p>
-    <p><i class="cue"></i> Hand-written rules go on every channel unchanged. We audit each rule per channel, and learn from real decoder failures what the rules miss.</p>
-    <p><i class="cue"></i> AI decoders are usually trained once. Ours fine-tunes to the channel, and the encoder and decoder adapt to each other in a loop instead of being designed apart.</p>
-    <p><i class="cue"></i> We compete at the system level: how an existing codec should be configured for one channel. Not a better encoder than DNA Fountain, not a better decoder than DNAformer.</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 10. What we actually built -->
-<section class="slide" id="a-arch" data-title="What we actually built" data-plan="161-185"
+<!-- ================================================================ 8. What we actually built -->
+<section class="slide" id="a-arch" data-title="What we actually built" data-plan="121-145"
   data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
   <p class="kicker">In one diagram</p>
   <h2 class="title sm">What we actually built</h2>
@@ -460,100 +407,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 11. Pipeline -->
-<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="185-209"
-  data-labels="Bits become letters|Synthesis writes copies|Sequencing returns noisy reads|Decoder votes a consensus|Checksum marks a wrong strand missing|Fountain code rebuilds the file">
-  <p class="kicker">How DNA storage works</p>
-  <h2 class="title sm">From bits to strands, and back</h2>
-  <div class="canvas">
-    <div class="col">
-      <div class="colhead">Write</div>
-      <div class="step frag" data-f="1">
-        <div class="cap"><span class="stepno">1</span>Bits become letters</div>
-        <div class="bits">01001000 01101001 00100001<small>"Hi!"</small></div>
-        <svg class="arrow-d" viewBox="0 0 28 30" aria-hidden="true"><path d="M14 2v24M5 17l9 9 9-9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <div class="strand-big"><span class="seq strandline" data-seq="CAGACGGCAGAC"></span></div>
-        <div class="map">2 bits per letter: <span class="seq" data-seq="A"></span> 00, <span class="seq" data-seq="C"></span> 01, <span class="seq" data-seq="G"></span> 10, <span class="seq" data-seq="T"></span> 11</div>
-      </div>
-      <div class="step frag" data-f="2">
-        <div class="cap"><span class="stepno">2</span>Synthesis writes many copies</div>
-        <div class="tube">
-          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
-          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
-          <span class="copy seq" data-seq="CAGACGGCAGAC"></span>
-          <span class="times">&times; many</span>
-        </div>
-      </div>
-    </div>
-    <div class="col">
-      <div class="colhead">Read</div>
-      <div class="step frag" data-f="3">
-        <div class="cap"><span class="stepno">3</span>Sequencing returns noisy reads</div>
-        <div class="reads">
-          <div class="scan" aria-hidden="true"></div>
-          <div class="read" style="--r:0"><span class="rl">read 1</span><span class="seq" data-seq="CAGA[C>T]GGCAGAC"></span></div>
-          <div class="read" style="--r:1"><span class="rl">read 2</span><span class="seq" data-seq="CAGACG[-G]CAGAC"></span></div>
-          <div class="read" style="--r:2"><span class="rl">read 3</span><span class="seq" data-seq="CAG[+T]ACGGCAGAC"></span></div>
-          <div class="read" style="--r:3"><span class="rl">read 4</span><span class="seq" data-seq="CAGACGGCA[G>A]AC"></span></div>
-          <div class="read" style="--r:4"><span class="rl">read 5</span><span class="seq" data-seq="C[-A]GACGGC[A>T]GAC"></span></div>
-        </div>
-        <div class="legend"><span><i class="l-sub"></i>wrong letter</span><span><i class="l-ins"></i>extra letter</span><span><i class="l-del"></i>missing letter</span></div>
-      </div>
-    </div>
-    <div class="col">
-      <div class="colhead">Recover</div>
-      <div class="step frag" data-f="4">
-        <div class="cap"><span class="stepno">4</span>The decoder rebuilds the strand</div>
-        <div class="consensus"><span class="seq strandline" data-seq="CAGACGGCAGAC"></span><span class="ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>matches</span></div><div class="how">the baseline votes a draft, then the learned polisher corrects it</div>
-      </div>
-      <div class="step frag" data-f="5">
-        <div class="cap"><span class="stepno">5</span>A checksum turns a wrong strand into a missing one</div>
-        <div class="pool">
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span class="tile bad"><svg class="cross" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span class="miss">missing</span></span>
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span class="tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        </div>
-      </div>
-      <div class="step frag" data-f="6">
-        <div class="cap"><span class="stepno">6</span>The Fountain code rebuilds the file</div>
-        <div class="file"><span class="doc">Hi!</span><span class="say">Any large enough set of strands works. The file comes back <b>exactly</b>, or not at all.</span></div>
-      </div>
-    </div>
-    <svg class="flow-arrow fa1" style="left:506px" viewBox="0 0 44 44" aria-hidden="true"><path d="M6 22h30M26 12l10 10-10 10" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <svg class="flow-arrow fa2" style="left:1126px" viewBox="0 0 44 44" aria-hidden="true"><path d="M6 22h30M26 12l10 10-10 10" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </div>
-  <aside class="notes">
-    <p>Quick picture of how DNA storage works.</p>
-    <p><i class="cue"></i> Bits become letters, two bits per letter. <i class="cue"></i> Synthesis writes many copies of each strand.</p>
-    <p><i class="cue"></i> Sequencing reads them back noisy: wrong letters, extra letters, missing letters. Every read is different.</p>
-    <p><i class="cue"></i> The decoder takes the cluster of reads for one strand: the baseline votes a draft, and a small learned polisher corrects what is left.</p>
-    <p><i class="cue"></i> If the consensus is still wrong, a checksum catches it and marks the strand as missing.</p>
-    <p><i class="cue"></i> And the Fountain code rebuilds the file from whatever strands are left. It comes back exactly, or not at all.</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 12. Tier 1 -->
-<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="209-236"
-  data-labels="Switch each rule off and measure|Nanopore verdicts|Illumina verdicts|Same rule, different verdict">
-  <p class="kicker">Tier 1 <span class="tag">rule audit</span></p>
-  <h2 class="title">Does this rule pay off on this channel?</h2>
-  <p class="lede">Switch one rule off. Measure the reads per strand needed so the 20 KB file comes back in all 300 held-out trials. Same encoder, same decoder.</p>
-  <div class="table" id="audit-table"></div>
-  <div class="legend" id="audit-legend"></div>
-  <div class="callout frag" data-f="4" id="audit-callout"></div>
-  <aside class="notes">
-    <p>This is tier one, the rule audit.</p>
-    <p><i class="cue"></i> We switch each rule off, one at a time, and measure what it costs and what it buys at that recovery target.</p>
-    <p><i class="cue"></i> On Nanopore, the run-length rule <span class="res" data-say="auditNanopore"></span>.</p>
-    <p><i class="cue"></i> Same rule, on Illumina: it <span class="res" data-say="auditIllumina"></span>.</p>
-    <p><i class="cue"></i> <span class="res" data-say="auditContrast"></span>. That's the point: you only know once you measure it.</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 13. Tier 2 -->
-<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="236-256"
+<!-- ================================================================ 9. Tier 2 -->
+<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="145-165"
   data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
   <h2 class="title sm">Learn where the decoder fails, then steer around it</h2>
@@ -580,8 +435,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 14. Loop -->
-<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="256-278" data-steps="4"
+<!-- ================================================================ 10. Loop -->
+<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="165-187" data-steps="4"
   data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
   <p class="kicker">The loop</p>
   <h2 class="title sm">Alternate and freeze, then judge on the Pareto plot</h2>
@@ -598,8 +453,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 15. Evidence: ablation and crossover -->
-<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="278-296"
+<!-- ================================================================ 11. Evidence: ablation and crossover -->
+<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="187-205"
   data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">Where the gain comes from, and where it holds</h2>
@@ -625,8 +480,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 16. Evidence: simulator -->
-<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="296-310"
+<!-- ================================================================ 12. Evidence: simulator -->
+<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="205-219"
   data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">No wet lab, so the simulator is checked against real reads</h2>
@@ -655,8 +510,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 17. Results and close -->
-<section class="slide" id="s-results" data-title="Results and close" data-plan="310-324" data-steps="2"
+<!-- ================================================================ 13. Results and close -->
+<section class="slide" id="s-results" data-title="Results and close" data-plan="219-233" data-steps="2"
   data-labels="Headline results|Close: tagline, team, repo">
   <p class="kicker">Results</p>
   <h2 class="title sm">What the audit measured</h2>
