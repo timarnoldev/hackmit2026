@@ -494,3 +494,13 @@ html:not(.js) .cue { display: none; }
    drawn by the scene and stays. */
 html.js .scene--close .copy .wordmark,
 html.js .scene--close .copy .asks { display: none; }
+
+/* The hero's second block: a short plain-language explainer that appears once the
+   headline has cleared, for a reader who has no idea what DNA storage is. */
+.cb--intro { max-width: 46rem; margin-inline: auto; text-align: center; }
+.cb--intro .intro {
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem); line-height: 1.55;
+  color: var(--muted); margin: 0 0 1rem;
+}
+.cb--intro .intro--lead { color: var(--ink); font-weight: 500; margin-bottom: 0; }
+@media (max-width: 720px) { .cb--intro { text-align: left; } }
