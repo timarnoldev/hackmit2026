@@ -145,9 +145,13 @@
   }
 
   /* ------------------------------------------------------------ slide 7: rules against the model
-   * One real slot of the encoder's candidate search. Strands, rule verdicts and risk scores all
-   * come from results.js ruleCase, which scripts/rule_vs_model_case.py computes with the trained
-   * model, so the builder only lays out what it is given.
+   * One real slot of the encoder's candidate search, judged twice. Left, the hand rules cross
+   * candidates out; right, our model puts a number on every one of them. Strands, verdicts and
+   * scores all come from results.js ruleCase, which scripts/rule_vs_model_case.py computes with
+   * the trained model, so the builder only lays out what it is given.
+   *
+   * The motion is the original one: rows slide in staggered, the strike sweeps across a rejected
+   * strand while a box marks the run that broke the rule, then the scores arrive one by one.
    */
 
   function buildRuleCase(R) {
@@ -164,49 +168,49 @@
     const ours = rows.find((r) => r.n === C.oursN) || rows.find((r) => r.passes);
     const best = rows.reduce((x, y) => (y.risk < x.risk ? y : x), rows[0]);
     const handed = rows.find((r) => r.rulesPick);
+    const W = 15;   // one base of the sequence, matching #s-rules .cand .seq .nt
     const pct = (v) => Math.max(2, Math.min(100, v * 100));
 
-    const letters = (r) => {
+    const left = rows.map((r, i) => {
       const run = maxRun(r.seq);
-      if (r.passes || run.len <= 3) return esc(r.seq);
-      return esc(r.seq.slice(0, run.start)) +
-        `<b>${esc(r.seq.slice(run.start, run.start + run.len))}</b>` +
-        esc(r.seq.slice(run.start + run.len));
-    };
-
-    const left = rows.map((r, i) =>
-      `<div class="rrow ${r.passes ? 'pass' : 'cut'}${r.rulesPick ? ' picked' : ''} frag fade" data-f="1" style="--i:${i}">` +
-      `<span class="no">${r.n}</span>` +
-      `<span class="seqwrap"><span class="seq">${letters(r)}</span><span class="strike"></span></span>` +
-      `<span class="why">${r.passes ? '' : esc(r.why)}</span>` +
-      (r.rulesPick ? '<span class="handed">handed over</span>' : '') +
-      `</div>`).join('');
-
-    const right = rows.map((r, i) => {
-      const cls = r.rulesPick ? 'cost' : (ours && r.n === ours.n ? 'gain' : (r.passes ? '' : 'cut'));
-      const tag = r.rulesPick ? 'riskier than average'
-        : (ours && r.n === ours.n ? 'what we keep'
-        : (best && r.n === best.n ? 'safest of the six, and cut' : ''));
-      return `<div class="mrow ${cls} frag fade" data-f="3" style="--i:${i}">` +
+      const marked = !r.passes && run.len > 3;
+      return `<div class="cand ${r.passes ? 'pass' : 'fail'}${r.rulesPick ? ' picked' : ''}" style="--i:${i}">` +
         `<span class="no">${r.n}</span>` +
-        `<span class="track"><i style="width:${pct(r.risk)}%"></i></span>` +
-        `<span class="val">${r.risk.toFixed(2)}</span>` +
-        (tag ? `<span class="mtag">${tag}</span>` : '') +
+        `<span class="seqwrap"><span class="seq">${seqHTML(r.seq)}</span>` +
+        (marked ? `<span class="runmark" style="left:${run.start * W + 2}px;width:${run.len * W - 4}px"></span>` : '') +
+        `<span class="strike"></span></span>` +
+        `<span class="why ${r.passes ? 'ok' : 'bad'}">${r.passes ? '' : `<span class="why-txt">${icon('cross')}${esc(r.why)}</span>`}</span>` +
+        (r.rulesPick ? '<span class="keep">handed over</span>' : '') +
         `</div>`;
     }).join('');
 
+    const right = rows.map((r, i) => {
+      const cls = r.rulesPick ? 'airisk' : (ours && r.n === ours.n ? 'kept' : (r.passes ? 'pass' : 'fail'));
+      const flag = r.rulesPick ? 'riskier than average'
+        : (ours && r.n === ours.n ? 'what we keep'
+        : (best && r.n === best.n ? 'safest of the six, and cut' : ''));
+      return `<div class="mrow ${cls}" style="--i:${i}">` +
+        `<span class="no">${r.n}</span>` +
+        `<span class="track"><i style="width:${pct(r.risk)}%"></i></span>` +
+        `<span class="risk">${r.risk.toFixed(2)}</span>` +
+        (flag ? `<span class="mflag">${flag}</span>` : '') +
+        `</div>`;
+    }).join('');
+
+    // the marker has to sit inside the bar column, so it mirrors the row grid
     const mean = isNum(C.mean)
-      ? `<span class="meanline frag fade" data-f="3" style="left:${pct(C.mean)}%"><i></i><em>average candidate ${C.mean.toFixed(2)}</em></span>`
+      ? `<span class="meanline"><span class="col" style="--x:${pct(C.mean)}%"><i></i>` +
+        `<em>average candidate ${C.mean.toFixed(2)}</em></span></span>`
       : '';
 
     host.innerHTML =
-      `<div class="pan frag fade" data-f="1"><h3>The hand rules<em>a yes or no</em></h3><div class="rows">${left}</div>` +
-      `<p class="pfoot frag fade" data-f="2">the encoder takes the first survivor` +
+      `<div class="pan"><h3>The hand rules<em>a yes or no</em></h3><div class="rows">${left}</div>` +
+      `<p class="pfoot">the encoder takes the first survivor` +
       (isNum(C.from) && isNum(C.to) && isNum(C.length) ? `<em>letters ${C.from} to ${C.to} of ${C.length}</em>` : '') +
       `</p></div>` +
-      `<div class="pan mod frag fade" data-f="3"><h3>Our risk model<em>a number for every candidate</em></h3>` +
+      `<div class="pan mod"><h3>Our risk model<em>a number for every candidate</em></h3>` +
       `<div class="rows bars">${mean}${right}</div>` +
-      `<p class="pfoot frag fade" data-f="3">predicted chance the whole strand fails on this channel</p></div>`;
+      `<p class="pfoot">predicted chance the whole strand fails on this channel</p></div>`;
 
     if (foot) {
       foot.innerHTML =
