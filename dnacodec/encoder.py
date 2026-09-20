@@ -297,6 +297,7 @@ class _Layout:
         if sb < 1 or L <= sb:
             raise ValueError("need 1 <= seed_bases < strand_length")
         self.strand_length = L
+        self.seed_bases = sb
         self.seed_bits = min(2 * sb, MAX_SEED_BITS)
         self.seed_field_bits = 2 * sb
         self.payload_bits = 2 * (L - sb)
@@ -363,11 +364,10 @@ class _Layout:
         if not _VALID.fullmatch(strand):
             return None
         if self.seed_coded:
-            sb = self.strand_length - self.payload_bits // 2
-            seed = _seed_rank(strand[:sb], *self.seed_params)
+            seed = _seed_rank(strand[: self.seed_bases], *self.seed_params)
             if seed is None or seed >= self.seed_space:
                 return None  # the seed block is not one this encoding can emit
-            raw = int(strand[sb:].translate(_TO_DIGITS), 4)
+            raw = int(strand[self.seed_bases :].translate(_TO_DIGITS), 4)
         else:
             x = int(strand.translate(_TO_DIGITS), 4)
             seed = x >> self.payload_bits

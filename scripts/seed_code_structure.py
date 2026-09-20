@@ -16,11 +16,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import zlib
 
 import numpy as np
 
-from dnacodec.encoder import _Layout, _neighbors, encode, seed_code_bits_lost, seed_code_size
-from dnacodec.encoder import SeedCodedSettings
+from dnacodec.encoder import (
+    FILE_CRC_BYTES,
+    SeedCodedSettings,
+    _chunks_from_bytes,
+    _homopolymer_re,
+    _Layout,
+    _neighbors,
+    _passes,
+    encode,
+    seed_code_bits_lost,
+    seed_code_size,
+)
 from dnacodec.results import RESULTS_DIR
 from dnacodec.seeds import train_seed
 from dnacodec.testfile import test_file
@@ -49,9 +60,53 @@ def _structure(seeds: list[int], n_chunks: int) -> dict[str, float]:
     }
 
 
+def _acceptance_by_degree(data: bytes, n_candidates: int) -> dict:
+    """Share of candidate droplets that pass the standard rules, bucketed by droplet degree.
+
+    Walks the encoder's own seed stream and builds the real strand for each seed, so this is
+    exactly the screening encode() does, just without stopping at the first acceptance.
+    """
+    settings = EncoderSettings()
+    layout = _Layout(settings)
+    n_chunks = layout.n_chunks(len(data))
+    blob = zlib.crc32(data).to_bytes(FILE_CRC_BYTES, "big") + data
+    chunks = _chunks_from_bytes(blob, layout, n_chunks)
+    homo = _homopolymer_re(settings)
+    seen: dict[int, list[int]] = {}
+    for counter in range(n_candidates):
+        seed = layout.seed_from_counter(counter)
+        nbrs = _neighbors(seed, n_chunks)
+        value = 0
+        for i in nbrs:
+            value ^= chunks[i]
+        row = seen.setdefault(len(nbrs), [0, 0])
+        row[0] += 1
+        row[1] += _passes(layout.to_strand(seed, value), settings, homo)
+    buckets = {
+        "1": [0, 0], "2-3": [0, 0], "4-8": [0, 0], "9-20": [0, 0], "21+": [0, 0],
+    }
+    for degree, (n, ok) in seen.items():
+        key = (
+            "1" if degree == 1
+            else "2-3" if degree <= 3
+            else "4-8" if degree <= 8
+            else "9-20" if degree <= 20
+            else "21+"
+        )
+        buckets[key][0] += n
+        buckets[key][1] += ok
+    total = sum(n for n, _ in buckets.values()), sum(ok for _, ok in buckets.values())
+    return {
+        "n_candidates": n_candidates,
+        "overall": total[1] / total[0],
+        "by_degree": {k: {"n": n, "accepted": ok, "rate": ok / n} for k, (n, ok) in buckets.items() if n},
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--replicates", type=int, default=500)
+    ap.add_argument("--candidates", type=int, default=200_000)
     args = ap.parse_args()
 
     data = test_file()
@@ -85,6 +140,11 @@ def main() -> None:
         "min_coverage_p95": float(np.percentile(mincov, 95)),
     }
 
+    # The mechanism: does screening a candidate reject some droplet degrees more than others?
+    # If acceptance is flat in degree, screening cannot bias the degree distribution at all, and
+    # any gap between the codecs above is the sampling noise measured in the null.
+    acceptance = _acceptance_by_degree(data, args.candidates)
+
     coded = SeedCodedSettings()
     seed_code = {
         "valid_blocks": seed_code_size(coded),
@@ -107,6 +167,12 @@ def main() -> None:
         f"(5-95%: {spread['min_coverage_p05']:.0f} to {spread['min_coverage_p95']:.0f})"
     )
     print(
+        f"\nhow often a candidate droplet passes the standard rules, by degree "
+        f"({acceptance['n_candidates']:,} candidates, overall {acceptance['overall']:.4f}):"
+    )
+    for key, row in acceptance["by_degree"].items():
+        print(f"  degree {key:>5s}  n={row['n']:7,d}  accepted {row['rate']:.4f}")
+    print(
         f"\nseed code: {seed_code['valid_blocks']:,} valid {coded.seed_bases}-mers of "
         f"{seed_code['plain_blocks']:,}, {seed_code['bits_lost']:.2f} bits of seed space given up"
     )
@@ -119,6 +185,7 @@ def main() -> None:
                 "n_chunks": n_chunks,
                 "codecs": rows,
                 "null": spread,
+                "acceptance_by_degree": acceptance,
                 "seed_code": seed_code,
             },
             indent=2,

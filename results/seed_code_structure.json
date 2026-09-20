@@ -32,15 +32,46 @@
     }
   },
   "null": {
-    "replicates": 300,
-    "mean_degree_mean": 10.244985203120796,
-    "mean_degree_sd": 0.83290280734062,
-    "mean_degree_p05": 9.035270379338177,
-    "mean_degree_p95": 11.593946731234867,
-    "min_coverage_mean": 3.736666666666667,
-    "min_coverage_sd": 1.1187018675457685,
+    "replicates": 500,
+    "mean_degree_mean": 10.239585149313964,
+    "mean_degree_sd": 0.827503641982125,
+    "mean_degree_p05": 8.999233252623084,
+    "mean_degree_p95": 11.667635189669086,
+    "min_coverage_mean": 3.718,
+    "min_coverage_sd": 1.1229416707879283,
     "min_coverage_p05": 2.0,
-    "min_coverage_p95": 5.050000000000011
+    "min_coverage_p95": 6.0
+  },
+  "acceptance_by_degree": {
+    "n_candidates": 200000,
+    "overall": 0.265065,
+    "by_degree": {
+      "1": {
+        "n": 4435,
+        "accepted": 1221,
+        "rate": 0.27531003382187147
+      },
+      "2-3": {
+        "n": 114600,
+        "accepted": 30401,
+        "rate": 0.26527923211169285
+      },
+      "4-8": {
+        "n": 38104,
+        "accepted": 10074,
+        "rate": 0.2643816922107915
+      },
+      "9-20": {
+        "n": 16305,
+        "accepted": 4344,
+        "rate": 0.26642134314627414
+      },
+      "21+": {
+        "n": 26556,
+        "accepted": 6973,
+        "rate": 0.2625771953607471
+      }
+    }
   },
   "seed_code": {
     "valid_blocks": 2087378872,
