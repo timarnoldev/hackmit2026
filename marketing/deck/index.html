@@ -148,7 +148,6 @@
   <div class="ben-stats">
     <div class="ben-stat card enter" style="--d:0.1">
       <div class="n">~215<small>PB per gram</small></div>
-      <div class="d">The often-cited theoretical density of DNA as a storage medium: millions of times denser than flash or tape.</div>
       <div class="ben-compare">
         <div class="ben-cmp-item">
           <svg class="ben-cmp-dna" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="5" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="5" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="4" stroke-linecap="round"/></svg>
@@ -193,7 +192,6 @@
     </div>
     <div class="ben-stat card enter" style="--d:0.2">
       <div class="n">500+<small>years</small></div>
-      <div class="d">Cold, dry, dark storage and DNA's own decay rate point to centuries of stability, no power or refresh cycle needed. Hard drives and tape need refreshing every 5 to 10 years.</div>
       <div class="ben-bars">
         <div class="ben-bar-row"><span class="ben-bar-lbl">SSD</span><div class="ben-bar" style="width:67px"></div><span class="ben-bar-val">~5 yr</span></div>
         <div class="ben-bar-row"><span class="ben-bar-lbl">HDD</span><div class="ben-bar" style="width:87px"></div><span class="ben-bar-val">~8 yr</span></div>
@@ -207,22 +205,18 @@
     <div class="ben-case card enter" style="--d:0.35">
       <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 7l2-3h14l2 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       <h4>Cold archives</h4>
-      <p>Data you must keep, but rarely touch</p>
     </div>
     <div class="ben-case card enter" style="--d:0.4">
       <svg class="ico" viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><line x1="8" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="1.8"/></svg>
       <h4>Scientific &amp; genomic records</h4>
-      <p>Long-horizon research data, kept as long as it's needed</p>
     </div>
     <div class="ben-case card enter" style="--d:0.45">
       <svg class="ico" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <h4>Compliance records</h4>
-      <p>Multi-decade retention, without a refresh cycle</p>
     </div>
     <div class="ben-case card enter" style="--d:0.5">
       <svg class="ico" viewBox="0 0 24 24"><path d="M12 21s7-7.2 7-12a7 7 0 0 0-14 0c0 4.8 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
       <h4>Disaster-resilient backups</h4>
-      <p>A tiny physical footprint, easy to keep off-site</p>
     </div>
   </div>
   <aside class="notes">
@@ -344,7 +338,6 @@
     <div class="hitem"><span class="seq" data-seq="GGGA"></span><span class="htag">deletions</span></div>
     <div class="hitem"><span class="seq" data-seq="CGAA"></span><span class="htag">insertions</span></div>
   </div>
-  <p class="tiny-note">measured on real reads &mdash; none of them caught by a hand-written rule</p>
   <p class="bridge">So something has to catch this that isn't a fixed rule.</p>
   <aside class="notes">
     <p>This is where the previous slide's complaint stops being abstract.</p>
@@ -361,13 +354,12 @@
   <h2 class="title sm">The encoder picks one of several candidate strands</h2>
   <div class="layout">
     <div>
-      <div class="src">One chunk of the file <span class="chip">slot 17</span> encoded with 8 different seeds <span style="font-size:21px">(shortened to 20 letters)</span></div>
+      <div class="src"><span class="chip">slot 17</span> 8 seeds &middot; 20 letters</div>
       <div class="cands" id="cands"></div>
     </div>
     <div class="side">
       <div class="box card frag" data-f="3">
         <h4>The risk model picks the safest</h4>
-        <p>By default every candidate that passes the rules looks equally good. But one of these hides a real Nanopore hot spot the hand rules can't see &mdash; so the risk model scores each survivor and keeps the one that isn't hiding anything.</p>
       </div>
     </div>
   </div>
