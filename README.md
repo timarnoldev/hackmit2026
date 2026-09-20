@@ -1,4 +1,6 @@
-# Adaptive DNA Codec
+# Erbgut
+
+![Erbgut](marketing/social/social-preview.png)
 
 **HackMIT 2026.** We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 
@@ -16,6 +18,8 @@ The result is a codec tuned to that channel that reaches the same recovery targe
 ---
 
 ## Contents
+
+**Where we stand against published work:** [docs/COMPARISON.md](docs/COMPARISON.md), written to be unflattering where the numbers are.
 
 **Reproduce the headline numbers in one command:** `scripts/reproduce.sh` (decoder against the classic baseline on real held-out reads, plus the end to end demo). Every number we quote with its provenance: [docs/NUMBERS.md](docs/NUMBERS.md).
 

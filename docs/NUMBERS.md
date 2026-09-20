@@ -95,11 +95,41 @@ The gain survives a structurally different simulator. In the coarse target metri
 
 ⚠️ **Run 1 numbers are superseded.** Run 1 suggested 6 vs 8 reads on Nanopore; that was a winner's curse (best of hundreds of settings on the same trials). The final round of run 1 then missed the target on held-out data (297 of 300). Run 2 adds a margin check, three seed blocks and train-only selection. Say this openly; it is a strength, not a weakness.
 
-## 6. The weak spot, stated before anyone asks
+## 6. Does the risk model transfer to real reads? Yes, once the measurement is done right ✅
 
-**Risk model on real reads: AUC 0.516**, essentially chance (held-out DNAformer Nanopore clusters, 24% decoder failures). ☑️ Known confounders: those references are constrained (98.6% have a longest run of 3 or 4, GC between 0.44 and 0.56), so the features the model uses barely vary there, and real failure is dominated by coverage (read count alone gives AUC 0.77). A stratified analysis is running. ⏳
+The first number we had was **AUC 0.516**, essentially chance, and it was a measurement artifact. On real reads, failure is dominated by how many reads a strand happens to get: **read count alone ranks failures at AUC 0.78**. A score that only looks at the sequence cannot show up in an unstratified measurement, by construction.
 
-Honest sentence: "On simulated channels the learned selection clearly helps, and it survives an independently built simulator. On real reads we cannot yet show that the ranking transfers."
+Holding coverage fixed (every cluster decoded at the same number of reads, 4 subsamples each, Microsoft held-out split, 1,996 clusters):
+
+| What ranks real decoder failures? | AUC |
+|---|---|
+| **Our risk model** (trained only on simulated channels) | **0.69** |
+| The homopolymer rule alone (longest run) | 0.66 |
+| The 5-mer context table (calibrated, not learned) | 0.61 |
+| GC deviation | 0.50, chance |
+
+**The decisive test:** holding coverage *and* longest run fixed, so the hand rule's own feature is neutralised, the model still reaches **0.61** while the rule itself drops to **0.50**. On real DNA the model knows something the hand rule does not. The same picture appears with the classic baseline decoder (0.71 pooled), so it is not an artifact of the polisher.
+
+**Why the DNAformer set shows nothing:** 98.1% of its references have a longest run of 3 or 4 and its GC standard deviation is 0.014, so the features barely vary. Every sequence-based score, including the hand rule, sits at 0.51 to 0.53 there. A risk model trained directly on real failures reaches 0.558 on that set, reproduced at 0.550 on a second flowcell.
+
+**Remaining honest limitation:** we show the ranking transfers to real reads. We have not shown that *selecting* candidates by it reduces failures on real DNA, because that would need new strands synthesized and sequenced.
+
+Reproduce: `python scripts/risk_real_analysis.py --dataset microsoft --risk-model <run>/nanopore_budget/risk_it3.pkl --decoder polish --coverages 4 6 8 12 16 --repeats 4`
+
+## 6b. Where we stand against published decoders ☑️
+
+`docs/COMPARISON.md` has the full table. Short version, exact strands on the same Microsoft dataset:
+
+| reads per cluster | 2 | 4 | 6 | 10 |
+|---|---|---|---|---|
+| TReconLM (TMLR 2025), fine-tuned | 10.9% | 76.8% | 91.2% | 98.6% |
+| **Ours, best variant** | 7.0% | 66.1% | 88.8% | 96.2% |
+| DNAformer, fine-tuned by TReconLM's authors | 3.0% | 65.9% | 88.3% | 95.7% |
+| ITR | 4.9% | 57.8% | 78.1% | 89.0% |
+| **Ours, classic baseline** | 4.8% | 39.2% | 68.0% | 85.3% |
+| Trellis BMA | 0.1% | 39.1% | 64.6% | 82.9% |
+
+**Say it like this:** our decoder is level with a fine-tuned DNAformer, ahead of the classical algorithms, and clearly behind the current best, TReconLM. We did not set out to win trace reconstruction; we needed a decoder good enough to run the codec loop, and we built one in 13 minutes of training.
 
 ## 7. The live demo
 
