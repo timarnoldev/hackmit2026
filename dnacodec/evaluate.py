@@ -9,14 +9,14 @@ import dataclasses
 import math
 import os
 from concurrent.futures import Future, ProcessPoolExecutor
-from typing import Sequence
+from typing import Callable, Sequence
 
 import numpy as np
 from rapidfuzz.distance import Levenshtein
 
 from .encoder import encode, payload_bits_per_base, recover
 from .profiles import SituationProfile
-from .simulator import simulate
+from .simulator import simulate as default_simulate
 from .types import (
     Cluster,
     Decoder,
@@ -30,6 +30,9 @@ from .types import (
 
 BITS_PER_MB = 8e6  # 1 MB = 10^6 bytes
 GATHER_CHUNK_TRIALS = 50  # trials per decode() call for main_process_only decoders
+
+# Signature of dnacodec.simulator.simulate: (strands, profile, seed) -> clusters
+Simulator = Callable[[Sequence[Strand], SituationProfile, int], list[Cluster]]
 
 
 def evaluate(
@@ -129,6 +132,9 @@ def recovery_trials(
     workers: int | None = None,
     *,
     gather_chunk_trials: int = GATHER_CHUNK_TRIALS,
+    simulator: Simulator | None = None,
+    encoded: EncodedFile | None = None,
+    per_trial: bool = False,
 ) -> Metrics:
     """File recovery over independent channel trials. Owner: Agent C.
 
@@ -151,14 +157,27 @@ def recovery_trials(
       concatenated and decoded with one decode() call here, then split per trial and
       recovered in workers. Memory: one chunk's clusters are held at a time.
       Results are identical to the per-trial path for any chunk size.
+    - simulator (keyword): a function with the signature of dnacodec.simulator.simulate,
+      e.g. dnacodec.simulator_b.simulate for the firewall. None = dnacodec.simulator.simulate.
+      It is sent to the workers, so it must be picklable (module-level functions are).
+    - encoded (keyword): a file already encoded from data with settings. Encoding is then
+      skipped and scorer is ignored. Raises ValueError if encoded.meta.settings != settings
+      or encoded.meta.n_bytes != len(data).
+    - per_trial (keyword): also store per-trial results in extra, as lists in seed order
+      (extra is typed dict[str, float]; these two entries are lists of floats instead):
+        extra["trial_strand_accuracy"]: evaluate() on each trial alone, so
+          mean(trial_strand_accuracy) == strand_accuracy up to float rounding;
+        extra["trial_recovered"]: 1.0 if the trial recovered the file exactly, else 0.0, so
+          mean(trial_recovered) == recovery_rate.
+      No other field changes. recovery_trials never exits early, with or without per_trial.
     - Workers use the platform's default multiprocessing start method; with spawn (macOS)
       the calling script needs an `if __name__ == "__main__":` guard.
     """
-    encoded = encode(data, settings, scorer)
+    encoded = _encoded_file(data, settings, scorer, encoded)
     with _TrialRunner(
-        encoded, data, decoder, workers, len(seeds), gather_chunk_trials
+        encoded, data, decoder, workers, len(seeds), gather_chunk_trials, simulator
     ) as runner:
-        return runner.run(profile, seeds)
+        return runner.run(profile, seeds, per_trial=per_trial)
 
 
 def min_reads_at_target(
@@ -173,6 +192,8 @@ def min_reads_at_target(
     workers: int | None = None,
     *,
     gather_chunk_trials: int = GATHER_CHUNK_TRIALS,
+    simulator: Simulator | None = None,
+    encoded: EncodedFile | None = None,
 ) -> float | None:
     """Fewest mean reads per strand at which recovery_rate >= target. Owner: Agent C.
 
@@ -189,6 +210,7 @@ def min_reads_at_target(
     - main_process_only decoders: trials are decoded in chunks of gather_chunk_trials and
       the early-exit check runs in seed order, so no further chunk is decoded once the target
       is unreachable. The answer matches the per-trial path for any chunk size.
+    - simulator and encoded: as in recovery_trials.
     - coverage_mean is the mean reads per surviving strand (profile semantics); dropouts
       come on top of that.
     """
@@ -197,9 +219,9 @@ def min_reads_at_target(
     if len(seeds) == 0:
         raise ValueError("no seeds")
     max_failures = math.floor((1.0 - target) * len(seeds) + 1e-9)
-    encoded = encode(data, settings, scorer)
+    encoded = _encoded_file(data, settings, scorer, encoded)
     with _TrialRunner(
-        encoded, data, decoder, workers, len(seeds), gather_chunk_trials
+        encoded, data, decoder, workers, len(seeds), gather_chunk_trials, simulator
     ) as runner:
         for c in sorted(coverages):
             m = runner.run(dataclasses.replace(profile, coverage_mean=float(c)), seeds, max_failures)
@@ -207,6 +229,23 @@ def min_reads_at_target(
             if not m.extra.get("early_exit") and failures <= max_failures:
                 return float(c)
     return None
+
+
+def _encoded_file(
+    data: bytes, settings: EncoderSettings, scorer: Scorer | None, encoded: EncodedFile | None
+) -> EncodedFile:
+    """Encode, or check and reuse a pre-encoded file."""
+    if encoded is None:
+        return encode(data, settings, scorer)
+    if encoded.meta.settings != settings:
+        raise ValueError(
+            f"encoded file was made with {encoded.meta.settings}, not with {settings}"
+        )
+    if encoded.meta.n_bytes != len(data):
+        raise ValueError(
+            f"encoded file holds {encoded.meta.n_bytes} bytes but data has {len(data)}"
+        )
+    return encoded
 
 
 def _density_and_costs(
@@ -230,16 +269,21 @@ def _density_and_costs(
 
 # ---- trial machinery -------------------------------------------------------------------
 
-# (strands, meta, data, decoder) set once per worker process by _init_worker.
+# (strands, meta, data, decoder, simulator) set once per worker process by _init_worker.
 # decoder is None in workers when the decoder is main_process_only.
-_WORKER_STATE: tuple[list[Strand], FileMeta, bytes, Decoder | None] | None = None
+_State = tuple[list[Strand], FileMeta, bytes, "Decoder | None", Simulator]
+_WORKER_STATE: _State | None = None
 
 
 def _init_worker(
-    strands: list[Strand], meta: FileMeta, data: bytes, decoder: Decoder | None
+    strands: list[Strand],
+    meta: FileMeta,
+    data: bytes,
+    decoder: Decoder | None,
+    simulator: Simulator,
 ) -> None:
     global _WORKER_STATE
-    _WORKER_STATE = (strands, meta, data, decoder)
+    _WORKER_STATE = (strands, meta, data, decoder, simulator)
 
 
 def _is_main_process_only(decoder: Decoder) -> bool:
@@ -247,10 +291,10 @@ def _is_main_process_only(decoder: Decoder) -> bool:
 
 
 def _one_trial(
-    state: tuple[list[Strand], FileMeta, bytes, Decoder], profile: SituationProfile, seed: int
+    state: _State, profile: SituationProfile, seed: int
 ) -> tuple[list[Strand | None], list[int], bool]:
     """One channel pass. Depends only on (state, profile, seed), so it is deterministic."""
-    strands, meta, data, decoder = state
+    strands, meta, data, decoder, simulate = state
     clusters = simulate(strands, profile, seed)
     decoded = list(decoder.decode(clusters, meta.settings.strand_length))
     if len(decoded) != len(strands):
@@ -266,12 +310,13 @@ def _worker_trial(profile: SituationProfile, seed: int):
 
 def _worker_simulate(profile: SituationProfile, seed: int) -> list[Cluster]:
     assert _WORKER_STATE is not None, "worker not initialized"
-    return simulate(_WORKER_STATE[0], profile, seed)
+    strands, _, _, _, simulate = _WORKER_STATE
+    return simulate(strands, profile, seed)
 
 
 def _worker_recover(decoded: list[Strand | None]) -> bool:
     assert _WORKER_STATE is not None, "worker not initialized"
-    _, meta, data, _ = _WORKER_STATE
+    _, meta, data, _, _ = _WORKER_STATE
     return recover(decoded, meta) == data
 
 
@@ -286,12 +331,14 @@ class _TrialRunner:
         workers: int | None,
         n_tasks: int,
         gather_chunk_trials: int = GATHER_CHUNK_TRIALS,
+        simulator: Simulator | None = None,
     ) -> None:
         if gather_chunk_trials < 1:
             raise ValueError(f"gather_chunk_trials={gather_chunk_trials} must be >= 1")
         self.chunk = gather_chunk_trials
         self.encoded = encoded
-        self.state = (list(encoded.strands), encoded.meta, bytes(data), decoder)
+        simulator = default_simulate if simulator is None else simulator
+        self.state: _State = (list(encoded.strands), encoded.meta, bytes(data), decoder, simulator)
         self.gather = _is_main_process_only(decoder)
         if workers is None:
             workers = os.cpu_count() or 1
@@ -301,7 +348,7 @@ class _TrialRunner:
         self.pool: ProcessPoolExecutor | None = None
         if self.workers > 1:
             # a main_process_only decoder never leaves this process
-            worker_state = self.state[:3] + ((None if self.gather else decoder),)
+            worker_state = self.state[:3] + ((None if self.gather else decoder), simulator)
             self.pool = ProcessPoolExecutor(
                 max_workers=self.workers, initializer=_init_worker, initargs=worker_state
             )
@@ -335,7 +382,7 @@ class _TrialRunner:
             yield from self._gather_chunk(profile, seeds[start : start + self.chunk])
 
     def _gather_chunk(self, profile: SituationProfile, seeds: Sequence[int]) -> list:
-        strands, meta, data, decoder = self.state
+        strands, meta, data, decoder, simulate = self.state
         if self.pool is None:
             per_trial = [simulate(strands, profile, s) for s in seeds]
         else:
@@ -375,12 +422,21 @@ class _TrialRunner:
                 f.cancel()  # no-op for finished or running tasks
 
     def run(
-        self, profile: SituationProfile, seeds: Sequence[int], max_failures: int | None = None
+        self,
+        profile: SituationProfile,
+        seeds: Sequence[int],
+        max_failures: int | None = None,
+        per_trial: bool = False,
     ) -> Metrics:
         """All trials, or (with max_failures) stop at the first trial in seed order that
-        makes failures exceed max_failures. Deterministic either way."""
+        makes failures exceed max_failures. Deterministic either way.
+        per_trial adds per-trial lists to extra and disables early exit."""
         if len(seeds) == 0:
             raise ValueError("no seeds")
+        if per_trial:
+            max_failures = None
+        trial_accuracy: list[float] = []
+        trial_recovered: list[float] = []
         strands = self.state[0]
         decoded_all: list[Strand | None] = []
         clusters_all: list[Cluster] = []  # size stand-ins: evaluate() only uses len(cluster)
@@ -394,6 +450,10 @@ class _TrialRunner:
                 n_recovered += recovered
                 decoded_all.extend(decoded)
                 clusters_all.extend([""] * k for k in sizes)
+                if per_trial:
+                    one = evaluate(strands, decoded, [[""] * k for k in sizes])
+                    trial_accuracy.append(one.strand_accuracy)
+                    trial_recovered.append(1.0 if recovered else 0.0)
                 if max_failures is not None and n_run - n_recovered > max_failures:
                     early_exit = n_run < len(seeds)
                     break
@@ -412,6 +472,9 @@ class _TrialRunner:
         if early_exit:
             extra["early_exit"] = 1.0
             extra["n_trials_requested"] = float(len(seeds))
+        if per_trial:
+            extra["trial_strand_accuracy"] = trial_accuracy  # type: ignore[assignment]
+            extra["trial_recovered"] = trial_recovered  # type: ignore[assignment]
         return dataclasses.replace(
             pooled,
             n_strands=len(strands),

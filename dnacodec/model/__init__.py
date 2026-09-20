@@ -21,6 +21,11 @@ Contents:
   subsampling seeds as scripts/eval_real.py. Never used for selection.
 - finetune.py: finetune(checkpoint_path, clusters, references, steps, out_path) -> Path,
   used by the loop. Only pass training clusters (train seeds or real train splits).
+- polish.py: PolishDecoder, the decoder that currently beats the baseline. It keeps the
+  majority vote draft and its vote columns and corrects them with a 0.8M parameter dilated
+  1D CNN (keep/substitute/delete per position, insertion per gap, deletions paired with
+  insertions so the output is exactly strand_length). scripts/train_polish.py trains it in
+  about 15 minutes on the GX10, including data generation.
 
 Import the submodules directly (dnacodec.model.decoder etc.); this package does not import
 torch on its own.
@@ -69,6 +74,12 @@ core), so no precomputed dataset is needed; --workers 8 keeps the GPU fed.
     # 4) Final numbers next to the baseline, same protocol and seeds as scripts/eval_real.py:
     uv run python scripts/eval_real.py                  # baseline column, once
     uv run python -m dnacodec.model.benchmark checkpoints/<run-name>/best.pt
+
+    # The polisher (this is the decoder that beats the baseline), ~15 min end to end:
+    uv run python scripts/train_polish.py --sim-clusters 400000 --real-passes 24 \\
+        --workers 8 --steps 10000 --batch-size 512 --low-prob 0.75 --low-max 4 \\
+        --run-name polish_low
+    uv run python -m dnacodec.model.benchmark --polish checkpoints/polish_low/polish.pt
 
 Each run writes checkpoints/<run-name>/{train.log, metrics.jsonl, best.pt, last.pt,
 step<N>.pt}. best.pt (best on the validation subset of the TRAIN split) is the checkpoint

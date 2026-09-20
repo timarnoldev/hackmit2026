@@ -16,6 +16,7 @@ from dnacodec.results import (
     RESULTS_DIR,
     AblationEntry,
     RuleAuditEntry,
+    Tier2Entry,
     CandidateExample,
     CoveragePoint,
     CrossoverEntry,
@@ -84,6 +85,8 @@ def main() -> None:
                         else [("GGCGG", 0.34), ("CCGCC", 0.31), ("AAAA", 0.12), ("TTTT", 0.11)]
                     ),
                     notes="mock",
+                    stage=("tier1", "alternation 0", "alternation 1")[i],
+                    default_min_reads_matched=round(start_reads - 0.1 * (i + 1), 2),
                 )
             )
         curve = [
@@ -150,7 +153,13 @@ def main() -> None:
         )
         for r_n, r_i in ((0.82, 0.15), (0.12, 0.10), (0.64, 0.22), (0.30, 0.74))
     ]
-    summary = ExperimentSummary(ablation, rule_audit, crossover, firewall, examples, is_mock=True)
+    tier2 = [
+        Tier2Entry("nanopore_budget", 6.0, 8, 300, 0.0099, 0.0047, -0.0052, (-0.0073, -0.0033), 0.93, 0.97, 0.04, (-0.02, 0.10)),
+        Tier2Entry("nanopore_budget", 6.0, 32, 300, 0.0099, 0.0045, -0.0054, (-0.0076, -0.0034), 0.93, 0.96, 0.03, (-0.02, 0.09)),
+        Tier2Entry("nanopore_budget", 6.0, 8, 300, 0.0110, 0.0071, -0.0039, (-0.0062, -0.0015), 0.90, 0.93, 0.03, (-0.03, 0.09), simulator="B"),
+        Tier2Entry("illumina_standard", 20.0, 8, 300, 0.0036, 0.0036, -0.0002, (-0.0009, 0.0005), 1.0, 1.0, 0.0, (0.0, 0.0)),
+    ]
+    summary = ExperimentSummary(ablation, rule_audit, crossover, firewall, examples, tier2, is_mock=True)
     print(save_summary(summary, "mock"))
 
 

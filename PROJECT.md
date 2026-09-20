@@ -73,10 +73,10 @@ Cost per MB is shown in the dashboard, but cost numbers are placeholders and are
 
 | Component | Role | Is it AI? |
 |---|---|---|
-| **Channel simulator** | Turns strands into clusters of noisy reads for a situation. Calibrated on real reads | No |
+| **Channel simulator** | Turns strands into clusters of noisy reads for a situation. Calibrated on real reads, including run-length effects and a per-5-mer error table | No |
 | **Encoder** | Fountain (LT) code. Generates candidates per strand, applies the hard constraints that are enabled for this situation, keeps the one the scorer rates safest. A checksum per strand turns decoder mistakes into erasures, so a confident wrong strand can never corrupt the file | No, but its choices are steered by the risk model |
 | **Decoder** | Transformer that reconstructs a strand from up to 16 noisy reads. Pretrained on simulated data, fine-tuned per channel. The alignment plus majority vote baseline is always reported next to it | **Yes** |
-| **Risk model** | Small CNN predicting P(decode failure \| sequence, situation). Replaces hand-written rejection rules | **Yes** |
+| **Risk model** | Small CNN predicting P(decode failure \| sequence, situation). Works on top of the audited hand rules and catches the patterns they don't cover | **Yes** |
 | **Settings search** | Grid search over redundancy, strand length, which hard constraints are on, and the risk threshold | No, deliberately |
 
 The settings search is a plain grid on purpose. The interesting learning happens in the decoder and the risk model; a third "AI optimizer" would add risk and weaken the story.
@@ -166,7 +166,7 @@ The loop could learn a quirk of our own simulator instead of a property of DNA. 
 |---|---|
 | Optimize | Simulator A (calibrated profile, train seeds) |
 | Test 1 | Simulator A, held-out seeds |
-| Test 2 | Simulator B: rates perturbed by ±30%, a different homopolymer and position error model, held-out seeds |
+| Test 2 | Simulator B: rates perturbed by ±30%, a different homopolymer and position error model, a context table fit on DNAformer instead of Microsoft, held-out seeds |
 | Test 3 | Real reads: decoder accuracy on held-out real clusters, and risk model ranking (ROC AUC of predicted risk vs actual decoder failure on held-out real clusters) |
 
 A gain that holds under Simulator B and a risk model whose ranking holds on real reads are the strongest evidence possible without a wet lab. A gain that disappears under B is reported as simulator overfitting, not hidden.
@@ -256,11 +256,13 @@ Real data alone can't drive the loop: every alternation produces new strands, an
 | Microsoft clustered Nanopore reads | Nanopore (MinION) | 10,000 references of length 110, 269,709 reads, already clustered. Error rates roughly 1.7% insertions, 2.0% deletions, 2.2% substitutions | [GitHub](https://github.com/microsoft/clustered-nanopore-reads-dataset) |
 | DNAformer binned reads (Technion) | Nanopore (2 flowcells) and Illumina | References of length 140, clusters labeled with their reference, random and semantic files, about 1.2 GB, CC BY 4.0 | [Zenodo](https://zenodo.org/records/17473983) |
 
-**Caveat on the Microsoft set.** The dataset README (note added 8/12/2024) says the references are *not* uniformly random: a generation bug gave them long-range dependencies, and some clusters may be malformed as a result. We therefore don't use it to discover risky motifs. We use it as a reconstruction benchmark, for calibration and for comparison with published results (Trellis BMA, BBS, DNAformer).
+**Caveat on the Microsoft set.** The dataset README (note added 8/12/2024) says the references are *not* uniformly random: a generation bug gave them long-range dependencies, and some clusters may be malformed as a result. We therefore never train the risk model on its references. We use it as a reconstruction benchmark, for calibration and for comparison with published results (Trellis BMA, BBS, DNAformer).
+
+Calibration does include a per-5-mer error table fit on Microsoft train reads. That is a different thing: it measures the error rate *given* a context, which the skewed reference composition mostly makes noisier for rare contexts. Malformed clusters could still bias some contexts. Two checks keep it honest: the same context families lead on DNAformer Nanopore, and Simulator B uses a table fit on DNAformer instead. A pattern the risk model learned only from a Microsoft quirk would lose its advantage in firewall test 2.
 
 **How we use real data**
 
-1. **Calibrate the simulator:** error rates, position dependence, homopolymer effect and coverage distribution, fit to real clusters vs their references.
+1. **Calibrate the simulator:** error rates, position dependence, run-length effects, per-5-mer context errors, read quality spread and coverage distribution, fit to real train clusters vs their references.
 2. **Fine-tune the decoder** on real train clusters after pretraining on simulated data.
 3. **Validate the risk model:** its predicted risk must rank held-out real failing strands above succeeding ones.
 4. **Benchmark honestly** on held-out real clusters that no training touches.
@@ -349,7 +351,7 @@ Human checkpoint: full pipeline runs end to end with the baseline decoder.
 | **Moving target between decoder and risk model** | Alternate and freeze, at most three alternations |
 | **Transformer outputs a confident wrong strand** | Per-strand checksum turns it into an erasure the Fountain code handles |
 | **Transformer underperforms** | Fallback to published DNAformer code or the baseline; the core claim (B to C) holds with any fixed decoder |
-| **Biased real data** | Microsoft references are known to be non-random; we don't learn motifs from them |
+| **Biased real data** | Microsoft references are known to be non-random. The risk model never trains on them; the context error table fit on Microsoft reads is cross-checked on DNAformer, and Simulator B uses the DNAformer table |
 | **Gains are small** | Selection is free, so any gain is a pure win; the ablation shows exactly how large it is. A small, clean, verified effect beats a large unverified one |
 | **Learned patterns just rediscover known rules** | That validates the method on Nanopore. The new part is that Illumina learns different, weaker rules, visible in the crossover matrix |
 | **Integration chaos from parallel agents** | Fixed interfaces, one merge owner, end-to-end run after every merge |

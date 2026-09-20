@@ -359,3 +359,130 @@ def test_main_process_only_min_reads_matches():
         n = len(encode(DATA, settings).strands)
         tried = kw["coverages"].index(got) + 1
         assert sum(dec.calls) // n < len(seeds) * tried, chunk
+
+
+# ---- simulator= and encoded= keyword options -------------------------------------------
+
+from dnacodec import simulator as simulator_a  # noqa: E402
+from dnacodec import simulator_b  # noqa: E402
+
+
+def test_default_simulator_is_simulator_a():
+    profile = load_profile("nanopore_budget")
+    args = (DATA, SETTINGS, None, MajorityVoteDecoder(), profile, _seeds(3))
+    default = recovery_trials(*args, workers=1)
+    explicit = recovery_trials(*args, workers=2, simulator=simulator_a.simulate)
+    assert dataclasses.asdict(default) == dataclasses.asdict(explicit)
+
+
+def test_simulator_b_changes_trials_and_stays_deterministic():
+    profile = load_profile("nanopore_budget")
+    seeds = _seeds(4)
+    args = (DATA, SETTINGS, None, MajorityVoteDecoder(), profile, seeds)
+    a = recovery_trials(*args, workers=1)
+    b_serial = recovery_trials(*args, workers=1, simulator=simulator_b.simulate)
+    assert b_serial.strand_accuracy != a.strand_accuracy
+    assert b_serial.per_position_error != a.per_position_error
+    # parallel workers and the gather path use simulator B too
+    b_parallel = recovery_trials(*args, workers=2, simulator=simulator_b.simulate)
+    assert dataclasses.asdict(b_parallel) == dataclasses.asdict(b_serial)
+    for workers in (1, 2):
+        dec = GatherBaseline()
+        b_gather = recovery_trials(
+            DATA, SETTINGS, None, dec, profile, seeds, workers=workers,
+            simulator=simulator_b.simulate, gather_chunk_trials=3,
+        )
+        assert dataclasses.asdict(b_gather) == dataclasses.asdict(b_serial)
+
+
+def test_min_reads_with_simulator_b_parallel_equals_serial():
+    profile = load_profile("nanopore_budget")
+    settings = dataclasses.replace(SETTINGS, redundancy=1.0)
+    args = (DATA, settings, None, MajorityVoteDecoder(), profile, _seeds(4))
+    kw = dict(coverages=(3, 6, 10, 16, 24, 32), simulator=simulator_b.simulate)
+    assert min_reads_at_target(*args, workers=1, **kw) == min_reads_at_target(
+        *args, workers=2, **kw
+    )
+
+
+def test_pre_encoded_file_gives_identical_metrics():
+    profile = load_profile("nanopore_budget")
+    encoded = encode(DATA, SETTINGS)
+    args = (DATA, SETTINGS, None, MajorityVoteDecoder(), profile, _seeds(3))
+    inside = recovery_trials(*args, workers=1)
+    outside = recovery_trials(*args, workers=2, encoded=encoded)
+    assert dataclasses.asdict(inside) == dataclasses.asdict(outside)
+
+    settings = dataclasses.replace(SETTINGS, redundancy=1.0)
+    encoded_r1 = encode(DATA, settings)
+    kw = dict(coverages=(3, 6, 10, 16, 24))
+    margs = (DATA, settings, None, MajorityVoteDecoder(), profile, _seeds(4))
+    expected = min_reads_at_target(*margs, workers=1, **kw)
+    assert expected is not None
+    assert expected == min_reads_at_target(*margs, workers=2, encoded=encoded_r1, **kw)
+
+
+def test_pre_encoded_file_must_match():
+    encoded = encode(DATA, SETTINGS)
+    other = dataclasses.replace(SETTINGS, redundancy=0.5)
+    with pytest.raises(ValueError):
+        recovery_trials(
+            DATA, other, None, FirstReadDecoder(), _clean(), _seeds(1), workers=1, encoded=encoded
+        )
+    with pytest.raises(ValueError):
+        min_reads_at_target(
+            DATA, other, None, FirstReadDecoder(), _clean(), _seeds(1), workers=1, encoded=encoded
+        )
+    with pytest.raises(ValueError):  # a different file
+        recovery_trials(
+            DATA[:500], SETTINGS, None, FirstReadDecoder(), _clean(), _seeds(1), workers=1,
+            encoded=encoded,
+        )
+
+
+# ---- per_trial= ---------------------------------------------------------------------
+
+def test_per_trial_aggregates_to_pooled_and_is_path_independent():
+    profile = dataclasses.replace(load_profile("nanopore_budget"), coverage_mean=7.0)
+    settings = dataclasses.replace(SETTINGS, redundancy=1.0)
+    seeds = _seeds(6)
+    args = (DATA, settings, None, MajorityVoteDecoder(), profile, seeds)
+    plain = recovery_trials(*args, workers=1)
+    m = recovery_trials(*args, workers=1, per_trial=True)
+
+    acc, rec = m.extra["trial_strand_accuracy"], m.extra["trial_recovered"]
+    assert len(acc) == len(rec) == len(seeds)
+    assert set(rec) <= {0.0, 1.0}
+    assert 0.0 < m.recovery_rate < 1.0, "want mixed outcomes for a meaningful test"
+    # aggregates exactly (in counts) to the pooled metrics
+    n = m.n_strands
+    assert sum(round(a * n) for a in acc) == round(m.strand_accuracy * n * len(seeds))
+    assert sum(rec) / len(seeds) == m.recovery_rate
+    assert sum(acc) / len(acc) == pytest.approx(m.strand_accuracy, abs=1e-12)
+    # nothing else changes
+    without = dict(dataclasses.asdict(m))
+    extra = dict(without.pop("extra"))
+    del extra["trial_strand_accuracy"], extra["trial_recovered"]
+    plain_d = dataclasses.asdict(plain)
+    assert extra == plain_d.pop("extra")
+    assert without == plain_d
+
+    # identical on the parallel and the chunked gather paths
+    parallel = recovery_trials(*args, workers=3, per_trial=True)
+    assert dataclasses.asdict(parallel) == dataclasses.asdict(m)
+    for workers, chunk in ((1, 4), (2, 1)):
+        dec = GatherBaseline()
+        g = recovery_trials(
+            DATA, settings, None, dec, profile, seeds, workers=workers, per_trial=True,
+            gather_chunk_trials=chunk,
+        )
+        assert dataclasses.asdict(g) == dataclasses.asdict(m), (workers, chunk)
+
+
+def test_per_trial_disables_early_exit():
+    encoded = encode(DATA, SETTINGS)
+    profile = load_profile("nanopore_budget")  # every trial fails here
+    with _TrialRunner(encoded, DATA, MajorityVoteDecoder(), 1, 5) as runner:
+        m = runner.run(profile, _seeds(5), max_failures=0, per_trial=True)
+    assert m.n_trials == 5 and "early_exit" not in m.extra
+    assert m.extra["trial_recovered"] == [0.0] * 5

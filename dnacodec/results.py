@@ -29,6 +29,8 @@ class IterationResult:
     min_reads_at_target: float | None = None  # Pareto y value: fewest mean reads per strand meeting the recovery target
     risky_kmers: list[tuple[str, float]] = field(default_factory=list)  # top patterns avoided, with learned risk
     notes: str = ""
+    stage: str = ""  # "tier1" (system C: audited rules, rule scorer) or "alternation 0", "alternation 1", ...
+    default_min_reads_matched: float | None = None  # default rules at this iteration's bits per base (matched density)
 
 
 @dataclass
@@ -77,6 +79,8 @@ class RunResult:
                     min_reads_at_target=it["min_reads_at_target"],
                     risky_kmers=[(k, r) for k, r in it["risky_kmers"]],
                     notes=it["notes"],
+                    stage=it.get("stage", ""),
+                    default_min_reads_matched=it.get("default_min_reads_matched"),
                 )
                 for it in d["iterations"]
             ],
@@ -139,6 +143,28 @@ class FirewallEntry:
 
 
 @dataclass
+class Tier2Entry:
+    """Direct tier-2 test: rule scorer vs learned risk scorer with otherwise identical settings,
+    same decoder, same held-out seeds (paired by trial). diff = risk - rule, so negative strand
+    failure and positive recovery mean the learned scorer is better. CIs are 95% paired bootstrap."""
+
+    situation: str
+    coverage: float  # mean reads per strand of the comparison
+    candidates_per_strand: int
+    n_trials: int
+    strand_fail_rule: float
+    strand_fail_risk: float
+    strand_fail_diff: float
+    strand_fail_diff_ci: tuple[float, float]
+    recovery_rule: float
+    recovery_risk: float
+    recovery_diff: float
+    recovery_diff_ci: tuple[float, float]
+    simulator: str = "A"  # "A" or "B" (firewall)
+    note: str = ""
+
+
+@dataclass
 class CandidateExample:
     """The same strand judged by each situation's risk model: accepted on one channel, rejected on another."""
 
@@ -154,6 +180,7 @@ class ExperimentSummary:
     crossover: list[CrossoverEntry] = field(default_factory=list)
     firewall: list[FirewallEntry] = field(default_factory=list)
     examples: list[CandidateExample] = field(default_factory=list)
+    tier2: list[Tier2Entry] = field(default_factory=list)  # last so positional callers keep working
     is_mock: bool = False
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -165,6 +192,11 @@ class ExperimentSummary:
         return cls(
             ablation=[AblationEntry(**{**e, "metrics": Metrics(**e["metrics"])}) for e in d["ablation"]],
             rule_audit=[RuleAuditEntry(**e) for e in d.get("rule_audit", [])],
+            tier2=[
+                Tier2Entry(**{**e, "strand_fail_diff_ci": tuple(e["strand_fail_diff_ci"]),
+                              "recovery_diff_ci": tuple(e["recovery_diff_ci"])})
+                for e in d.get("tier2", [])
+            ],
             crossover=[CrossoverEntry(**{**e, "metrics": Metrics(**e["metrics"])}) for e in d["crossover"]],
             firewall=[FirewallEntry(**e) for e in d["firewall"]],
             examples=[CandidateExample(**e) for e in d["examples"]],
