@@ -1,7 +1,7 @@
 # Erbgut live decode ticker, ESP32-S3-BOX-3
 
-The box on the jury table. It shows a statistics header and, under it, DNA strands scrolling
-through with every fix visibly applied, in the same visual language as the deck.
+The box on the jury table. A statistics header above a tape of DNA flowing right to left
+through a decode head, in the same palette as the deck.
 
 The box is a thin display. It decodes nothing and invents nothing. `scripts/ticker_server.py`
 on the Mac runs the real encode, channel simulation and decode, and pushes one compact JSON
@@ -9,6 +9,66 @@ object per line down the USB cable.
 
 **No WiFi.** On purpose: a stage demo must not depend on hackathon WiFi. There is no
 `secrets.h` and no captive portal. Everything comes over USB.
+
+## What is on the screen
+
+320 x 240, with 14 px clear on every side.
+
+```
+ +--------------------------------------------------------------+
+ |  Erbgut            polish  tape 1 in 20        (o) live       |  title row
+ |                                                               |
+ |   1396            77%             806                         |  three headline
+ |   strands         exact           fixes                       |  numbers
+ |                                                               |
+ |  ####  ##  ####  #  ####  ###  ##########                     |  sparkline, 48 outcomes
+ |  ===========================================------------      |  progress through the file
+ +--------------------------------------------------------------+
+ |            142 v                                              |  strand label, scrolls
+ |  ~~~   G  C  A  A  T  T | G  C  C  G  A  T  G  A  T  G        |  read 1
+ |  ~~~   G  C  A  A  T  C | G  C  C  G  A  T  G  A  T  G        |  read 2
+ |  ~~~   G  C  A  A  T  T | G  C  C  G  A  T  G  A  T  G        |  read 3
+ |                         |                                     |
+ |  |||  G  C  A  A  T  T  T  G  C  C  G  A  T  G  A  T          |  the decoded strand
+ |                         ^                                     |
+ +--------------------------------------------------------------+
+                      the decode head
+```
+
+The tape flows right to left at five letters per second by default. A column is undecided
+until it reaches the head: it shows the letter the classic majority vote produced. As it
+crosses, the read errors light up and a position the model corrected flashes cost for the
+wrong letter, then gain as the corrected letter takes its place, then dissolves into the
+strand. The trail behind the head keeps its final state and fades out to the left. A divider,
+the strand number and a tick or a cross mark every strand boundary.
+
+The left gutter holds a lane icon per row, drawn in code: a small noisy wave for each read,
+and the Erbgut mark in miniature, bases standing on a strand, for the decoded line.
+
+**The tape shows a sample.** It runs far slower than the decode, so only the freshest strand
+waits its turn. The header counts every strand and the caption says "tape 1 in N", so the
+difference is stated rather than implied. Nothing on the panel is animated that did not come
+out of a real decode.
+
+Colours are the deck's tokens (`marketing/deck/deck.css`), so the table and the slides match:
+cost for an error, gain for a correction, ink and muted for neutral text, audit for an extra
+letter and the decode head, tbd for a strand that came back with no reads.
+
+**Measured:** 27 fps drawing the live tape, 30 fps on the splash, one off-screen sprite in
+internal RAM pushed per frame, about 200 KB of heap free.
+
+## Touch
+
+| Where | What |
+|---|---|
+| left third, tap | the tape flows slower, down to 1.5 letters per second |
+| right third, tap | the tape flows faster, up to 14 |
+| middle, **hold 400 ms** | pause or resume the decode on the Mac |
+| middle, short tap | nothing, on purpose |
+
+Pausing a demo by accident is worse than not being able to pause, so the middle needs a
+deliberate press, touches in the first 1500 ms after boot are ignored, and every touch
+prints its coordinates and what it did over USB.
 
 ---
 
