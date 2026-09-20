@@ -20,6 +20,13 @@ This module imports helpers from dnacodec.baseline (owned by Agent C) and does n
 
 from __future__ import annotations
 
+import atexit
+import math
+import multiprocessing as mp
+import os
+import sys
+import weakref
+from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
@@ -340,6 +347,185 @@ def apply_edits(
     return result
 
 
+# ---------------------------------------------------------------- CPU work on a process pool
+
+# Building the draft and its vote columns is pure CPU work (numpy plus rapidfuzz alignment) and
+# it dominates decode(): the CNN itself is a few milliseconds per batch. The torch model cannot
+# be shipped to worker processes, so PolishDecoder is main_process_only and evaluation hands it
+# all clusters of a chunk of trials in one call - which used to leave that CPU part on a single
+# core. _FeaturePool fans it out over a process pool of our own, inside decode(); the model stays
+# here and only the finished feature arrays come back.
+#
+# Oversubscription: dnacodec.evaluate runs its own pool over trials, but the two are never busy
+# at the same time. For a main_process_only decoder evaluate simulates a chunk of trials in its
+# pool, then calls decode() (its pool idle), then recovers in its pool again (our pool idle).
+# The phases alternate, so the idle pool only costs memory. DEFAULT_WORKERS still stays well
+# below the core count, and a pool is never created inside a worker process (no nested pools).
+
+CHUNK_CLUSTERS = 256  # upper bound of clusters per task, keeps the pickled payloads small
+TASKS_PER_WORKER = 4  # aim for this many tasks per worker, so the last tasks even the load out
+
+
+def _default_workers() -> int:
+    """Safe default for the feature pool: half the cores, at most 8, override with POLISH_WORKERS.
+
+    The loop already runs a pool of its own over trials (see above), so we leave it room.
+    """
+    env = os.environ.get("POLISH_WORKERS")
+    if env:
+        return max(1, int(env))
+    return max(1, min(8, (os.cpu_count() or 1) // 2))
+
+
+DEFAULT_WORKERS = _default_workers()
+
+
+def _default_start_method() -> str:
+    """fork on Linux, spawn elsewhere; override with POLISH_START_METHOD.
+
+    fork is what dnacodec.evaluate's own pool already uses on Linux, from this very process,
+    so the polisher's pool adds no new kind of risk. The workers only run numpy and rapidfuzz,
+    never CUDA, which is what makes forking a process with a GPU context safe here (torch's
+    own DataLoader forks the same way), and they start instantly with torch already imported.
+    forkserver and spawn also work (POLISH_START_METHOD=forkserver), but they re-import the
+    caller's __main__ in every worker, which needs an `if __name__ == "__main__"` guard and
+    fails outright for a script piped into python.
+    On macOS forking a process that has loaded torch is unreliable, so spawn is used there: it
+    costs a few seconds once per pool, not once per decode(), because the pool is kept alive.
+    """
+    available = mp.get_all_start_methods()
+    override = os.environ.get("POLISH_START_METHOD")
+    if override:
+        if override not in available:
+            raise ValueError(f"start method {override!r} is not one of {available}")
+        return override
+    if "fork" in available and not sys.platform.startswith("darwin"):
+        return "fork"
+    return "spawn" if "spawn" in available else available[0]
+
+
+def _in_worker_process() -> bool:
+    """True inside any multiprocessing worker (ours, or one of evaluate's trial workers)."""
+    return mp.parent_process() is not None
+
+
+def _init_feature_worker() -> None:
+    """One thread per worker: the parallelism is one process per chunk of clusters."""
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    try:
+        torch.set_num_threads(1)
+    except Exception:  # pragma: no cover - torch always has this, but never fail a worker here
+        pass
+
+
+def build_features(clusters: Sequence[Cluster], strand_length: int):
+    """Drafts, features and read counts for non-empty clusters, in order.
+
+    Module level and free of any torch state, so ProcessPoolExecutor can pickle it by reference
+    and a worker never receives the model. The features come back stacked into one array when
+    all drafts have the same length (they do, _fix_length forces strand_length), which pickles
+    much faster than one small array per cluster.
+    """
+    drafts: list[str] = []
+    feats: list[np.ndarray] = []
+    sizes: list[int] = []
+    for cluster in clusters:
+        draft, votes = draft_of(cluster, strand_length)
+        drafts.append(draft)
+        feats.append(features_of(draft, votes))
+        sizes.append(votes[3])
+    if feats and len({f.shape for f in feats}) == 1:
+        return drafts, np.stack(feats), sizes
+    return drafts, feats, sizes
+
+
+class _FeaturePool:
+    """A process pool for build_features, created lazily and kept alive across decode() calls.
+
+    decode() is called once per chunk of trials, hundreds of times in a loop run, and starting
+    a pool costs more than one chunk of work, so the pool outlives the call. close() shuts it
+    down; every live pool is also closed at interpreter exit.
+    """
+
+    def __init__(self, workers: int, start_method: str | None = None) -> None:
+        if workers < 1:
+            raise ValueError(f"workers={workers} must be >= 1")
+        self.workers = int(workers)
+        self.start_method = start_method or _default_start_method()
+        self._pool: ProcessPoolExecutor | None = None
+        _LIVE_POOLS.add(self)
+
+    def _executor(self) -> ProcessPoolExecutor:
+        if self._pool is None:
+            ctx = mp.get_context(self.start_method)
+            if self.start_method == "forkserver":
+                # the server imports this module once; the workers fork from it for free
+                ctx.set_forkserver_preload([__name__])
+            self._pool = ProcessPoolExecutor(
+                max_workers=self.workers, mp_context=ctx, initializer=_init_feature_worker
+            )
+        return self._pool
+
+    def map_chunks(self, chunks: Sequence[Sequence[Cluster]], strand_length: int) -> list:
+        """build_features for every chunk, results in submission order.
+
+        A worker that raises re-raises here with its own traceback. A worker that dies (killed,
+        out of memory) breaks the pool: we close it and raise, so the call fails loudly instead
+        of hanging, and the next call starts a fresh pool.
+        """
+        pool = self._executor()
+        futures = []
+        try:
+            for chunk in chunks:
+                futures.append(pool.submit(build_features, chunk, strand_length))
+            return [f.result() for f in futures]
+        except BrokenExecutor as exc:
+            self.close()
+            raise RuntimeError(
+                "the polish feature worker pool died (a worker process crashed or was killed). "
+                "Pass workers=None to PolishDecoder to build the features in this process."
+            ) from exc
+        finally:
+            for f in futures:
+                f.cancel()  # no-op for finished tasks, drops queued ones after a failure
+
+    def close(self) -> None:
+        pool, self._pool = self._pool, None
+        if pool is not None:
+            pool.shutdown(wait=True, cancel_futures=True)
+
+
+_LIVE_POOLS: weakref.WeakSet[_FeaturePool] = weakref.WeakSet()
+
+
+@atexit.register
+def _close_feature_pools() -> None:
+    for pool in list(_LIVE_POOLS):
+        pool.close()
+
+
+def _build_all(clusters: Sequence[Cluster], strand_length: int, pool: _FeaturePool | None):
+    """build_features over all clusters, split across the pool when there is one.
+
+    The result does not depend on the split: build_features is deterministic per cluster and the
+    chunks come back in order, so the features are bit for bit the ones the serial path builds.
+    """
+    n = len(clusters)
+    if pool is None or n < 2:
+        drafts, feats, sizes = build_features(clusters, strand_length)
+        return drafts, list(feats), sizes
+    size = max(1, min(CHUNK_CLUSTERS, math.ceil(n / (pool.workers * TASKS_PER_WORKER))))
+    chunks = [clusters[start : start + size] for start in range(0, n, size)]
+    drafts: list[str] = []
+    feats: list[np.ndarray] = []
+    sizes: list[int] = []
+    for chunk_drafts, chunk_feats, chunk_sizes in pool.map_chunks(chunks, strand_length):
+        drafts.extend(chunk_drafts)
+        feats.extend(chunk_feats)  # rows of the stacked array, or the per-cluster arrays
+        sizes.extend(chunk_sizes)
+    return drafts, feats, sizes
+
+
 # ---------------------------------------------------------------- decoder
 
 
@@ -350,30 +536,32 @@ def predict_probs(
     strand_length: int,
     batch_size: int = 512,
     device: torch.device | str | None = None,
+    pool: _FeaturePool | None = None,
 ):
     """Drafts and edit probabilities for every non-empty cluster.
 
     Returns (index, draft, op probabilities (N_OPS, L), insert probabilities (N_INS, L),
     number of reads) per non-empty cluster, in input order.
+
+    pool: an optional _FeaturePool that builds the drafts and features in worker processes.
+    The model itself always runs here, batched, and the output is identical either way.
     """
     device = torch.device(device) if device is not None else next(model.parameters()).device
-    drafts, feats, sizes, idx = {}, {}, {}, []
-    for i, cluster in enumerate(clusters):
-        if not any(cluster):
-            continue
-        draft, votes = draft_of(cluster, strand_length)
-        drafts[i], feats[i], sizes[i] = draft, features_of(draft, votes), votes[3]
-        idx.append(i)
+    idx = [i for i, cluster in enumerate(clusters) if any(cluster)]
+    drafts, feats, sizes = _build_all([clusters[i] for i in idx], strand_length, pool)
     amp = device.type == "cuda"
     out = []
     for start in range(0, len(idx), batch_size):
-        chunk = idx[start : start + batch_size]
-        x = torch.from_numpy(np.stack([feats[i] for i in chunk])).to(device)
+        stop = min(start + batch_size, len(idx))
+        x = torch.from_numpy(np.stack(feats[start:stop])).to(device)
         with torch.autocast(device.type, dtype=torch.bfloat16, enabled=amp):
             op_logits, ins_logits = model(x)
         op_p = op_logits.float().softmax(1).cpu().numpy()
         ins_p = ins_logits.float().softmax(1).cpu().numpy()
-        out.extend((i, drafts[i], op_p[j], ins_p[j], sizes[i]) for j, i in enumerate(chunk))
+        out.extend(
+            (idx[start + j], drafts[start + j], op_p[j], ins_p[j], sizes[start + j])
+            for j in range(stop - start)
+        )
     return out
 
 
@@ -394,9 +582,10 @@ def polish_clusters(
     batch_size: int = 512,
     device: torch.device | str | None = None,
     thresholds: dict | None = None,
+    pool: _FeaturePool | None = None,
 ) -> list[Strand | None]:
     """Baseline draft plus learned corrections. None for clusters without any read."""
-    probs = predict_probs(model, clusters, strand_length, batch_size, device)
+    probs = predict_probs(model, clusters, strand_length, batch_size, device, pool)
     return edits_from_probs(len(clusters), probs, strand_length, thresholds)
 
 
@@ -544,6 +733,12 @@ class PolishDecoder:
 
     The defaults reproduce the original decoder exactly. rounds, drafts, select and mode
     switch on the extras described in polish_clusters_multi() and apply_edits().
+
+    The CNN runs here on the GPU, the drafts and features are built on a process pool
+    (workers > 1) that lives as long as the decoder. workers=None or 1 keeps everything in
+    this process, exactly as before. Call close() when done, or let the atexit hook do it.
+    Only the default path (rounds=1, drafts=1, mode="topk") uses the pool so far; the multi
+    draft path interleaves CPU and GPU work per round and still runs in this process.
     """
 
     name = "polish"
@@ -560,6 +755,7 @@ class PolishDecoder:
         select: str = "confidence",
         mode: str = "topk",
         escalate: float | None = None,
+        workers: int | None = DEFAULT_WORKERS,
     ):
         from .net import pick_device
 
@@ -571,11 +767,35 @@ class PolishDecoder:
         self.checkpoint_info = {k: v for k, v in ckpt.items() if k in ("step", "metrics", "source")}
         self.rounds, self.drafts, self.select, self.mode = rounds, drafts, select, mode
         self.escalate = escalate
+        if workers is not None and int(workers) < 1:
+            raise ValueError(f"workers={workers} must be >= 1 or None")
+        self.workers = 1 if workers is None else int(workers)
+        self._pool: _FeaturePool | None = None
+
+    def _feature_pool(self) -> _FeaturePool | None:
+        """The pool, started on first use. None when single process, or inside a worker."""
+        if self.workers <= 1 or _in_worker_process():
+            return None  # no nested pools: a worker keeps the CPU work to itself
+        if self._pool is None:
+            self._pool = _FeaturePool(self.workers)
+        return self._pool
 
     def decode(self, clusters: Sequence[Cluster], strand_length: int) -> list[Strand | None]:
         if self.rounds == 1 and self.drafts == 1 and self.mode == "topk":  # the original path
             return polish_clusters(self.model, clusters, strand_length, self.batch_size,
-                                   self.device, self.thresholds)
+                                   self.device, self.thresholds, self._feature_pool())
         return polish_clusters_multi(self.model, clusters, strand_length, self.batch_size,
                                      self.device, self.thresholds, self.rounds, self.drafts,
                                      self.select, self.mode, self.escalate)
+
+    def close(self) -> None:
+        """Shut the feature workers down. Idempotent; a later decode() starts a new pool."""
+        if self._pool is not None:
+            self._pool.close()
+            self._pool = None
+
+    def __enter__(self) -> PolishDecoder:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
