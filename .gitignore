@@ -20,6 +20,7 @@ results/*
 !results/rule_recovery_curve_*.json
 !results/tier2_recovery_curve_*.json
 !results/treconlm_*.json
+!results/rule_vs_model_case.json
 !results/decoder_real_heldout.json
 .DS_Store
 /.claude/worktrees

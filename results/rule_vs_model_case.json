@@ -1,0 +1,100 @@
+{
+  "model": "checkpoints/risk/risk_nanopore_budget.pkl",
+  "settings": {
+    "strand_length": 110,
+    "seed_bases": 16,
+    "max_homopolymer": 3,
+    "gc_min": 0.4,
+    "gc_max": 0.6
+  },
+  "scanned": 20000,
+  "mean_risk": 0.505,
+  "window_start": 13262,
+  "gap": 0.17,
+  "candidates": [
+    {
+      "n": 1,
+      "strand": "ATACCAAAGAGGGAGGTGTAAGTAGTGTGGTGTGCAGGCACAAGTTGAATTAGATGCTGAATAGTCCATGAGGGCGTAAAGGTTTGGCCACAAATGTCTGAAGTTCGGGT",
+      "excerpt": "TGTAAGTAGTGTGGTGTGCAGGCACAAGTTGAATTAGATG",
+      "excerpt_from": 17,
+      "excerpt_to": 56,
+      "risk": 0.62,
+      "passes": true,
+      "violation": "",
+      "run": 3,
+      "gc": 0.464,
+      "rules_pick": true,
+      "model_pick": false
+    },
+    {
+      "n": 2,
+      "strand": "TACGGACACGTAGGTTAAGGGGTGTTAGACCGGGAGAATCTCAGGGAGGTGGGTTACCTCGATGAAGCCGGCAATTAAAGCTGGTAAAGGGCGCAATTCTGAAACCAGCG",
+      "excerpt": "AAGGGGTGTTAGACCGGGAGAATCTCAGGGAGGTGGGTTA",
+      "excerpt_from": 17,
+      "excerpt_to": 56,
+      "risk": 0.63,
+      "passes": false,
+      "violation": "run of 4",
+      "run": 4,
+      "gc": 0.527,
+      "rules_pick": false,
+      "model_pick": false
+    },
+    {
+      "n": 3,
+      "strand": "CTAAATCGCTGTTGACCATGCGTTAGGCCTAAGGATGGGGGACTTTTTACTGGAAGTAAACCTAGTGCAAGCTGCACCGGAGTGCGTTTTAGGGCCCCTGAAACCAAAAT",
+      "excerpt": "CATGCGTTAGGCCTAAGGATGGGGGACTTTTTACTGGAAG",
+      "excerpt_from": 17,
+      "excerpt_to": 56,
+      "risk": 0.594,
+      "passes": false,
+      "violation": "run of 5",
+      "run": 5,
+      "gc": 0.491,
+      "rules_pick": false,
+      "model_pick": false
+    },
+    {
+      "n": 4,
+      "strand": "GGTCGGGGATTAGGTAGTTACGATATGATGTTTTATGCGTTTCGTTAGGTCTTCCGTCGCTTACGCATAAAGGTAACCGTCGAATGGAGCCAGTGACGGCGCTCCGTTGA",
+      "excerpt": "GTTACGATATGATGTTTTATGCGTTTCGTTAGGTCTTCCG",
+      "excerpt_from": 17,
+      "excerpt_to": 56,
+      "risk": 0.45,
+      "passes": false,
+      "violation": "run of 4",
+      "run": 4,
+      "gc": 0.5,
+      "rules_pick": false,
+      "model_pick": true
+    },
+    {
+      "n": 5,
+      "strand": "CCCATCTGCCCAAGTTACCATTACTGTAGACGCTGCCGCGTACTCGTCCCCGGCCGTTGAACTCCCCATTGATCGATGATGTCCACTTTAGCCATTGGACGAAACTGGCG",
+      "excerpt": "ACCATTACTGTAGACGCTGCCGCGTACTCGTCCCCGGCCG",
+      "excerpt_from": 17,
+      "excerpt_to": 56,
+      "risk": 0.474,
+      "passes": false,
+      "violation": "run of 4",
+      "run": 4,
+      "gc": 0.555,
+      "rules_pick": false,
+      "model_pick": false
+    },
+    {
+      "n": 6,
+      "strand": "CCTGGAGGCTGTAGATTAAATATATTCCTAGGGAAGAAACCTACTAGATTCGCCATGGGCTGGCTTCCGGTCAACCGCCCGGTCCACCCGCTTTCCTCGCGCCGATCTTT",
+      "excerpt": "TAAATATATTCCTAGGGAAGAAACCTACTAGATTCGCCAT",
+      "excerpt_from": 17,
+      "excerpt_to": 56,
+      "risk": 0.518,
+      "passes": true,
+      "violation": "",
+      "run": 3,
+      "gc": 0.545,
+      "rules_pick": false,
+      "model_pick": false
+    }
+  ]
+}
