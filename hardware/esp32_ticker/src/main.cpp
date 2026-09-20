@@ -32,6 +32,7 @@
 #include "board_config.h"
 #include "box_data.h"
 #include "box_decoder.h"
+#include "box_polish.h"
 
 // The panel. LovyanGFX ships a profile for this exact board, so we use it instead of
 // hand writing pins: LGFX_ESP32_S3_BOX_V3 in the library's LGFX_AutoDetect_ESP32_all.hpp.
@@ -264,6 +265,8 @@ static char decoderTag[10] = "";
 // currently on screen: falling back to the frozen run must not erase it, or the tag goes
 // stale and stops telling the truth the moment the host comes back.
 static bool hostModelLive = false;
+// Did the learned polisher actually run on this chip? Only then may the header say so.
+static bool gPolishOnDevice = false;
 static char channelName[34] = "";
 static bool linkUp = false;
 static bool paused = false;
@@ -276,7 +279,9 @@ static uint32_t gDecodeUs = 0;   // rolling mean time for one on-device decode
 static uint32_t gDecoded = 0;
 static inline uint32_t micros_now() { return (uint32_t)micros(); }
 
-static bool modelOnScreen() { return source == SRC_HOST && hostModelLive; }
+static bool modelOnScreen() {
+  return source == SRC_HOST ? hostModelLive : gPolishOnDevice;
+}
 
 // ---------------------------------------------------------------- marks
 
@@ -372,8 +377,18 @@ static bool parseRecord(const char *rec, Strand &out, int &nfix, uint32_t &micro
 
   char cons[boxdec::kMaxLen + 1] = {0};
   char draft[boxdec::kMaxLen + 1] = {0};
-  const int nCons = boxdec::reconstruct(c, BOX_DATA_STRAND_LENGTH, 3, cons, sizeof(cons));
-  const int nDraft = boxdec::pickDraft(c, BOX_DATA_STRAND_LENGTH, draft, sizeof(draft));
+  int nCons = 0, nDraft = 0;
+  if (gPolishOnDevice) {
+    // the learned polisher runs the classic vote first and then corrects it, so the classic
+    // answer is the "before" strand and every teal flip is a real model edit
+    nCons = boxpolish::polish(c, BOX_DATA_STRAND_LENGTH, draft, sizeof(draft), cons,
+                              sizeof(cons));
+    nDraft = (int)strlen(draft);
+  }
+  if (nCons == 0) {  // no model, or it declined: fall back to the classic decoder
+    nCons = boxdec::reconstruct(c, BOX_DATA_STRAND_LENGTH, 3, cons, sizeof(cons));
+    nDraft = boxdec::pickDraft(c, BOX_DATA_STRAND_LENGTH, draft, sizeof(draft));
+  }
   micros = micros_now() - t0;
 
   out.ok = (nRef == nCons) && memcmp(cons, reference, (size_t)nCons) == 0;
@@ -652,7 +667,8 @@ static void drawHeader() {
     capColour = C_AUDIT;
   } else if (source == SRC_EMBEDDED) {
     // standing on its own: say so, and say which decoder produced what is on screen
-    snprintf(caption, sizeof(caption), "majority vote, on device");
+    snprintf(caption, sizeof(caption), gPolishOnDevice ? "polish, on device"
+                                                       : "majority vote, on device");
   } else if (!hostModelLive) {
     // the Mac is attached but its polisher is not loaded, which would otherwise be invisible
     snprintf(caption, sizeof(caption), "majority vote, on the Mac");
@@ -1069,8 +1085,13 @@ void setup() {
                 lcd.height(), (int)canvasReady, (int)inPsram, (unsigned)ESP.getFreeHeap());
   memset(spark, 0, sizeof(spark));
   if (canvasReady) splash();
+  boxpolish::setYield([]() { vTaskDelay(1); });
+  gPolishOnDevice = boxpolish::available() && boxpolish::begin();
+  Serial.printf("polish on device=%d working=%u bytes heap=%u\n", (int)gPolishOnDevice,
+                (unsigned)boxpolish::workingBytes(), (unsigned)ESP.getFreeHeap());
+
   // the decoder gets the core the renderer is not on
-  xTaskCreatePinnedToCore(decodeTask, "decode", 8192, nullptr, 1, nullptr,
+  xTaskCreatePinnedToCore(decodeTask, "decode", 16384, nullptr, 1, nullptr,
                           xPortGetCoreID() == 0 ? 1 : 0);
   Serial.println("display ready");
   Serial.println('?');  // ask the server what is running

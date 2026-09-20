@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "box_decoder.h"
+#include "box_polish.h"
 
 int main() {
   if (const char *o = getenv("BT_ORDER")) boxdec::gBacktraceOrder = atoi(o);
@@ -61,7 +62,13 @@ int main() {
     char draft[boxdec::kMaxLen + 1] = {0};
     boxdec::reconstruct(c, strandLength, 3, cons, sizeof(cons));
     boxdec::pickDraft(c, strandLength, draft, sizeof(draft));
-    std::cout << cons << "\t" << draft << "\n";
+
+    // the polished strand too, when the model is compiled in
+    char polished[boxdec::kMaxLen + 1] = {0};
+    char pdraft[boxdec::kMaxLen + 1] = {0};
+    if (boxpolish::begin()) boxpolish::polish(c, strandLength, pdraft, sizeof(pdraft),
+                                              polished, sizeof(polished));
+    std::cout << cons << "\t" << draft << "\t" << polished << "\n";
   }
   return 0;
 }
