@@ -147,14 +147,7 @@ html.instant *, html.instant *::before, html.instant *::after {
 /* ---------------------------------------------------------------- typography */
 
 .kicker {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--sa-audit);
-  letter-spacing: 0;
-  margin: 0 0 14px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: none;
 }
 .kicker .tag {
   font-size: 22px;
@@ -1244,20 +1237,16 @@ html.results-broken .load-error { display: block; }
 .appx .chain .cs > div span { color: var(--sa-muted); }
 
 #a-cctt .hotlist {
-  display: flex; justify-content: center; flex-wrap: wrap; gap: 24px;
-  margin: 72px auto 0; max-width: 1680px;
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 40px;
+  margin: 96px auto 0; max-width: 1680px;
 }
 #a-cctt .hitem {
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
-  padding: 30px 36px; border-radius: 20px; background: var(--sa-surface); border: 2px solid var(--sa-rule);
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+  padding: 48px 64px; border-radius: 26px; background: var(--sa-surface); border: 2px solid var(--sa-rule);
 }
-#a-cctt .hitem .seq { font-size: 44px; }
-#a-cctt .hitem .nt { width: 30px; }
-#a-cctt .hitem .htag { font-size: 18px; font-weight: 600; color: var(--sa-cost); text-transform: uppercase; letter-spacing: 0.04em; }
-#a-cctt .bridge {
-  max-width: 1200px; margin: 40px auto 0; font-size: 32px; font-weight: 600;
-  text-align: center; color: var(--sa-audit);
-}
+#a-cctt .hitem .seq { font-size: 68px; }
+#a-cctt .hitem .nt { width: 46px; }
+#a-cctt .hitem .htag { font-size: 22px; font-weight: 600; color: var(--sa-cost); text-transform: uppercase; letter-spacing: 0.04em; }
 
 .qa { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 44px; }
 .qa .q { font-size: 28px; font-weight: 600; line-height: 1.25; margin: 0 0 8px; }
