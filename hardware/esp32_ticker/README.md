@@ -137,7 +137,13 @@ Tested on this Mac against the box at `/dev/cu.usbmodem1101`:
 - the sketch runs and the display driver comes up (`B` and `D` arrive at boot),
 - the box receives and parses JSON lines and answers a `hi` with `?`,
 - the heartbeat arrives once a second while the server streams,
-- the server survives the box being unplugged and reconnects when the port reappears.
+- the server keeps decoding when the box stops answering: an upload attempted while the
+  server held the port failed (as it should), `box_alive` went to false within three
+  seconds, `connected` stayed true, and the browser view carried on without a hiccup.
+
+Not exercised with a real cable pull, only with the port being taken away, but that is the
+same code path: any read or write error closes the port and the sender retries every 1.5
+seconds.
 
 **Not verified:** what the screen actually shows. Nobody looked at the panel while this was
 written, so the layout, the orientation, the colour order and the touch mapping are
