@@ -222,3 +222,69 @@ def test_risk_model_plugs_into_encoder(fitted):
     default = encode(data, settings)
     # the risk-scored encoder picks strands the model rates safer than first-passing ones
     assert fitted(enc.strands).mean() < fitted(default.strands).mean()
+
+
+# -- real-read analysis helpers (section 4) ----------------------------------------------
+
+
+def test_subsample_reads_keeps_order_and_size():
+    reads = [f"read{i}" for i in range(10)]
+    rng = np.random.default_rng(0)
+    picked = risk.subsample_reads(reads, 4, rng)
+    assert len(picked) == 4 and len(set(picked)) == 4
+    assert picked == [r for r in reads if r in set(picked)]  # original order kept
+    assert risk.subsample_reads(reads[:3], 4, rng) == reads[:3]  # fewer than k: all of them
+
+
+def test_real_failure_rates_labels_and_seed_discipline():
+    refs = ["ACGT" * 10, "TTGA" * 10, "GCGC" * 10]
+    reads = [[r] * 6 for r in refs]  # every read is the reference
+    rates = risk.real_failure_rates(refs, reads, FirstReadDecoder(), 4, repeats=3, seed=train_seed(1), workers=1)
+    assert np.array_equal(rates, np.zeros(3))
+    rates = risk.real_failure_rates(refs, reads, WrongDecoder(), 4, repeats=3, seed=train_seed(1), workers=1)
+    assert np.array_equal(rates, np.ones(3))
+    empty = risk.real_failure_rates(refs[:1], [[]], FirstReadDecoder(), 4, repeats=2, seed=train_seed(1), workers=1)
+    assert np.isnan(empty[0])
+    with pytest.raises(ValueError):
+        risk.real_failure_rates(refs, reads, FirstReadDecoder(), 4, seed=heldout_seeds(1)[0])
+    with pytest.raises(ValueError):
+        risk.real_failure_rates(refs, reads, FirstReadDecoder(), 4, seed=train_seed(1), heldout=True)
+
+
+def test_real_failure_rates_same_for_any_number_of_workers():
+    rng = np.random.default_rng(3)
+    refs = ["".join("ACGT"[i] for i in rng.integers(0, 4, 110)) for _ in range(150)]
+    reads = [[r[:50] + r[51:], r, r[:20] + "A" + r[20:]] for r in refs]  # noisy copies
+    a = risk.real_failure_rates(refs, reads, FirstReadDecoder(), 2, repeats=2, seed=train_seed(2), workers=1)
+    b = risk.real_failure_rates(refs, reads, FirstReadDecoder(), 2, repeats=2, seed=train_seed(2), workers=3)
+    assert np.array_equal(a, b, equal_nan=True)
+    c = risk.real_failure_rates(refs, reads, FirstReadDecoder(), 2, repeats=2, seed=train_seed(5), workers=1)
+    assert not np.array_equal(a, c, equal_nan=True)
+
+
+def test_context_risk_matches_the_simulator_table():
+    profile = load_profile("nanopore_budget")
+    strands = risk.generate_strands(50, 110, seed=train_seed(11))
+    worst = risk.context_risk(strands, profile, "total", "max")
+    mean = risk.context_risk(strands, profile, "total", "mean")
+    top5 = risk.context_risk(strands, profile, "total", "top5")
+    assert worst.shape == (50,)
+    assert np.all(worst >= top5) and np.all(top5 >= mean) and np.all(mean > 0)
+    flat = dataclasses.replace(profile, context_table=None)
+    assert np.array_equal(risk.context_risk(strands, flat), np.zeros(50))
+
+
+def test_stratified_auc_removes_a_pure_stratum_effect():
+    # The score only encodes the stratum, and failure only depends on the stratum:
+    # unstratified that looks like a perfect ranker, within strata it is chance.
+    strata = np.repeat([1, 2], 200)
+    failed = np.concatenate([np.zeros(200, bool), np.ones(200, bool)])
+    score = strata.astype(float) + np.random.default_rng(0).normal(0, 0.01, 400)
+    assert risk.roc_auc(failed, score) > 0.99
+    pooled, rows = risk.stratified_auc(failed, score, strata)
+    assert np.isnan(pooled) and all(np.isnan(r["auc"]) for r in rows)
+    # A score that ranks inside every stratum survives stratification.
+    failed = np.random.default_rng(1).random(400) < 0.3
+    score = failed + strata * 10.0
+    pooled, rows = risk.stratified_auc(failed, score, strata)
+    assert pooled == 1.0 and [r["n"] for r in rows] == [200, 200]
