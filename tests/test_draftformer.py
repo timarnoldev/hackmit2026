@@ -13,7 +13,6 @@ from dnacodec.simulator import simulate
 torch = pytest.importorskip("torch")
 
 from dnacodec.model.draftformer import (  # noqa: E402
-    BASE_PAD,
     NO_ALIGN,
     DraftFormer,
     DraftFormerConfig,
@@ -25,7 +24,8 @@ from dnacodec.model.draftformer import (  # noqa: E402
     load_checkpoint,
     pack_cluster,
     pack_example,
-    read_width,
+    HALF_WINDOW,
+    OUTSIDE,
     save_checkpoint,
 )
 
@@ -38,8 +38,7 @@ def _clusters(n=8, length=110, coverage=8.0, seed=0):
 
 
 def _tiny():
-    return DraftFormer(DraftFormerConfig(d=32, d_read=16, heads=2, read_layers=1,
-                                         cross_layers=1, trunk_layers=1, dec_layers=1))
+    return DraftFormer(DraftFormerConfig(d=32, d_read=16, heads=2, cross_layers=1, trunk_layers=1, dec_layers=1))
 
 
 # ---------------------------------------------------------------- alignment
@@ -76,8 +75,7 @@ def test_gathered_columns_reproduce_the_baseline_votes():
         counts = np.zeros((len(draft), 5), dtype=np.int64)
         for r in range(pack.n_reads):
             for i in range(len(draft)):
-                j = int(pack.gather[r, i])
-                counts[i, int(pack.rbase[r, j]) if j != NO_ALIGN else _DEL] += 1
+                counts[i, int(pack.win[r, i, HALF_WINDOW]) if pack.aligned[r, i] else _DEL] += 1
         assert (counts == base_votes).all()
 
 
@@ -93,11 +91,12 @@ def test_pack_uses_the_same_draft_and_features_as_v1():
         assert len(draft) == len(ref)
         assert np.allclose(pack.feats.astype(np.float32), features_of(v1_draft, v1_votes),
                            atol=1e-3)
-        assert pack.rbase.shape == (16, read_width(len(ref)))
-        assert pack.gather.shape == (16, len(ref))
+        assert pack.win.shape == (16, len(ref), 2 * HALF_WINDOW + 1)
+        assert pack.aligned.shape == (16, len(ref))
         assert pack.n_reads == len(reads)
-        # unused read slots are fully padded
-        assert (pack.rbase[pack.n_reads :] == BASE_PAD).all()
+        # unused read slots carry nothing
+        assert (pack.win[pack.n_reads :] == OUTSIDE).all()
+        assert (pack.aligned[pack.n_reads :] == 0).all()
 
 
 def test_pack_cluster_handles_no_reads():

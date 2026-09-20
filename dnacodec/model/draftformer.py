@@ -17,12 +17,11 @@ are thrown away by that:
 So this module keeps the classic alignment as a *hint* (learning alignment from scratch is
 what sank ``ConsensusNet``, see docs/MODELS.md section 3) and changes the two things above:
 
-    reads ──▶ per-read transformer **in read coordinates**, positional embedding = the draft
-    │         position each read base aligns to, plus a flag for "this base is an insertion".
-    │         A read base therefore carries its own local context, including bases the
-    │         alignment mis-assigned, which the aligned-column view destroys.
-    ▼
-    gather at the aligned index ──▶ (draft position, read) grid of read states
+    reads ──▶ at every draft position, every read contributes the WINDOW letters around the
+    │         one aligned to it, **in the read's own coordinates**, plus whether it has a base
+    │         there at all and how far the whole read sits from the draft. A read base
+    │         therefore carries its own local context, including bases the alignment
+    │         mis-assigned, which the aligned-column view destroys.
     ▼
     cross-read attention: one query per draft position (built from the v1 17 features, the
     draft base, coverage and the position) attends over the reads at that position. Attention
@@ -56,7 +55,6 @@ from ..baseline import MAX_READS, _pick_draft, _to_array, subsample
 from ..types import ALPHABET, Cluster, Strand
 from .polish import N_FEATURES, N_INS, N_OPS, apply_edits, features_of, labels_of, refine_draft
 
-BASE_PAD = 4  # read base token for padding
 NO_ALIGN = -1  # gather index for "this read has no base at this draft position"
 BOS = 4  # decoder start token
 _LETTERS = np.frombuffer(ALPHABET.encode(), dtype=np.uint8)
@@ -93,22 +91,44 @@ def align_read(draft: str, read: str, arr: np.ndarray, n_pos: int):
     return gather, coord, is_ins
 
 
+HALF_WINDOW = 3  # read bases kept on each side of the aligned one
+WINDOW = 2 * HALF_WINDOW + 1
+OUTSIDE = 4  # window value for "past the end of this read"
+
+
 @dataclass
 class Pack:
-    """One cluster, ready for the model. All arrays are fixed size so they batch directly."""
+    """One cluster, ready for the model. All arrays are fixed size so they batch directly.
 
-    rbase: np.ndarray  # (R, Lr) int8, read bases, BASE_PAD outside the read
-    rcoord: np.ndarray  # (R, Lr) int16, draft position of each read base
-    rins: np.ndarray  # (R, Lr) int8, 1 = inserted base
-    gather: np.ndarray  # (R, L) int16, read index per draft position, NO_ALIGN if missing
+    The window is the point of this decoder. At draft position i, read r contributes not one
+    voted letter but the ``WINDOW`` letters around the aligned one **in the read's own
+    coordinates**, so a read that slipped out of register, or that carries an extra base
+    three letters earlier, still shows what it actually said. When the read has no base at a
+    draft position, the window is centred where that base would have been, so a deletion is
+    visible in context instead of being one anonymous "missing" vote.
+    """
+
+    win: np.ndarray  # (R, L, WINDOW) int8, read bases around the aligned one, OUTSIDE = past the end
+    aligned: np.ndarray  # (R, L) int8, 1 = this read has a base at this draft position
+    rqual: np.ndarray  # (R,) float16, share of draft positions this read disagrees with
     feats: np.ndarray  # (N_FEATURES, L) float16, the v1 vote features of the same draft
     draft: np.ndarray  # (L,) int8
     n_reads: int
 
 
-def read_width(strand_length: int) -> int:
-    """Padded read length. Nanopore reads run a little longer or shorter than the strand."""
-    return strand_length + 32
+def read_window(draft: str, read: str, arr: np.ndarray, n_pos: int):
+    """(window, aligned) for one read against the draft. See Pack."""
+    gather, _, _ = align_read(draft, read, arr, n_pos)
+    aligned = gather >= 0
+    # where the read has no base, centre on the position the missing base would have had:
+    # one past the last aligned base before it.
+    prev = np.where(aligned, gather, -1)
+    np.maximum.accumulate(prev, out=prev)
+    centre = np.where(aligned, gather, prev + 1)
+    idx = centre[:, None] + np.arange(-HALF_WINDOW, HALF_WINDOW + 1)[None, :]
+    inside = (idx >= 0) & (idx < len(read))
+    win = np.where(inside, arr[np.clip(idx, 0, max(len(read) - 1, 0))], OUTSIDE)
+    return win.astype(np.int8), aligned.astype(np.int8)
 
 
 def pack_cluster(cluster: Cluster, strand_length: int, max_reads: int = MAX_READS):
@@ -118,26 +138,21 @@ def pack_cluster(cluster: Cluster, strand_length: int, max_reads: int = MAX_READ
         return None, None
     arrays = [_to_array(r) for r in reads]
     draft, votes = refine_draft(_pick_draft(reads, strand_length), reads, arrays, strand_length)
-    width = read_width(strand_length)
     n = len(reads)
-    rbase = np.full((max_reads, width), BASE_PAD, dtype=np.int8)
-    rcoord = np.zeros((max_reads, width), dtype=np.int16)
-    rins = np.zeros((max_reads, width), dtype=np.int8)
-    gather = np.full((max_reads, strand_length), NO_ALIGN, dtype=np.int16)
+    win = np.full((max_reads, strand_length, WINDOW), OUTSIDE, dtype=np.int8)
+    aligned = np.zeros((max_reads, strand_length), dtype=np.int8)
+    rqual = np.zeros(max_reads, dtype=np.float16)
+    draft_codes = _to_array(draft)
     for r, (read, arr) in enumerate(zip(reads, arrays)):
-        g, coord, ins = align_read(draft, read, arr, strand_length)
-        keep = min(len(read), width)
-        rbase[r, :keep] = arr[:keep]
-        rcoord[r, :keep] = coord[:keep]
-        rins[r, :keep] = ins[:keep]
-        gather[r] = np.where(g < keep, g, NO_ALIGN)  # a truncated tail counts as unaligned
+        win[r], aligned[r] = read_window(draft, read, arr, strand_length)
+        same = (win[r, :, HALF_WINDOW] == draft_codes) & (aligned[r] == 1)
+        rqual[r] = 1.0 - same.mean()
     pack = Pack(
-        rbase=rbase,
-        rcoord=rcoord,
-        rins=rins,
-        gather=gather,
+        win=win,
+        aligned=aligned,
+        rqual=rqual,
         feats=features_of(draft, votes).astype(np.float16),
-        draft=_to_array(draft).astype(np.int8),
+        draft=draft_codes.astype(np.int8),
         n_reads=n,
     )
     return draft, pack
@@ -156,10 +171,9 @@ def collate(packs: Sequence[Pack], device: torch.device | str = "cpu") -> dict:
     """Stack packs into the batch dict the model's forward wants."""
     t = lambda a, dt: torch.from_numpy(np.ascontiguousarray(a)).to(device=device, dtype=dt)  # noqa: E731
     return {
-        "rbase": t(np.stack([p.rbase for p in packs]), torch.long),
-        "rcoord": t(np.stack([p.rcoord for p in packs]), torch.long),
-        "rins": t(np.stack([p.rins for p in packs]), torch.long),
-        "gather": t(np.stack([p.gather for p in packs]), torch.long),
+        "win": t(np.stack([p.win for p in packs]), torch.long),
+        "aligned": t(np.stack([p.aligned for p in packs]), torch.long),
+        "rqual": t(np.stack([p.rqual for p in packs]), torch.float32),
         "feats": t(np.stack([p.feats for p in packs]), torch.float32),
         "draft": t(np.stack([p.draft for p in packs]), torch.long),
         "n_reads": t(np.array([p.n_reads for p in packs]), torch.long),
@@ -253,38 +267,14 @@ class _CrossBlock(nn.Module):
         return x + self.drop(self.ff(self.n2(x)))
 
 
-class _ReadBlock(nn.Module):
-    """Residual dilated convolution along one read, in the read's own coordinates.
-
-    A read only needs its local neighbourhood (an insertion two bases earlier, the run it
-    sits in), and there are 16 reads per cluster, so this axis is 16 times as many tokens as
-    the draft axis. A convolution is the cheap way to buy that context; attention is spent
-    where it earns its keep, across the reads and along the draft.
-    """
-
-    def __init__(self, c: int, kernel: int, dilation: int, dropout: float):
-        super().__init__()
-        pad = dilation * (kernel - 1) // 2
-        self.norm = nn.GroupNorm(4, c)
-        self.conv1 = nn.Conv1d(c, c, kernel, padding=pad, dilation=dilation)
-        self.conv2 = nn.Conv1d(c, c, 1)
-        self.drop = nn.Dropout(dropout)
-
-    def forward(self, x):  # (N, C, T)
-        h = self.conv1(F.gelu(self.norm(x)))
-        return x + self.drop(self.conv2(F.gelu(h)))
-
-
 # ---------------------------------------------------------------- the model
 
 
 @dataclass
 class DraftFormerConfig:
-    d_read: int = 96
+    d_read: int = 80
     d: int = 192
     heads: int = 6
-    read_kernel: int = 5
-    read_layers: int = 3
     cross_layers: int = 2
     trunk_layers: int = 4
     dec_layers: int = 4
@@ -302,24 +292,18 @@ class DraftFormer(nn.Module):
         super().__init__()
         self.cfg = cfg = cfg or DraftFormerConfig()
         dr, d, ffn = cfg.d_read, cfg.d, cfg.d * cfg.ffn_mult
-        # --- per-read encoder, in read coordinates
-        self.base_emb = nn.Embedding(5, dr)
-        self.coord_emb = nn.Embedding(cfg.max_len + 1, dr)
-        self.ins_emb = nn.Embedding(2, dr)
-        self.read_blocks = nn.ModuleList(
-            [_ReadBlock(dr, cfg.read_kernel, 2**i, cfg.dropout) for i in range(cfg.read_layers)]
-        )
+        # --- per-read encoder: the read-coordinate window at each draft position
+        self.win_proj = nn.Linear(WINDOW * 5 + 2, dr)  # one-hots plus "aligned" and read quality
+        self.read_mlp = nn.Sequential(nn.LayerNorm(dr), nn.Linear(dr, dr * 2), nn.GELU(),
+                                      nn.Linear(dr * 2, dr))
         self.read_norm = nn.LayerNorm(dr)
-        self.no_align = nn.Parameter(torch.zeros(dr))
-        self.read_proj = nn.Linear(dr, d)
-        self.read_id = nn.Embedding(cfg.max_reads, d)  # a read slot identity, so reads differ
         # --- draft-position query
         self.feat_proj = nn.Linear(N_FEATURES, d)
         self.draft_emb = nn.Embedding(4, d)
         self.pos_emb = nn.Embedding(cfg.max_len, d)
         self.cov_emb = nn.Embedding(cfg.max_reads + 1, d)
         self.cross_blocks = nn.ModuleList(
-            [_CrossBlock(d, cfg.heads, ffn, cfg.dropout) for _ in range(cfg.cross_layers)]
+            [_CrossBlock(d, cfg.heads, ffn, cfg.dropout, d_mem=dr) for _ in range(cfg.cross_layers)]
         )
         self.trunk_blocks = nn.ModuleList(
             [_SelfBlock(d, cfg.heads, ffn, cfg.dropout) for _ in range(cfg.trunk_layers)]
@@ -345,33 +329,25 @@ class DraftFormer(nn.Module):
 
     def encode(self, batch: dict) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Batch dict -> memory (B, L, d) and the auxiliary op/insert logits."""
-        rbase, rcoord, rins = batch["rbase"], batch["rcoord"], batch["rins"]
-        gather, feats, draft = batch["gather"], batch["feats"], batch["draft"]
-        n_reads = batch["n_reads"]
-        b, r, width = rbase.shape
-        length = draft.shape[1]
+        win, aligned, rqual = batch["win"], batch["aligned"], batch["rqual"]
+        feats, draft, n_reads = batch["feats"], batch["draft"], batch["n_reads"]
+        b, r, length, _ = win.shape
         cfg = self.cfg
+        dtype = self.win_proj.weight.dtype
 
-        h = (
-            self.base_emb(rbase)
-            + self.coord_emb(rcoord.clamp(0, cfg.max_len))
-            + self.ins_emb(rins)
+        x = F.one_hot(win, 5).to(dtype).reshape(b, r, length, WINDOW * 5)
+        x = torch.cat(
+            [x, aligned[..., None].to(dtype), rqual[:, :, None, None].expand(b, r, length, 1)],
+            dim=-1,
         )
-        h = h.reshape(b * r, width, cfg.d_read).transpose(1, 2)  # (B*R, d_read, Lr)
-        for block in self.read_blocks:
-            h = block(h)
-        h = self.read_norm(h.transpose(1, 2)).reshape(b, r, width, cfg.d_read)
+        g = self.win_proj(x)
+        g = self.read_norm(g + self.read_mlp(g))  # (B, R, L, d_read)
+        g = g.permute(0, 2, 1, 3).reshape(b * length, r, cfg.d_read)  # (B*L, R, d_read)
 
-        idx = gather.clamp(min=0).unsqueeze(-1).expand(-1, -1, -1, cfg.d_read)
-        g = torch.gather(h, 2, idx)  # (B, R, L, d_read)
-        g = torch.where((gather >= 0).unsqueeze(-1), g, self.no_align.to(g.dtype))
-        g = self.read_proj(g) + self.read_id.weight[:r][None, :, None, :]
-        g = g.permute(0, 2, 1, 3).reshape(b * length, r, cfg.d)  # (B*L, R, d)
-
-        present = torch.arange(r, device=rbase.device)[None, :] >= n_reads[:, None]  # True = pad
+        present = torch.arange(r, device=win.device)[None, :] >= n_reads[:, None]  # True = pad
         kpm = present[:, None, :].expand(b, length, r).reshape(b * length, r)
 
-        pos = torch.arange(length, device=rbase.device)
+        pos = torch.arange(length, device=win.device)
         q = (
             self.feat_proj(feats.transpose(1, 2))
             + self.draft_emb(draft)

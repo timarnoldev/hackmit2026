@@ -123,10 +123,9 @@ def make_batch(args):
         return None
     packs = [e[0] for e in examples]
     stacked = {
-        "rbase": np.stack([p.rbase for p in packs]),
-        "rcoord": np.stack([p.rcoord for p in packs]),
-        "rins": np.stack([p.rins for p in packs]),
-        "gather": np.stack([p.gather for p in packs]),
+        "win": np.stack([p.win for p in packs]),
+        "aligned": np.stack([p.aligned for p in packs]),
+        "rqual": np.stack([p.rqual for p in packs]),
         "feats": np.stack([p.feats for p in packs]),
         "draft": np.stack([p.draft for p in packs]),
         "n_reads": np.array([p.n_reads for p in packs], dtype=np.int16),
@@ -139,7 +138,7 @@ def make_batch(args):
 
 def to_device(stacked, device):
     kinds = {
-        "rbase": torch.long, "rcoord": torch.long, "rins": torch.long, "gather": torch.long,
+        "win": torch.long, "aligned": torch.long, "rqual": torch.float32,
         "feats": torch.float32, "draft": torch.long, "n_reads": torch.long,
     }
     return {
@@ -225,11 +224,10 @@ def main(argv=None) -> None:
     p.add_argument("--aux-weight", type=float, default=0.3)
     p.add_argument("--teacher-noise", type=float, default=0.05)
     p.add_argument("--d", type=int, default=192)
-    p.add_argument("--d-read", type=int, default=96)
+    p.add_argument("--d-read", type=int, default=80)
     p.add_argument("--trunk-layers", type=int, default=4)
     p.add_argument("--dec-layers", type=int, default=4)
     p.add_argument("--cross-layers", type=int, default=2)
-    p.add_argument("--read-layers", type=int, default=2)
     p.add_argument("--dropout", type=float, default=0.0)
     p.add_argument("--eval-every", type=int, default=2_000)
     p.add_argument("--val-size", type=int, default=1_000)
@@ -255,7 +253,7 @@ def main(argv=None) -> None:
     cfg = DraftFormerConfig(
         d=args.d, d_read=args.d_read, trunk_layers=args.trunk_layers,
         dec_layers=args.dec_layers, cross_layers=args.cross_layers,
-        read_layers=args.read_layers, dropout=args.dropout,
+        dropout=args.dropout,
     )
     model = DraftFormer(cfg).to(device)
     start_step = 0
