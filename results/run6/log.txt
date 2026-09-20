@@ -1,0 +1,182 @@
+17:55:51 INFO [illumina_standard] run run6: budget B=20 reads/strand, target 1.000, decoder polish, 2 alternations
+17:55:52 INFO [illumina_standard] runtime estimate: 0.28s/trial wall (5 trials, workers=5), 0.2s/scored encode, 64 candidates x 2 alternations -> ~35 min typical, 64 min worst case (a CNN scorer makes encodes ~10x slower and a transformer adds fine-tuning; re-projected after the first alternation)
+17:55:52 INFO decoder 'polish' has no channel adaptation, keeping it unchanged
+17:55:52 INFO [illumina_standard] step 1: decoder {'kind': 'polish', 'checkpoint': '/home/asus/hackmit2026/checkpoints/polish/polish.pt'} -> {'kind': 'polish', 'checkpoint': '/home/asus/hackmit2026/checkpoints/polish/polish.pt'} (frozen)
+17:59:25 INFO [illumina_standard] default codec (system B): held-out recovery 1.000, strand acc 0.997, 1.202 bits/base, min reads 2.5 (min/median/max 2.5/2.5/3 over blocks [2.5, 3, 2.5])
+18:00:29 INFO [illumina_standard] level 1.575 bits/base: 4 candidates, 4 pass 50-trial screen (64s, 200 trials so far)
+18:01:44 INFO [illumina_standard]   re-check len 140 red 0.05 hp<=3 gc 0.4-0.6 thr off cand 8: 1.000
+18:03:00 INFO [illumina_standard]   margin check at 18.00 reads: 1.000
+18:03:00 INFO [illumina_standard] rules only: chose len 140 red 0.05 hp<=3 gc 0.4-0.6 thr off cand 8 | 1.575 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 800 train trials, 215s)
+18:12:01 INFO [illumina_standard] tier1: held-out recovery 1.000, strand acc 0.997, 1.575 bits/base | MIN READS tuned 5.5 vs default rules at the same bits/base 5.5 (tuned min/median/max 5.5/5.5/6 over blocks [5.5, 6, 5.5]; default min/median/max 5.5/5.5/6 over blocks [5.5, 6, 5.5])
+18:12:21 INFO [illumina_standard] alt 0 step 2: 2000 strands x K=20, mean failure rate 0.000 (0 unlabeled)
+18:22:51 INFO [illumina_standard] level 1.575 bits/base: 32 candidates, 28 pass 50-trial screen (624s, 1600 trials so far)
+18:24:11 INFO [illumina_standard]   re-check len 140 red 0.05 hp off gc 0.4-0.6 thr 3.767e-05 cand 32: 1.000
+18:25:24 INFO [illumina_standard]   margin check at 18.00 reads: 1.000
+18:25:24 INFO [illumina_standard] alt 0 step 4: chose len 140 red 0.05 hp off gc 0.4-0.6 thr 3.767e-05 cand 32 | 1.575 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 2200 train trials, 777s)
+18:33:07 INFO [illumina_standard] alternation 0: held-out recovery 1.000, strand acc 0.997, 1.575 bits/base | MIN READS tuned 5.5 vs default rules at the same bits/base 5.5 (tuned min/median/max 5.5/5.5/6 over blocks [5.5, 5.5, 6]; default min/median/max 5.5/5.5/6 over blocks [5.5, 6, 5.5])
+18:33:07 INFO [illumina_standard] measured: first alternation took 21.1 min; projected remaining ~23 min (1 more alternations plus coverage curves)
+18:33:09 INFO decoder 'polish' has no channel adaptation, keeping it unchanged
+18:33:23 INFO [illumina_standard] alt 1 step 2: 2000 strands x K=20, mean failure rate 0.000 (0 unlabeled)
+18:43:48 INFO [illumina_standard] level 1.575 bits/base: 32 candidates, 32 pass 50-trial screen (623s, 1600 trials so far)
+18:45:07 INFO [illumina_standard]   re-check len 140 red 0.05 hp<=3 gc 0.4-0.6 thr 5.359e-06 cand 8: 1.000
+18:46:29 INFO [illumina_standard]   margin check at 18.00 reads: 1.000
+18:46:29 INFO [illumina_standard] alt 1 step 4: chose len 140 red 0.05 hp<=3 gc 0.4-0.6 thr 5.359e-06 cand 8 | 1.575 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 2200 train trials, 783s)
+18:51:47 INFO [nanopore_budget] run run6: budget B=6 reads/strand, target 1.000, decoder polish, 2 alternations
+18:51:50 INFO [nanopore_budget] runtime estimate: 0.66s/trial wall (4 trials, workers=4), 0.4s/scored encode, 80 candidates x 2 alternations -> ~91 min typical, 169 min worst case (a CNN scorer makes encodes ~10x slower and a transformer adds fine-tuning; re-projected after the first alternation)
+18:51:50 INFO decoder 'polish' has no channel adaptation, keeping it unchanged
+18:51:50 INFO [nanopore_budget] step 1: decoder {'kind': 'polish', 'checkpoint': '/home/asus/hackmit2026/checkpoints/polish/polish.pt'} -> {'kind': 'polish', 'checkpoint': '/home/asus/hackmit2026/checkpoints/polish/polish.pt'} (frozen)
+18:56:29 INFO [illumina_standard] alternation 1: held-out recovery 1.000, strand acc 0.997, 1.575 bits/base | MIN READS tuned 5.5 vs default rules at the same bits/base 5.5 (tuned min/median/max 5.5/5.5/5.5 over blocks [5.5, 5.5, 5.5]; default min/median/max 5.5/5.5/6 over blocks [5.5, 6, 5.5])
+19:01:20 INFO [illumina_standard] done in 65.5 min
+19:01:26 INFO [nanopore_budget] run run6: budget B=6 reads/strand, target 1.000, decoder polish, 2 alternations
+19:01:29 INFO [nanopore_budget] runtime estimate: 0.57s/trial wall (5 trials, workers=5), 0.4s/scored encode, 80 candidates x 2 alternations -> ~78 min typical, 146 min worst case (a CNN scorer makes encodes ~10x slower and a transformer adds fine-tuning; re-projected after the first alternation)
+19:01:29 INFO decoder 'polish' has no channel adaptation, keeping it unchanged
+19:01:29 INFO [nanopore_budget] step 1: decoder {'kind': 'polish', 'checkpoint': '/home/asus/hackmit2026/checkpoints/polish/polish.pt'} -> {'kind': 'polish', 'checkpoint': '/home/asus/hackmit2026/checkpoints/polish/polish.pt'} (frozen)
+19:04:26 INFO [nanopore_budget] default codec (system B): held-out recovery 0.000, strand acc 0.595, 1.202 bits/base, min reads 15.5 (min/median/max 12/15.5/15.5 over blocks [15.5, 15.5, 12])
+19:04:43 INFO [nanopore_budget] level 1.378 bits/base: 4 candidates, 0 pass 50-trial screen (17s, 40 trials so far)
+19:05:01 INFO [nanopore_budget] level 1.272 bits/base: 4 candidates, 0 pass 50-trial screen (35s, 80 trials so far)
+19:05:21 INFO [nanopore_budget] level 1.141 bits/base: 4 candidates, 0 pass 50-trial screen (55s, 120 trials so far)
+19:05:43 INFO [nanopore_budget] level 1.034 bits/base: 4 candidates, 0 pass 50-trial screen (77s, 160 trials so far)
+19:06:08 INFO [nanopore_budget] level 0.919 bits/base: 4 candidates, 0 pass 50-trial screen (102s, 200 trials so far)
+19:06:08 WARNING [nanopore_budget] nothing in the grid meets the target, trying higher redundancy
+19:08:23 INFO [nanopore_budget] level 0.719 bits/base: 4 candidates, 4 pass 50-trial screen (237s, 400 trials so far)
+19:11:23 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc off thr off cand 8: 0.997
+19:13:07 INFO [nanopore_budget] default codec (system B): held-out recovery 0.000, strand acc 0.595, 1.202 bits/base, min reads 15.5 (min/median/max 12/15.5/15.5 over blocks [15.5, 15.5, 12])
+19:13:25 INFO [nanopore_budget] level 1.378 bits/base: 4 candidates, 0 pass 50-trial screen (18s, 40 trials so far)
+19:13:43 INFO [nanopore_budget] level 1.272 bits/base: 4 candidates, 0 pass 50-trial screen (36s, 80 trials so far)
+19:14:03 INFO [nanopore_budget] level 1.141 bits/base: 4 candidates, 0 pass 50-trial screen (56s, 120 trials so far)
+19:14:21 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr off cand 8: 0.997
+19:14:26 INFO [nanopore_budget] level 1.034 bits/base: 4 candidates, 0 pass 50-trial screen (78s, 160 trials so far)
+19:14:50 INFO [nanopore_budget] level 0.919 bits/base: 4 candidates, 0 pass 50-trial screen (103s, 200 trials so far)
+19:14:50 WARNING [nanopore_budget] nothing in the grid meets the target, trying higher redundancy
+19:17:01 INFO [nanopore_budget] level 0.719 bits/base: 4 candidates, 4 pass 50-trial screen (234s, 400 trials so far)
+19:17:19 INFO [nanopore_budget]   re-check len 140 red 1.3 hp off gc 0.4-0.6 thr off cand 8: 1.000
+19:19:49 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc off thr off cand 8: 0.997
+19:20:15 INFO [nanopore_budget]   margin check at 5.40 reads: 0.993
+19:21:33 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr off cand 8: 0.997
+19:22:18 INFO [nanopore_budget]   re-check len 140 red 1.3 hp off gc off thr off cand 8: 0.997
+19:23:26 INFO [nanopore_budget]   re-check len 140 red 1.3 hp off gc 0.4-0.6 thr off cand 8: 1.000
+19:24:25 INFO [nanopore_budget] level 0.636 bits/base: 4 candidates, 4 pass 50-trial screen (1199s, 2100 trials so far)
+19:25:17 INFO [nanopore_budget]   margin check at 5.40 reads: 0.993
+19:26:52 INFO [nanopore_budget]   re-check len 140 red 1.6 hp<=3 gc off thr off cand 8: 1.000
+19:27:14 INFO [nanopore_budget]   re-check len 140 red 1.3 hp off gc off thr off cand 8: 0.997
+19:28:52 INFO [nanopore_budget] level 0.636 bits/base: 4 candidates, 4 pass 50-trial screen (945s, 2100 trials so far)
+19:28:58 INFO [nanopore_budget]   margin check at 5.40 reads: 1.000
+19:28:58 INFO [nanopore_budget] selection margin changed the choice: len 140 red 1.3 hp off gc 0.4-0.6 thr off cand 8 -> len 140 red 1.6 hp<=3 gc off thr off cand 8
+19:28:58 INFO [nanopore_budget] rules only: chose len 140 red 1.6 hp<=3 gc off thr off cand 8 | 0.636 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 2700 train trials, 1472s)
+19:30:39 INFO [nanopore_budget]   re-check len 140 red 1.6 hp<=3 gc off thr off cand 8: 1.000
+19:32:38 INFO [nanopore_budget]   margin check at 5.40 reads: 1.000
+19:32:38 INFO [nanopore_budget] selection margin changed the choice: len 140 red 1.3 hp off gc 0.4-0.6 thr off cand 8 -> len 140 red 1.6 hp<=3 gc off thr off cand 8
+19:32:38 INFO [nanopore_budget] rules only: chose len 140 red 1.6 hp<=3 gc off thr off cand 8 | 0.636 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 2700 train trials, 1171s)
+19:47:37 INFO [nanopore_budget] tier1: held-out recovery 1.000, strand acc 0.554, 0.636 bits/base | MIN READS tuned 4.5 vs default rules at the same bits/base 4.5 (tuned min/median/max 4.5/4.5/4.5 over blocks [4.5, 4.5, 4.5]; default min/median/max 4.5/4.5/4.5 over blocks [4.5, 4.5, 4.5])
+19:47:54 INFO [nanopore_budget] alt 0 step 2: 2000 strands x K=20, mean failure rate 0.569 (0 unlabeled)
+19:51:06 INFO [nanopore_budget] tier1: held-out recovery 1.000, strand acc 0.554, 0.636 bits/base | MIN READS tuned 4.5 vs default rules at the same bits/base 4.5 (tuned min/median/max 4.5/4.5/4.5 over blocks [4.5, 4.5, 4.5]; default min/median/max 4.5/4.5/4.5 over blocks [4.5, 4.5, 4.5])
+19:51:23 INFO [nanopore_budget] alt 0 step 2: 2000 strands x K=20, mean failure rate 0.569 (0 unlabeled)
+19:51:36 INFO [nanopore_budget] level 1.378 bits/base: 32 candidates, 0 pass 50-trial screen (214s, 320 trials so far)
+19:55:01 INFO [nanopore_budget] level 1.378 bits/base: 32 candidates, 0 pass 50-trial screen (211s, 320 trials so far)
+19:55:19 INFO [nanopore_budget] level 1.272 bits/base: 32 candidates, 0 pass 50-trial screen (437s, 640 trials so far)
+19:58:51 INFO [nanopore_budget] level 1.272 bits/base: 32 candidates, 0 pass 50-trial screen (441s, 640 trials so far)
+19:59:28 INFO [nanopore_budget] level 1.141 bits/base: 32 candidates, 0 pass 50-trial screen (686s, 960 trials so far)
+20:03:02 INFO [nanopore_budget] level 1.141 bits/base: 32 candidates, 0 pass 50-trial screen (692s, 960 trials so far)
+20:03:56 INFO [nanopore_budget] level 1.034 bits/base: 32 candidates, 0 pass 50-trial screen (954s, 1280 trials so far)
+20:07:30 INFO [nanopore_budget] level 1.034 bits/base: 32 candidates, 0 pass 50-trial screen (960s, 1280 trials so far)
+20:11:31 INFO [nanopore_budget] level 0.919 bits/base: 32 candidates, 0 pass 50-trial screen (1409s, 1880 trials so far)
+20:11:31 WARNING [nanopore_budget] nothing in the grid meets the target, trying higher redundancy
+20:14:23 INFO [nanopore_budget] level 0.919 bits/base: 32 candidates, 0 pass 50-trial screen (1373s, 1800 trials so far)
+20:14:23 WARNING [nanopore_budget] nothing in the grid meets the target, trying higher redundancy
+20:26:12 INFO [nanopore_budget] level 0.719 bits/base: 32 candidates, 29 pass 50-trial screen (2290s, 3440 trials so far)
+20:27:18 INFO [nanopore_budget] level 0.719 bits/base: 32 candidates, 30 pass 50-trial screen (2148s, 3400 trials so far)
+20:28:04 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4445 cand 32: 1.000
+20:29:04 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc off thr 0.425 cand 32: 1.000
+20:29:39 INFO [nanopore_budget]   margin check at 5.40 reads: 0.997
+20:30:28 INFO [nanopore_budget]   margin check at 5.40 reads: 1.000
+20:30:28 INFO [nanopore_budget] alt 0 step 4: chose len 140 red 1.3 hp<=3 gc off thr 0.425 cand 32 | 0.719 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 4000 train trials, 2338s)
+20:31:29 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc off thr 0.4209 cand 32: 1.000
+20:33:04 INFO [nanopore_budget]   margin check at 5.40 reads: 1.000
+20:33:04 INFO [nanopore_budget] selection margin changed the choice: len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4445 cand 32 -> len 140 red 1.3 hp<=3 gc off thr 0.4209 cand 32
+20:33:04 INFO [nanopore_budget] alt 0 step 4: chose len 140 red 1.3 hp<=3 gc off thr 0.4209 cand 32 | 0.719 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 4640 train trials, 2702s)
+20:41:50 INFO [nanopore_budget] alternation 0: held-out recovery 1.000, strand acc 0.585, 0.719 bits/base | MIN READS tuned 5.0 vs default rules at the same bits/base 5.0 (tuned min/median/max 5/5/5.5 over blocks [5.5, 5, 5]; default min/median/max 5/5/6.5 over blocks [5, 5, 6.5])
+20:41:50 INFO [nanopore_budget] measured: first alternation took 50.7 min; projected remaining ~56 min (1 more alternations plus coverage curves)
+20:41:59 INFO decoder 'polish' has no channel adaptation, keeping it unchanged
+20:42:07 INFO [nanopore_budget] alt 1 step 2: 2000 strands x K=20, mean failure rate 0.564 (0 unlabeled)
+20:44:16 INFO [nanopore_budget] level 1.378 bits/base: 32 candidates, 0 pass 50-trial screen (127s, 320 trials so far)
+20:46:17 INFO [nanopore_budget] alternation 0: held-out recovery 1.000, strand acc 0.584, 0.719 bits/base | MIN READS tuned 5.5 vs default rules at the same bits/base 5.0 (tuned min/median/max 5/5.5/5.5 over blocks [5.5, 5, 5.5]; default min/median/max 5/5/6.5 over blocks [5, 5, 6.5])
+20:46:17 INFO [nanopore_budget] measured: first alternation took 58.7 min; projected remaining ~65 min (1 more alternations plus coverage curves)
+20:46:24 INFO decoder 'polish' has no channel adaptation, keeping it unchanged
+20:46:26 INFO [nanopore_budget] level 1.272 bits/base: 32 candidates, 0 pass 50-trial screen (257s, 640 trials so far)
+20:46:34 INFO [nanopore_budget] alt 1 step 2: 2000 strands x K=20, mean failure rate 0.564 (0 unlabeled)
+20:48:34 INFO [nanopore_budget] level 1.378 bits/base: 32 candidates, 0 pass 50-trial screen (118s, 320 trials so far)
+20:48:36 INFO [nanopore_budget] level 1.141 bits/base: 32 candidates, 0 pass 50-trial screen (387s, 960 trials so far)
+20:50:40 INFO [nanopore_budget] level 1.272 bits/base: 32 candidates, 0 pass 50-trial screen (244s, 640 trials so far)
+20:50:56 INFO [nanopore_budget] level 1.034 bits/base: 32 candidates, 0 pass 50-trial screen (528s, 1280 trials so far)
+20:52:59 INFO [nanopore_budget] level 1.141 bits/base: 32 candidates, 0 pass 50-trial screen (383s, 960 trials so far)
+20:55:29 INFO [nanopore_budget] level 1.034 bits/base: 32 candidates, 0 pass 50-trial screen (533s, 1280 trials so far)
+20:57:52 INFO [nanopore_budget] level 0.919 bits/base: 32 candidates, 1 pass 50-trial screen (943s, 2480 trials so far)
+20:59:01 INFO [nanopore_budget]   re-check len 140 red 0.8 hp<=3 gc off thr 0.4575 cand 32: 0.963
+20:59:01 WARNING [nanopore_budget] nothing in the grid meets the target, trying higher redundancy
+21:02:37 INFO [nanopore_budget] level 0.919 bits/base: 32 candidates, 3 pass 50-trial screen (961s, 2400 trials so far)
+21:04:01 INFO [nanopore_budget]   re-check len 140 red 0.8 hp<=3 gc 0.4-0.6 thr 0.4181 cand 32: 0.973
+21:05:24 INFO [nanopore_budget]   re-check len 140 red 0.8 hp<=3 gc 0.4-0.6 thr 0.4713 cand 32: 0.957
+21:06:45 INFO [nanopore_budget]   re-check len 140 red 0.8 hp<=3 gc 0.4-0.6 thr 0.4408 cand 32: 0.977
+21:06:45 WARNING [nanopore_budget] nothing in the grid meets the target, trying higher redundancy
+21:10:30 INFO [nanopore_budget] level 0.719 bits/base: 32 candidates, 32 pass 50-trial screen (1702s, 4380 trials so far)
+21:12:05 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4302 cand 32: 1.000
+21:13:24 INFO [nanopore_budget]   margin check at 5.40 reads: 0.997
+21:14:59 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc off thr 0.4303 cand 32: 1.000
+21:16:24 INFO [nanopore_budget]   margin check at 5.40 reads: 0.997
+21:17:55 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4574 cand 32: 0.997
+21:19:29 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4875 cand 32: 1.000
+21:19:44 INFO [nanopore_budget] level 0.719 bits/base: 32 candidates, 32 pass 50-trial screen (1988s, 4900 trials so far)
+21:20:53 INFO [nanopore_budget]   margin check at 5.40 reads: 1.000
+21:20:53 INFO [nanopore_budget] selection margin changed the choice: len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4302 cand 32 -> len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4875 cand 32
+21:20:53 INFO [nanopore_budget] alt 1 step 4: chose len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4875 cand 32 | 0.719 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 6480 train trials, 2325s)
+21:21:34 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc off thr 0.4179 cand 32: 0.993
+21:23:29 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4181 cand 32: 1.000
+21:25:06 INFO [nanopore_budget]   margin check at 5.40 reads: 0.993
+21:26:50 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4408 cand 32: 0.997
+21:28:41 INFO [nanopore_budget]   re-check len 140 red 1.3 hp<=3 gc off thr 0.4407 cand 32: 1.000
+21:30:16 INFO [nanopore_budget]   margin check at 5.40 reads: 0.997
+21:32:04 INFO [nanopore_budget] alternation 1: held-out recovery 1.000, strand acc 0.586, 0.719 bits/base | MIN READS tuned 5.5 vs default rules at the same bits/base 5.0 (tuned min/median/max 5/5.5/5.5 over blocks [5.5, 5, 5.5]; default min/median/max 5/5/6.5 over blocks [5, 5, 6.5])
+21:36:20 INFO [nanopore_budget] done in 154.9 min
+21:42:52 INFO [nanopore_budget] level 0.636 bits/base: 32 candidates, 32 pass 50-trial screen (3376s, 8300 trials so far)
+21:44:35 INFO [nanopore_budget]   re-check len 140 red 1.6 hp<=3 gc off thr 0.4179 cand 32: 1.000
+21:46:05 INFO [nanopore_budget]   margin check at 5.40 reads: 1.000
+21:46:05 INFO [nanopore_budget] selection margin changed the choice: len 140 red 1.3 hp<=3 gc 0.4-0.6 thr 0.4181 cand 32 -> len 140 red 1.6 hp<=3 gc off thr 0.4179 cand 32
+21:46:05 INFO [nanopore_budget] alt 1 step 4: chose len 140 red 1.6 hp<=3 gc off thr 0.4179 cand 32 | 0.636 bits/base | re-check 1.000 over 300 train trials (target met on train: True; 8900 train trials, 3569s)
+21:56:35 INFO [nanopore_budget] alternation 1: held-out recovery 1.000, strand acc 0.589, 0.636 bits/base | MIN READS tuned 5.0 vs default rules at the same bits/base 4.5 (tuned min/median/max 4.5/5/5.5 over blocks [4.5, 5, 5.5]; default min/median/max 4.5/4.5/4.5 over blocks [4.5, 4.5, 4.5])
+21:56:35 INFO [nanopore_budget] final codec: keeping alternation 0 (len 140 red 1.3 hp<=3 gc off thr 0.4209 cand 32) over the last alternation, decided on train results
+22:01:05 INFO [nanopore_budget] done in 189.3 min
+05:41:41 INFO [nanopore_budget] rule audit max_homopolymer=3: reads on 15.5 / off 13.5 -> harmful
+05:45:01 INFO [nanopore_budget] rule audit gc 0.4-0.6: reads on 15.5 / off 15.5 -> no measurable benefit
+05:47:26 INFO [nanopore_budget] rule audit redundancy 0.3 vs 1.6: reads 15.5 / 4.5 -> tuned is better
+05:47:26 INFO [nanopore_budget] MATCHED DENSITY (tier 1, 0.636 bits/base): default rules need 4.5 reads, tuned codec 4.5 -> no measurable benefit
+05:47:26 INFO [nanopore_budget] MATCHED DENSITY (full loop, 0.719 bits/base): default rules need 5.0 reads, tuned codec 5.5 -> harmful
+05:48:32 INFO [nanopore_budget] ablation (held-out recovery / min reads): A 0.000/15.5  B 0.000/15.5  C 1.000/4.5  D 1.000/5.5  E 1.000/5.5
+05:49:02 INFO [illumina_standard] rule audit max_homopolymer=3: reads on 2.5 / off 2.5 -> no measurable benefit
+05:49:36 INFO [illumina_standard] rule audit gc 0.4-0.6: reads on 2.5 / off 2.5 -> no measurable benefit
+05:50:15 INFO [illumina_standard] rule audit redundancy 0.3 vs 0.05: reads 2.5 / 5.5 -> tuned is better
+05:50:15 INFO [illumina_standard] MATCHED DENSITY (tier 1, 1.575 bits/base): default rules need 5.5 reads, tuned codec 5.5 -> no measurable benefit
+05:50:15 INFO [illumina_standard] MATCHED DENSITY (full loop, 1.575 bits/base): default rules need 5.5 reads, tuned codec 5.5 -> no measurable benefit
+05:50:30 INFO [illumina_standard] ablation (held-out recovery / min reads): A 1.000/2.5  B 1.000/2.5  C 1.000/5.5  D 1.000/5.5  E 1.000/5.5
+05:50:30 INFO crossover default on nanopore_budget: recovery 0.000, min reads 15.5
+05:50:30 INFO crossover nanopore_budget on nanopore_budget: recovery 1.000, min reads 5.5
+05:55:40 INFO crossover illumina_standard on nanopore_budget: recovery 0.000, min reads None
+05:55:40 INFO crossover default on illumina_standard: recovery 1.000, min reads 2.5
+05:58:03 INFO crossover nanopore_budget on illumina_standard: recovery 1.000, min reads 1.5
+05:58:03 INFO crossover illumina_standard on illumina_standard: recovery 1.000, min reads 5.5
+06:11:22 INFO [nanopore_budget] real risk AUC: coverage-stratified 0.681, + run-stratified 0.552 (unstratified 0.630, read count only 0.790)
+06:11:23 INFO [nanopore_budget] DNAformer risk AUC 0.514 (BinnedNanoporeSecondFlowcell_Random held-out, 2000 clusters at <= 6 reads, 19.7% decoder failures; 98% of DNAformer references have a longest run of 3 or 4, so the homopolymer effect cannot be measured on this set)
+06:15:34 INFO [illumina_standard] real risk AUC: coverage-stratified 0.622, + run-stratified 0.670 (unstratified 0.509, read count only 0.790)
+06:15:35 INFO [illumina_standard] DNAformer risk AUC nan (BinnedTestIllumina_Random held-out, 2000 clusters at <= 20 reads, 0.0% decoder failures; 98% of DNAformer references have a longest run of 3 or 4, so the homopolymer effect cannot be measured on this set)
+06:16:46 INFO [nanopore_budget] TIER2 DIRECT sim A cov 6, 8 cand: strand fail rule 0.4464, risk 0.4260, diff -0.0204 [-0.0223, -0.0184]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:17:22 INFO [nanopore_budget] TIER2 DIRECT sim A cov 6, 32 cand: strand fail rule 0.4464, risk 0.4188, diff -0.0276 [-0.0297, -0.0255]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:18:51 INFO [nanopore_budget] TIER2 DIRECT sim A cov 15.5, 8 cand: strand fail rule 0.1418, risk 0.1301, diff -0.0117 [-0.0131, -0.0103]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:19:39 INFO [nanopore_budget] TIER2 DIRECT sim A cov 15.5, 32 cand: strand fail rule 0.1418, risk 0.1256, diff -0.0162 [-0.0178, -0.0147]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:20:47 INFO [nanopore_budget] TIER2 DIRECT sim B cov 6, 8 cand: strand fail rule 0.4478, risk 0.4289, diff -0.0189 [-0.0206, -0.0169]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:21:24 INFO [nanopore_budget] TIER2 DIRECT sim B cov 6, 32 cand: strand fail rule 0.4478, risk 0.4193, diff -0.0285 [-0.0302, -0.0268]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:21:53 INFO [illumina_standard] TIER2 DIRECT sim A cov 20, 8 cand: strand fail rule 0.0027, risk 0.0026, diff -0.0000 [-0.0002, +0.0001]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:22:09 INFO [illumina_standard] TIER2 DIRECT sim A cov 20, 32 cand: strand fail rule 0.0027, risk 0.0028, diff +0.0001 [-0.0000, +0.0002]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:22:28 INFO [illumina_standard] TIER2 DIRECT sim A cov 2.5, 8 cand: strand fail rule 0.1550, risk 0.1544, diff -0.0006 [-0.0016, +0.0003]; recovery rule 0.000, risk 0.000, diff +0.000 [+0.000, +0.000]
+06:22:39 INFO [illumina_standard] TIER2 DIRECT sim A cov 2.5, 32 cand: strand fail rule 0.1550, risk 0.1552, diff +0.0002 [-0.0007, +0.0012]; recovery rule 0.000, risk 0.000, diff +0.000 [+0.000, +0.000]
+06:23:12 INFO [illumina_standard] TIER2 DIRECT sim B cov 20, 8 cand: strand fail rule 0.0026, risk 0.0026, diff -0.0000 [-0.0002, +0.0001]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:23:29 INFO [illumina_standard] TIER2 DIRECT sim B cov 20, 32 cand: strand fail rule 0.0026, risk 0.0027, diff +0.0001 [-0.0000, +0.0003]; recovery rule 1.000, risk 1.000, diff +0.000 [+0.000, +0.000]
+06:23:30 INFO summary written to /home/asus/hackmit2026/results/run6/summary.json (is_mock=False)

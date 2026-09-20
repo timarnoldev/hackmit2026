@@ -126,6 +126,21 @@ Monotone: the field's rule of 3 is the best of the five, and each step looser co
 
 The gain survives a structurally different simulator. In the coarse target metric it is worth about half a read.
 
+**Reproduced with the learned decoder (run 6)** ✅ — the table above was measured with the classic decoder. Run 6 repeats the whole experiment with the polisher in place, which is the harder test: a better decoder repairs more of what the risk model was steering around, so the gain had room to vanish. It did not.
+
+| Channel | Simulator | Candidates | Strand failures, rules | with learned selection | Difference (95% CI) |
+|---|---|---|---|---|---|
+| Nanopore, 6 reads | A | 32 | 44.64% | 41.88% | **−2.76 points** (−2.97 to −2.55) |
+| Nanopore, 6 reads | **B (firewall)** | 32 | 44.78% | 41.93% | **−2.85 points** (−3.02 to −2.68) |
+| Nanopore, 15.5 reads | A | 32 | 14.18% | 12.56% | −1.62 points |
+| Illumina | A and B | 8 and 32 | 0.26% | 0.26% | 0 |
+
+Smaller than with the classic decoder, which is what you would expect, and still clearly separated from zero on both simulators. Raw: `results/run6/`.
+
+⚠️ **What did not reproduce in run 6: the tier-2 rung of the ablation ladder.** With the polisher, C (audited rules, tuned redundancy) comes out at 4.5 reads and D (C plus the risk model) at 5.5, so the ladder says the risk model *hurt*, while the direct paired measurement above says it helped with a tight confidence interval. Run 6 used 100 evaluation trials per point rather than 300, and the all-or-nothing threshold is knife-edge near the top of the curve, exactly as [LEARNED_RULES.md](LEARNED_RULES.md) documents. **We quote the paired measurement, not the ladder rung**, because it is the one with an error bar. The honest statement on stage: *at file level the effect is inside the noise of our coarse metric; per strand it is measurable and survives the firewall.*
+
+**Why the deck quotes run 2, not run 6.** Run 2's codecs were re-measured at 3 blocks × 300 held-out trials; run 6 ran 100. Run 6 is the cross-check, run 2 strict is the record. The two must never be mixed in one table, because the decoder differs and every reads-per-strand number shifts with it (the default codec needs 19.5 reads with the classic decoder and 15.5 with the polisher).
+
 ⚠️ **Run 1 numbers are superseded.** Run 1 suggested 6 vs 8 reads on Nanopore; that was a winner's curse (best of hundreds of settings on the same trials). The final round of run 1 then missed the target on held-out data (297 of 300). Run 2 adds a margin check, three seed blocks and train-only selection. Say this openly; it is a strength, not a weakness.
 
 ## 6. Does the risk model transfer to real reads? Yes, once the measurement is done right ✅

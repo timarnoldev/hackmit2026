@@ -16,6 +16,8 @@ results/*
 !results/run3/
 !results/run4/
 !results/run2_strict/
+!results/run5_strict/
+!results/run6/
 !results/rule_recovery_curve_*.json
 !results/decoder_real_heldout.json
 .DS_Store
