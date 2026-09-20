@@ -89,14 +89,25 @@ def test_read_marks_names_the_three_error_kinds():
 def test_fix_marks_counts_every_edit_and_trims_the_window():
     draft = "ACGT" * 15
     final = "TCGT" + "ACGT" * 14  # one substitution at position 0
-    marks, total = fix_marks(draft, final, VISIBLE_LETTERS)
+    marks, replaced, total = fix_marks(draft, final, VISIBLE_LETTERS)
     assert total == 1
     assert unpack_marks(marks) == [(0, "s")]
+    assert replaced == "A", "the display needs the letter the classic decoder actually had"
     # an edit outside the visible window is counted but not drawn
     late_final = draft[:50] + ("T" if draft[50] != "T" else "A") + draft[51:]
-    marks, total = fix_marks(draft, late_final, VISIBLE_LETTERS)
+    marks, replaced, total = fix_marks(draft, late_final, VISIBLE_LETTERS)
     assert total == 1
-    assert marks == ""
+    assert marks == "" and replaced == ""
+
+
+def test_replaced_letters_line_up_with_the_marks():
+    """Every mark in the compact event has exactly one replaced letter, in the same order."""
+    for e in [x for x in collect(20) if x["t"] == "s"]:
+        c = compact_event(e)
+        assert len(unpack_marks(c["f"])) == len(c["fp"]), c
+        for pos, kind in unpack_marks(c["f"]):
+            assert kind in "sid"
+            assert pos < len(c["c"]) or kind == "d"
 
 
 # ---------------------------------------------------------------- live events

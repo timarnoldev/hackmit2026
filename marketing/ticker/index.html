@@ -109,6 +109,20 @@ header {
 .stat.fix .v { color: var(--sa-gain); }
 .stat.reads .v { color: var(--sa-audit); }
 
+/* the last strand outcomes, oldest on the left, the same sparkline the box draws */
+.spark { display: flex; gap: 2px; height: 10px; margin: 0 0 10px; }
+.spark i {
+  flex: 1 1 0; border-radius: 1px; background: var(--sa-rule);
+  transition: background-color 0.3s, opacity 0.3s;
+}
+.spark i.y { background: var(--sa-gain); }
+.spark i.n { background: var(--sa-cost); }
+.spark i.t { background: var(--sa-tbd); }
+
+/* a counter lights up for a moment when it moves */
+.stat .v { transition: color 0.45s, text-shadow 0.45s; }
+.stat.lit .v { color: var(--sa-ink); text-shadow: 0 0 18px currentColor; }
+
 .progress { height: 4px; background: var(--sa-rule); border-radius: 2px; overflow: hidden; }
 .progress i { display: block; height: 100%; width: 0; background: var(--sa-audit); transition: width 0.25s linear; }
 .progress.done i { background: var(--sa-gain); }
@@ -233,6 +247,7 @@ body.hover .controls { opacity: 1; }
     <div class="stat fix"><div class="v" id="s-fix">0</div><div class="k" id="k-fix">fixes the model applied</div></div>
     <div class="stat reads"><div class="v" id="s-reads">0</div><div class="k">reads per strand</div></div>
   </div>
+  <div class="spark" id="spark"></div>
   <div class="progress" id="prog"><i></i></div>
 </header>
 
@@ -331,18 +346,76 @@ function addStrand(e) {
 
 const fmt = (n) => (n || 0).toLocaleString("en-US");
 
+/* Counters ease toward their new value instead of jumping, and flash while they move. The
+   same idea as the box, so the projector and the jury table read as one thing. */
+const SPARK_N = 48;
+const counters = {};
+function counter(id, render) {
+  counters[id] = { el: el(id), tile: el(id).parentElement, shown: 0, target: 0, lit: 0, render };
+}
+counter("s-done", (v) => fmt(Math.round(v)));
+counter("s-acc", (v) => Math.round(v) + '<span class="u">%</span>');
+counter("s-err", (v) => fmt(Math.round(v)));
+counter("s-fix", (v) => fmt(Math.round(v)));
+counter("s-reads", (v) => v.toFixed(1));
+
+let progTarget = 0;
+let progShown = 0;
+
+function aim(id, value) {
+  const c = counters[id];
+  if (!c) return;
+  if (Math.abs(value - c.target) > 1e-6) c.lit = 1;
+  c.target = value;
+}
+
+function tick() {
+  for (const c of Object.values(counters)) {
+    c.shown += (c.target - c.shown) * 0.18;
+    if (Math.abs(c.target - c.shown) < 0.01) c.shown = c.target;
+    c.el.innerHTML = c.render(c.shown);
+    if (c.lit > 0) {
+      c.lit = Math.max(0, c.lit - 0.045);
+      c.tile.classList.toggle("lit", c.lit > 0.02);
+    }
+  }
+  progShown += (progTarget - progShown) * 0.14;
+  const bar = el("prog");
+  bar.firstElementChild.style.width = (progShown * 100).toFixed(1) + "%";
+  bar.classList.toggle("done", progTarget >= 0.999);
+  requestAnimationFrame(tick);
+}
+
+const sparkBars = [];
+(function buildSpark() {
+  const row = el("spark");
+  for (let i = 0; i < SPARK_N; i++) {
+    const b = document.createElement("i");
+    row.appendChild(b);
+    sparkBars.push(b);
+  }
+})();
+let sparkAt = 0;
+function pushSpark(cls) {
+  const b = sparkBars[sparkAt];
+  b.className = cls;
+  sparkAt = (sparkAt + 1) % SPARK_N;
+  sparkBars.forEach((bar, i) => {
+    const age = (i - sparkAt + SPARK_N) % SPARK_N;  // 0 is the oldest
+    bar.style.opacity = (0.35 + 0.65 * (age / SPARK_N)).toFixed(2);
+  });
+}
+
 function setStats(st) {
   if (!st) return;
-  el("s-done").textContent = fmt(st.done);
-  el("s-acc").innerHTML = Math.round((st.acc || 0) * 100) + '<span class="u">%</span>';
-  el("s-err").textContent = fmt(st.rfix);
-  el("s-fix").textContent = fmt(st.mfix);
-  el("s-reads").textContent = (st.rps || 0).toFixed(1);
+  aim("s-done", st.done || 0);
+  aim("s-acc", (st.acc || 0) * 100);
+  aim("s-err", st.rfix || 0);
+  aim("s-fix", st.mfix || 0);
+  aim("s-reads", st.rps || 0);
+  progTarget = st.prog || 0;
   el("b-files").textContent = fmt(st.rec) + (st.rec === 1 ? " file back exactly" : " files back exactly");
   el("b-files").className = "badge" + (st.rec > 0 ? " live" : "");
-  const bar = el("prog");
-  bar.firstElementChild.style.width = Math.round((st.prog || 0) * 100) + "%";
-  bar.classList.toggle("done", (st.prog || 0) >= 0.999);
 }
 
 /* ------------------------------------------------------------------ events */
@@ -368,6 +441,7 @@ function onEvent(e) {
     case "s":
       addStrand(e);
       setStats(e.st);
+      pushSpark(e.drop ? "t" : (e.ok ? "y" : "n"));
       break;
     case "file": {
       const block = document.createElement("div");
@@ -454,6 +528,7 @@ document.addEventListener("mousemove", () => {
 });
 
 connect();
+tick();
 </script>
 </body>
 </html>

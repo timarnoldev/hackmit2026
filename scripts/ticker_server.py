@@ -77,9 +77,17 @@ DEFAULT_CHECKPOINTS = (
     Path.home() / "hackmit2026" / "checkpoints" / "polish" / "polish.pt",
 )
 
-# What fits a 320 x 240 screen in a small monospace font (38 cells of 8 px plus a margin).
+# The browser view's window: 38 letters and 3 reads per strand.
 VISIBLE_LETTERS = 38
 VISIBLE_READS = 3
+
+# The box's window is narrower. Its panel is 320 x 240 with a 14 px margin on every side and
+# the decoded strand drawn at 12 px per letter, so 22 letters and 2 reads is what fits while
+# the letters stay readable from two metres. The trim happens in compact_event(), so the
+# browser keeps the wider view. Must match VISIBLE_LETTERS and MAX_READS in
+# hardware/esp32_ticker/src/board_config.h.
+BOX_LETTERS = 22
+BOX_READS = 2
 
 PROTOCOL_VERSION = 1
 
@@ -255,13 +263,18 @@ def read_marks(read: str, final: str, visible: int) -> str:
     return pack_marks(out)
 
 
-def fix_marks(draft: str, final: str, visible: int) -> tuple[str, int]:
+def fix_marks(draft: str, final: str, visible: int) -> tuple[str, str, int]:
     """What the model changed, in final-strand coordinates, plus the total count.
 
-    Kinds: "s" substituted, "i" inserted, "d" deleted a letter in front of this position.
-    The count is over the whole strand; the string is trimmed to the visible window.
+    Returns (marks, replaced, total). Kinds: "s" substituted, "i" inserted, "d" deleted a
+    letter in front of this position. `replaced` holds, in the same order as the marks, the
+    letter the classic decoder had there, or "-" where it had none. The display needs it to
+    show a corrected position actually changing from the wrong letter to the right one, and
+    it is the real draft letter, not a guess. The count is over the whole strand; the strings
+    are trimmed to the visible window.
     """
     marks: list[tuple[int, str]] = []
+    was: dict[tuple[int, str], str] = {}
     total = 0
     seen_del: set[int] = set()
     for op in Levenshtein.editops(draft, final):
@@ -271,12 +284,16 @@ def fix_marks(draft: str, final: str, visible: int) -> tuple[str, int]:
             continue
         if op.tag == "replace":
             marks.append((pos, "s"))
+            was[(pos, "s")] = draft[op.src_pos]
         elif op.tag == "insert":
             marks.append((pos, "i"))
+            was[(pos, "i")] = "-"  # the draft had nothing here
         elif op.tag == "delete" and pos not in seen_del:
             seen_del.add(pos)
             marks.append((pos, "d"))
-    return pack_marks(marks), total
+            was[(pos, "d")] = draft[op.src_pos]
+    ordered = sorted(marks)
+    return pack_marks(ordered), "".join(was[m] for m in ordered), total
 
 
 # ---------------------------------------------------------------- totals
@@ -448,7 +465,7 @@ class Engine:
             self.last_stats = self.totals.as_event(i, n)
             return {
                 "t": "s", "i": i, "n": n, "nr": 0, "ok": False, "drop": True,
-                "reads": [], "cons": "", "fix": "", "nfix": 0,
+                "reads": [], "cons": "", "fix": "", "fixfrom": "", "nfix": 0,
                 "layer": self.backend.fix_layer, "st": self.last_stats,
             }, None
 
@@ -457,7 +474,7 @@ class Engine:
         correct = final == reference
         self.totals.correct += int(correct)
 
-        marks, n_fix = fix_marks(draft or final, final, vis)
+        marks, replaced, n_fix = fix_marks(draft or final, final, vis)
         self.totals.model_fixes += n_fix
 
         # The first few reads of the deterministic subsample, so the picture is reproducible.
@@ -479,6 +496,7 @@ class Engine:
             "reads": read_events,
             "cons": final[:vis],
             "fix": marks,
+            "fixfrom": replaced,
             "nfix": n_fix,
             "layer": self.backend.fix_layer,
             "st": self.last_stats,
@@ -662,20 +680,23 @@ class SerialSender:
     compact JSON object is written per line, and every failure closes the port and retries.
     The decode never waits for the box: if the write would block, the event is dropped.
 
-    The box may send single characters back: 'p' pause, 'r' resume, '+' faster, '-' slower,
-    '?' resend the hello event, and '.' once a second as a heartbeat. The heartbeat is the
-    only proof that the firmware is running and reading, so it is tracked but never acted on.
+    The box talks back in lines, not loose bytes. A line holding exactly one character is a
+    command: 'p' pause, 'r' resume, '+' faster, '-' slower, '?' resend the hello, '.' the
+    once a second heartbeat. Every other line is diagnostic text from the firmware and is
+    kept for /api/state but never acted on. The framing matters: the box also prints things
+    like "fps=28.4 heap=213456", and a bare byte scan would read the 'p' in that as a pause.
     """
 
     RECONNECT_SECONDS = 1.5
 
     def __init__(self, hub: Hub, control: Callable[[str], None], port: str | None = None,
-                 baud: int = 921600, visible: int = VISIBLE_LETTERS) -> None:
+                 baud: int = 921600, visible: int = BOX_LETTERS, reads: int = BOX_READS) -> None:
         self.hub = hub
         self.control = control
         self.requested_port = port
         self.baud = baud
         self.visible = visible
+        self.reads = reads
         self.stop = threading.Event()
         self.fd: int | None = None
         self.port: str | None = None
@@ -683,6 +704,8 @@ class SerialSender:
         self.last_error = ""
         self.last_rx: float = 0.0  # when the box last said anything
         self.beats = 0
+        self.log: list[str] = []  # the last few diagnostic lines the firmware printed
+        self._rx = b""
 
     # -------------------------------------------------- port handling
 
@@ -745,7 +768,7 @@ class SerialSender:
                         event = q.get(timeout=0.2)
                     except queue.Empty:
                         continue
-                    self._write_line(compact_event(event, self.visible))
+                    self._write_line(compact_event(event, self.visible, self.reads))
         finally:
             self.hub.unsubscribe(q)
             self._close()
@@ -769,9 +792,9 @@ class SerialSender:
         Deliberately without the "hi" line: the box answers "hi" with '?', so replying to a
         '?' with another "hi" would bounce the two forever.
         """
-        self._write_line(compact_event(self.hub.engine_hello(), self.visible))
+        self._write_line(compact_event(self.hub.engine_hello(), self.visible, self.reads))
         for event in self.hub.history():
-            self._write_line(compact_event(event, self.visible))
+            self._write_line(compact_event(event, self.visible, self.reads))
 
     def _write_line(self, payload: dict) -> None:
         if self.fd is None:
@@ -805,23 +828,44 @@ class SerialSender:
         if not chunk:
             return
         self.last_rx = time.monotonic()
-        for byte in chunk:
-            ch = chr(byte)
-            if ch == ".":
+        self._rx += chunk
+        while b"\n" in self._rx:
+            raw, self._rx = self._rx.split(b"\n", 1)
+            self._handle_line(raw.decode("utf-8", "replace").strip())
+        if len(self._rx) > 512:  # a line that long is noise, not a message
+            self._rx = b""
+
+    def _handle_line(self, line: str) -> None:
+        if not line:
+            return
+        if len(line) == 1:
+            if line == ".":
                 self.beats += 1
-                continue
-            if ch in "pr+-?":
+                return
+            if line in "pr+-?":
                 try:
-                    self.control(ch)
+                    self.control(line)
                 except Exception:  # noqa: BLE001  a bad key must never kill the sender
                     pass
+                return
+        self.log.append(line)
+        del self.log[:-8]
 
 
 def _trim_marks(packed: str, visible: int) -> str:
     return pack_marks([(p, k) for p, k in unpack_marks(packed) if p < visible])
 
 
-def compact_event(event: dict, visible: int = VISIBLE_LETTERS) -> dict:
+def _trim_replaced(packed: str, replaced: str, visible: int) -> str:
+    """The replaced letters that survive trimming the marks to the visible window."""
+    out = []
+    for i, (pos, _kind) in enumerate(unpack_marks(packed)):
+        if pos < visible and i < len(replaced):
+            out.append(replaced[i])
+    return "".join(out)
+
+
+def compact_event(event: dict, visible: int = BOX_LETTERS, reads: int = BOX_READS) -> dict:
     """The same event, trimmed for the serial link so a line stays small.
 
     Nothing is invented here; fields the box does not draw are dropped and the strings are
@@ -838,14 +882,21 @@ def compact_event(event: dict, visible: int = VISIBLE_LETTERS) -> dict:
             "ok": event["ok"],
             "d": event.get("drop", False),
             "r": [{"s": r["s"][:visible], "m": _trim_marks(r["m"], visible)}
-                  for r in event.get("reads", [])],
+                  for r in event.get("reads", [])[:reads]],
             "c": event.get("cons", "")[:visible],
             "f": _trim_marks(event.get("fix", ""), visible),
-            # only the five numbers the box's header draws
-            "st": {k: st[k] for k in ("done", "ok", "rfix", "rps", "prog") if k in st},
+            # the letters the classic decoder had where the model changed something, so the
+            # box can show a position flip from the wrong letter to the corrected one
+            "fp": _trim_replaced(event.get("fix", ""), event.get("fixfrom", ""), visible),
+            # only the numbers the box's header draws. Keep this list in step with the
+             # header: leaving "mfix" out once made the box show 0 fixes for a whole run
+             # while the server was counting them correctly.
+            "st": {k: st[k] for k in ("done", "ok", "mfix", "rfix", "rps", "prog") if k in st},
         }
     if t == "hello":
         return {"t": "hello", "v": event.get("v", PROTOCOL_VERSION), "dec": event.get("decoder", ""),
+                # "model" or "vote": the box shows the fallback in the header, in cost
+                # magenta, so a silent drop to the classic decoder is never invisible
                 "layer": event.get("fix_layer", ""), "ch": event.get("channel", ""),
                 "rps": event.get("reads_per_strand", 0), "rate": event.get("rate", 0)}
     if t == "pass":
@@ -983,6 +1034,7 @@ class App:
         self.sender = sender
         self.verbose = verbose
         self.recorder = recorder
+        self.controls: list[str] = []  # what paused or resumed the stream, and who asked
 
     def state(self) -> dict:
         c = self.engine.config
@@ -994,6 +1046,7 @@ class App:
             "reads_per_strand": getattr(c, "reads_per_strand", 0),
             "source": getattr(c, "source", ""),
             "totals": getattr(self.engine, "last_stats", {}),
+            "controls": self.controls,  # the last few pause, resume and speed changes, with their source
             "serial": {
                 "enabled": self.sender is not None,
                 "connected": bool(self.sender and self.sender.connected),
@@ -1003,10 +1056,18 @@ class App:
                 "box_alive": bool(self.sender and self.sender.last_rx
                                   and time.monotonic() - self.sender.last_rx < 3.0),
                 "beats": (self.sender.beats if self.sender else 0),
+                "box_log": (self.sender.log if self.sender else []),
             },
         }
 
-    def control(self, payload: dict) -> dict:
+    def control(self, payload: dict, source: str = "http") -> dict:
+        """Apply a control and record where it came from.
+
+        Every pause on stage has to be explainable, so the source travels with the action and
+        lands in the log, on the console and in /api/state. Nothing in the server ever pauses
+        on its own: a missed heartbeat, an unplugged box or a dropped browser tab only affect
+        what gets drawn, never whether the decode runs.
+        """
         action = str(payload.get("action", "")).lower()
         e = self.engine
         if action == "pause":
@@ -1030,19 +1091,25 @@ class App:
         elif action:
             raise ValueError(f"unknown action {action!r}")
         out = self.state()
+        if action:
+            entry = (f"{time.strftime('%H:%M:%S')} {action} from {source}"
+                     f" -> paused={out['paused']} rate={out['rate']:g}")
+            self.controls.append(entry)
+            del self.controls[:-12]
+            print(entry, flush=True)
         self.hub.publish({"t": "state", "paused": out["paused"], "rate": out["rate"]})
         return out
 
     def key(self, ch: str) -> None:
-        """A single character from the box's touch screen or buttons."""
+        """One character on its own line from the box. Anything unknown is ignored."""
         if ch == "p":
-            self.control({"action": "pause"})
+            self.control({"action": "pause"}, source="box touch")
         elif ch == "r":
-            self.control({"action": "resume"})
+            self.control({"action": "resume"}, source="box touch")
         elif ch == "+":
-            self.control({"action": "speed", "rate": self.engine.config.rate * 1.5})
+            self.control({"action": "speed", "rate": self.engine.config.rate * 1.5}, source="box touch")
         elif ch == "-":
-            self.control({"action": "speed", "rate": self.engine.config.rate / 1.5})
+            self.control({"action": "speed", "rate": self.engine.config.rate / 1.5}, source="box touch")
         elif ch == "?" and self.sender is not None:
             self.sender._resend()
 
@@ -1103,16 +1170,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"replaying {args.replay} ({len(engine.events)} events), no decode is running")
     else:
         engine = Engine(config, emit)
-        print(f"decoder: {engine.backend.name}")
-        if engine.backend.note:
+        if engine.backend.has_model:
+            print(f"decoder: {engine.backend.name}")
             print(f"  {engine.backend.note}")
+        else:
+            bar = "!" * 78
+            print(f"\n{bar}\nWARNING: the learned polisher is NOT running, so the ticker's "
+                  f"'fixes' counter will stay at 0.\n{engine.backend.note}\n"
+                  "Install torch and put a checkpoint at checkpoints/polish/polish.pt, or pass "
+                  "--checkpoint.\n"
+                  f"{bar}\n")
 
     hub.engine = engine
     app = App(engine, hub, None, verbose=args.verbose)
     sender = None
     if not args.no_serial:
-        sender = SerialSender(hub, app.key, port=args.serial_port, baud=args.baud,
-                              visible=config.visible_letters)
+        sender = SerialSender(hub, app.key, port=args.serial_port, baud=args.baud)
         app.sender = sender
         threading.Thread(target=sender.run, daemon=True).start()
         found = find_serial_port(args.serial_port)
