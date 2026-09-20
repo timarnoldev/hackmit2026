@@ -6,7 +6,7 @@
 <title>Erbgut</title>
 <meta name="description" content="Erbgut measures whether a DNA coding rule actually pays off on your sequencing channel, and tunes the codec accordingly. HackMIT 2026.">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308130B'/%3E%3Cpath d='M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54' fill='none' stroke='%2339E6FF' stroke-width='3.4' stroke-linecap='round'/%3E%3Cpath d='M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54' fill='none' stroke='%23FF2E9C' stroke-width='3.4' stroke-linecap='round'/%3E%3Cline x1='24' y1='16' x2='40' y2='16' stroke='%2339FF6E' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='24' y1='48' x2='40' y2='48' stroke='%2339FF6E' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M1.5 32C11.56 13.04 23.77 8 32 8C40.23 8 52.44 13.04 62.5 32' fill='none' stroke='%2332C7DB' stroke-width='9' stroke-linecap='round'/%3E%3Cpath d='M1.5 32C11.56 50.96 23.77 56 32 56C40.23 56 52.44 50.96 62.5 32' fill='none' stroke='%2332C7DB' stroke-width='9' stroke-linecap='round'/%3E%3Crect x='10.5' y='18' width='10.5' height='28' rx='5.25' fill='%23FEC746'/%3E%3Crect x='26.75' y='11' width='10.5' height='42' rx='5.25' fill='%23FC68D6'/%3E%3Crect x='43' y='18' width='10.5' height='28' rx='5.25' fill='%235BD67C'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
     --tbd-bg: #EAF5DA;
     --tbd-line: #A9B81C;
     --tile: #08130B;
-    --mark-a: #39E6FF; --mark-c: #FF2E9C; --mark-g: #39FF6E;
+    --mark-helix: #32C7DB; --mark-a: #FEC746; --mark-c: #FC68D6; --mark-g: #5BD67C;
     --sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
     --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
     color-scheme: light;
@@ -46,7 +46,7 @@
       --tbd-bg: #1E2A0C;
       --tbd-line: #D4B62E;
       --tile: #EAFFF3;
-      --mark-a: #10A6C4; --mark-c: #C41477; --mark-g: #0E9C55;
+      /* the new mark reads on either background, so it does not invert */
       color-scheme: dark;
     }
   }
@@ -247,11 +247,11 @@
 <header class="wrap top">
   <a class="brand" href="#top" aria-label="Erbgut home">
     <svg viewBox="0 0 64 64" aria-hidden="true">
-      <rect width="64" height="64" rx="14" fill="var(--tile)"/>
-      <path d="M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54" fill="none" stroke="var(--mark-a)" stroke-width="3.4" stroke-linecap="round"/>
-      <path d="M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54" fill="none" stroke="var(--mark-c)" stroke-width="3.4" stroke-linecap="round"/>
-      <line x1="24" y1="16" x2="40" y2="16" stroke="var(--mark-g)" stroke-width="3" stroke-linecap="round"/>
-      <line x1="24" y1="48" x2="40" y2="48" stroke="var(--mark-g)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M1.5 32C11.56 13.04 23.77 8 32 8C40.23 8 52.44 13.04 62.5 32" fill="none" stroke="var(--mark-helix)" stroke-width="9" stroke-linecap="round"/>
+      <path d="M1.5 32C11.56 50.96 23.77 56 32 56C40.23 56 52.44 50.96 62.5 32" fill="none" stroke="var(--mark-helix)" stroke-width="9" stroke-linecap="round"/>
+      <rect x="10.5" y="18" width="10.5" height="28" rx="5.25" fill="var(--mark-a)"/>
+      <rect x="26.75" y="11" width="10.5" height="42" rx="5.25" fill="var(--mark-c)"/>
+      <rect x="43" y="18" width="10.5" height="28" rx="5.25" fill="var(--mark-g)"/>
     </svg>
     Erbgut
   </a>

@@ -1,4 +1,4 @@
-<p><img src="logo.svg" alt="Erbgut" width="240"></p>
+<p><img src="logo.svg" alt="Erbgut" width="240" height="210"></p>
 
 # Erbgut
 

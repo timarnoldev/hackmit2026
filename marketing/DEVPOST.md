@@ -5,7 +5,7 @@
 **Tagline (Devpost "elevator pitch", max 200 characters):**
 We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 
-**Thumbnail:** `logo-mark.svg` exported to PNG at 512 px, or a dashboard screenshot of the rule audit view.
+**Thumbnail:** `logo/erbgut-mark.svg` exported to PNG at 512 px, or a dashboard screenshot of the rule audit view.
 
 > Before submitting: replace every `[RESULT: ...]` with a number from held-out trials, or delete the sentence. Search for `[RESULT` and `[TEAM` before you press submit.
 
