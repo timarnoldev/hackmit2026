@@ -402,8 +402,11 @@
     a += `<g class="frag fade" data-f="1"><line class="stdline" x1="${Xr(3)}" x2="${Xr(3)}" y1="${m.t}" y2="${m.t + ph}"/>` +
       `<text class="stdlab" x="${Xr(3) - 12}" y="${m.t + 26}" text-anchor="end">standard rule:</text>` +
       `<text class="stdlab" x="${Xr(3) - 12}" y="${m.t + 52}" text-anchor="end">no run over 3</text>` +
-      `<text class="modellab" x="${Xr(5) + 14}" y="${m.t + 26}">the model draws</text>` +
-      `<text class="modellab" x="${Xr(5) + 14}" y="${m.t + 52}">the line at 4 to 5</text></g>`;
+      `<text class="modellab" x="${Xr(5) + 14}" y="${m.t + 26}">the model would draw</text>` +
+      `<text class="modellab" x="${Xr(5) + 14}" y="${m.t + 52}">the line at 4 to 5</text>` +
+      `<text class="modellab warn" x="${Xr(5.8)}" y="${m.t + ph - 74}">measured, and it is wrong:</text>` +
+      `<text class="modellab warn" x="${Xr(5.8)}" y="${m.t + ph - 50}">at 12 reads a limit of 4</text>` +
+      `<text class="modellab warn" x="${Xr(5.8)}" y="${m.t + ph - 26}">recovers 33% of files, 3 does 81%</text></g>`;
 
     // 2. GC response, same scale, so flat looks flat
     const Xg = (v) => m.l + ((v - 0.2) / 0.6) * pw;

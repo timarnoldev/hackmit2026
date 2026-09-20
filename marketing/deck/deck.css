@@ -1873,6 +1873,7 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
 #a-learned .stdline { stroke: var(--sa-cost); stroke-width: 3.5; stroke-dasharray: 9 7; }
 #a-learned .stdlab { fill: var(--sa-cost); font-weight: 600; font-size: 21px; }
 #a-learned .modellab { fill: var(--sa-gain); font-weight: 600; font-size: 21px; }
+#a-learned .modellab.warn { fill: var(--sa-cost); font-size: 18px; }
 #a-learned .band { fill: var(--tint-gain); }
 #a-learned .kbar { fill: var(--sa-cost); }
 #a-learned .kbar.bg { fill: var(--sa-rule); }
