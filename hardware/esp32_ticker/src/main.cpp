@@ -32,6 +32,8 @@
 #include "board_config.h"
 #include "box_data.h"
 #include "box_decoder.h"
+#include "box_polish.h"
+#include "box_risk.h"
 
 // The panel. LovyanGFX ships a profile for this exact board, so we use it instead of
 // hand writing pins: LGFX_ESP32_S3_BOX_V3 in the library's LGFX_AutoDetect_ESP32_all.hpp.
@@ -193,6 +195,7 @@ struct Strand {
   char cons[VISIBLE_LETTERS + 1];
   char was[VISIBLE_LETTERS + 1];   // what the classic decoder had, per position
   char fix[VISIBLE_LETTERS + 1];   // 's', 'i', 'd' or ' '
+  float risk = -1.0f;              // what the risk model gives this strand, -1 = not scored
 };
 
 // One column of the tape: the same strand position across every lane, so the reads and the
@@ -205,6 +208,7 @@ struct Col {
   char was = 0;
   char fix = 0;
   uint8_t verdict = 0;  // dividers: 1 exact, 2 wrong, 3 no reads
+  float risk = -1.0f;   // dividers: the risk model's score for the strand that follows
   uint16_t strand = 0;
   uint16_t age = 0;     // frames since this column crossed the head, 0 = not resolved yet
 };
@@ -264,6 +268,10 @@ static char decoderTag[10] = "";
 // currently on screen: falling back to the frozen run must not erase it, or the tag goes
 // stale and stops telling the truth the moment the host comes back.
 static bool hostModelLive = false;
+// Did the learned polisher actually run on this chip? Only then may the header say so.
+static bool gPolishOnDevice = false;
+static bool gRiskOnDevice = false;
+static uint32_t gRiskUs = 0;
 static char channelName[34] = "";
 static bool linkUp = false;
 static bool paused = false;
@@ -276,7 +284,9 @@ static uint32_t gDecodeUs = 0;   // rolling mean time for one on-device decode
 static uint32_t gDecoded = 0;
 static inline uint32_t micros_now() { return (uint32_t)micros(); }
 
-static bool modelOnScreen() { return source == SRC_HOST && hostModelLive; }
+static bool modelOnScreen() {
+  return source == SRC_HOST ? hostModelLive : gPolishOnDevice;
+}
 
 // ---------------------------------------------------------------- marks
 
@@ -372,8 +382,18 @@ static bool parseRecord(const char *rec, Strand &out, int &nfix, uint32_t &micro
 
   char cons[boxdec::kMaxLen + 1] = {0};
   char draft[boxdec::kMaxLen + 1] = {0};
-  const int nCons = boxdec::reconstruct(c, BOX_DATA_STRAND_LENGTH, 3, cons, sizeof(cons));
-  const int nDraft = boxdec::pickDraft(c, BOX_DATA_STRAND_LENGTH, draft, sizeof(draft));
+  int nCons = 0, nDraft = 0;
+  if (gPolishOnDevice) {
+    // the learned polisher runs the classic vote first and then corrects it, so the classic
+    // answer is the "before" strand and every teal flip is a real model edit
+    nCons = boxpolish::polish(c, BOX_DATA_STRAND_LENGTH, draft, sizeof(draft), cons,
+                              sizeof(cons));
+    nDraft = (int)strlen(draft);
+  }
+  if (nCons == 0) {  // no model, or it declined: fall back to the classic decoder
+    nCons = boxdec::reconstruct(c, BOX_DATA_STRAND_LENGTH, 3, cons, sizeof(cons));
+    nDraft = boxdec::pickDraft(c, BOX_DATA_STRAND_LENGTH, draft, sizeof(draft));
+  }
   micros = micros_now() - t0;
 
   out.ok = (nRef == nCons) && memcmp(cons, reference, (size_t)nCons) == 0;
@@ -385,6 +405,13 @@ static bool parseRecord(const char *rec, Strand &out, int &nfix, uint32_t &micro
   nfix = boxdec::fixMarks(draft, nDraft, cons, nCons, VISIBLE_LETTERS, marks, replaced);
   memcpy(out.fix, marks, VISIBLE_LETTERS + 1);
   memcpy(out.was, replaced, VISIBLE_LETTERS + 1);
+
+  if (gRiskOnDevice) {
+    // the other model: how likely this strand was to come back wrong in the first place
+    const uint32_t r0 = micros_now();
+    out.risk = boxrisk::score(cons, nCons);
+    gRiskUs = micros_now() - r0;
+  }
 
   const int lanes = nFull < MAX_READ_LANES ? nFull : MAX_READ_LANES;
   for (int r = 0; r < lanes; ++r) {
@@ -473,6 +500,13 @@ static void putChar(int x, int y, char c, uint32_t fg, uint32_t bg, int size) {
 
 static const int LANE_Y[MAX_READ_LANES] = {LANE1_Y, LANE2_Y, LANE3_Y};
 
+// Low risk reads as gain, high risk as cost, through amber in the middle. Colour alone never
+// carries it: the number is printed next to the label.
+static uint32_t riskColour(float r) {
+  if (r < 0.0f) return C_MUTED;
+  return r < 0.5f ? mix(C_GAIN, C_TBD, r * 2.0f) : mix(C_TBD, C_COST, (r - 0.5f) * 2.0f);
+}
+
 // The lane icons, drawn in code so nothing depends on a font. A read lane gets a small
 // noisy wave, because that is what a read is. The decoded strand gets the Erbgut mark in
 // miniature: bases standing on a strand. Both are dim on purpose, so they label the lanes
@@ -536,6 +570,11 @@ static void drawTape() {
       canvas.setTextColor(rgb(mix(C_MUTED, C_PAPER, fade)), rgb(C_PAPER));
       canvas.setCursor(x + CELL_W / 2 + 4, LABEL_Y);
       canvas.printf("%u", (unsigned)(c.strand + 1));
+      if (c.risk >= 0.0f) {  // what the risk model thought of this strand before it was read
+        canvas.setTextColor(rgb(mix(riskColour(c.risk), C_PAPER, fade)), rgb(C_PAPER));
+        canvas.setCursor(x + CELL_W / 2 + 4 + 6 * 5, LABEL_Y);
+        canvas.printf("risk %.2f", c.risk);
+      }
       // a tick when the strand came back exactly, a cross when it did not
       const uint32_t tc = mix(vc, C_PAPER, fade);
       const int tx = x + CELL_W / 2 + 4, ty = LABEL_Y + 10;
@@ -652,7 +691,8 @@ static void drawHeader() {
     capColour = C_AUDIT;
   } else if (source == SRC_EMBEDDED) {
     // standing on its own: say so, and say which decoder produced what is on screen
-    snprintf(caption, sizeof(caption), "majority vote, on device");
+    snprintf(caption, sizeof(caption), gPolishOnDevice ? "polish, on device"
+                                                       : "majority vote, on device");
   } else if (!hostModelLive) {
     // the Mac is attached but its polisher is not loaded, which would otherwise be invisible
     snprintf(caption, sizeof(caption), "majority vote, on the Mac");
@@ -788,6 +828,7 @@ static void appendColumn() {
     c.kind = 1;
     c.strand = cur.index;
     c.verdict = cur.dropout ? 3 : (cur.ok ? 1 : 2);
+    c.risk = cur.risk;
     pushCol(c);
     if (curLen == 0) curActive = false;  // a dropout strand is just its boundary
     return;
@@ -1069,8 +1110,16 @@ void setup() {
                 lcd.height(), (int)canvasReady, (int)inPsram, (unsigned)ESP.getFreeHeap());
   memset(spark, 0, sizeof(spark));
   if (canvasReady) splash();
+  boxpolish::setYield([]() { vTaskDelay(1); });
+  gPolishOnDevice = boxpolish::available() && boxpolish::begin();
+  Serial.printf("polish on device=%d working=%u bytes heap=%u\n", (int)gPolishOnDevice,
+                (unsigned)boxpolish::workingBytes(), (unsigned)ESP.getFreeHeap());
+  gRiskOnDevice = boxrisk::available() && boxrisk::begin();
+  Serial.printf("risk on device=%d working=%u bytes heap=%u\n", (int)gRiskOnDevice,
+                (unsigned)boxrisk::workingBytes(), (unsigned)ESP.getFreeHeap());
+
   // the decoder gets the core the renderer is not on
-  xTaskCreatePinnedToCore(decodeTask, "decode", 8192, nullptr, 1, nullptr,
+  xTaskCreatePinnedToCore(decodeTask, "decode", 16384, nullptr, 1, nullptr,
                           xPortGetCoreID() == 0 ? 1 : 0);
   Serial.println("display ready");
   Serial.println('?');  // ask the server what is running
@@ -1108,8 +1157,9 @@ void loop() {
 
   if (now - fpsWindow > 3000) {
     fps = frames * 1000.0f / (now - fpsWindow);
-    Serial.printf("fps=%.1f heap=%u decode=%luus n=%lu\n", fps, (unsigned)ESP.getFreeHeap(),
-                  (unsigned long)gDecodeUs, (unsigned long)gDecoded);
+    Serial.printf("fps=%.1f heap=%u decode=%luus risk=%luus n=%lu\n", fps,
+                  (unsigned)ESP.getFreeHeap(), (unsigned long)gDecodeUs,
+                  (unsigned long)gRiskUs, (unsigned long)gDecoded);
     fpsWindow = now;
     frames = 0;
   }

@@ -3,12 +3,60 @@
 The box on the jury table. A statistics header above a tape of DNA flowing right to left
 through a decode head, in the same palette as the deck.
 
-The box is a thin display. It decodes nothing and invents nothing. `scripts/ticker_server.py`
-on the Mac runs the real encode, channel simulation and decode, and pushes one compact JSON
-object per line down the USB cable.
+**Both models run on the chip.** Plugged into any USB power supply, with no Mac in sight,
+the box decodes real clusters with the classic majority vote, corrects them with the learned
+polisher, and scores every strand with the risk model. When a Mac is attached it hands over
+and displays what the Mac decodes instead. It never asks anyone to choose.
 
 **No WiFi.** On purpose: a stage demo must not depend on hackathon WiFi. There is no
-`secrets.h` and no captive portal. Everything comes over USB.
+`secrets.h` and no captive portal. Everything comes over USB, when there is a USB host at all.
+
+## What runs where
+
+| | standalone | with a Mac attached |
+|---|---|---|
+| clusters | 300 real ones compiled in, looping | streamed live over USB |
+| classic decode | on the chip, 170 ms per strand | on the Mac |
+| learned polisher | on the chip, int8, 5.0 s per strand | on the Mac, the multi draft variant |
+| risk model | on the chip, float32 | not sent |
+| header caption | "polish, on device" | "polish on the Mac" |
+
+The caption only ever names what actually produced the strand on screen. If the weights do
+not fit, or the buffers cannot be allocated, the firmware falls back to the classic decoder
+and says so.
+
+### How the models got onto the chip
+
+| | parameters | on device | verified against Python |
+|---|---|---|---|
+| polisher | 0.8M | int8 weights, int16 activations, int32 accumulate | 95.3% same strand, identical exact accuracy |
+| risk model | 63k | float32, BatchNorm folded in | 1.2e-07 largest difference, rank correlation 1.000 |
+
+The polisher is quantized because it is thirteen times larger and its convolutions are the
+whole run time. The risk model is not, because at 6.4M multiply accumulates quantizing would
+save flash that is not scarce and cost accuracy that is.
+
+Regenerating either one:
+
+```bash
+# the frozen run the box plays when it is alone
+uv run python scripts/ticker_server.py --dump-box hardware/esp32_ticker/src/box_data.h
+
+# the polisher, quantized, plus the comparison against the float model
+uv run python hardware/esp32_ticker/tools/quantize_polish.py --clusters 250 \
+    --write ../src/box_polish_weights.h
+
+# the risk model
+uv run python hardware/esp32_ticker/tools/export_risk.py --write ../src/box_risk_weights.h
+```
+
+Checking them, without flashing anything, because both compile for the host too:
+
+```bash
+uv run python hardware/esp32_ticker/tools/verify_decoder.py --clusters 600
+uv run python hardware/esp32_ticker/tools/verify_polish.py --clusters 300
+uv run python hardware/esp32_ticker/tools/verify_risk.py --strands 400
+```
 
 ## What is on the screen
 
@@ -35,7 +83,8 @@ object per line down the USB cable.
                       the decode head
 ```
 
-The tape flows right to left at five letters per second by default. A column is undecided
+The tape flows right to left at 3.5 letters per second by default, which is about 6.6
+seconds per strand and keeps the tape behind the polisher's 5 seconds of inference. A column is undecided
 until it reaches the head: it shows the letter the classic majority vote produced. As it
 crosses, the read errors light up and a position the model corrected flashes cost for the
 wrong letter, then gain as the corrected letter takes its place, then dissolves into the
@@ -54,8 +103,12 @@ Colours are the deck's tokens (`marketing/deck/deck.css`), so the table and the 
 cost for an error, gain for a correction, ink and muted for neutral text, audit for an extra
 letter and the decode head, tbd for a strand that came back with no reads.
 
-**Measured:** 27 fps drawing the live tape, 30 fps on the splash, one off-screen sprite in
-internal RAM pushed per frame, about 200 KB of heap free.
+Every strand's label carries the risk the model gave it, coloured from gain through amber to
+cost. The number is always printed, so colour never carries the meaning alone.
+
+**Measured:** 27 fps drawing the live tape, held while the models run, because decoding
+happens on the second core. 170 ms for the classic decode, 5.0 s for the polisher, well
+under a millisecond for the risk model. Flash 29% of the app partition.
 
 ## Touch
 

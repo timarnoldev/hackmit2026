@@ -225,6 +225,15 @@ static void buildVotes(const char *draft, int nd, const Cluster &c, Votes &v) {
   }
 }
 
+void computeVotes(const char *draft, int nd, const Cluster &c, VoteView &out) {
+  buildVotes(draft, nd, c, gVotes);
+  out.base = &gVotes.base[0][0];
+  out.ins = gVotes.ins;
+  out.insBase = &gVotes.insBase[0][0];
+  out.nPos = nd;
+  out.nReads = c.n;
+}
+
 // ---------------------------------------------------------------- rebuild
 
 // Plurality per draft position plus majority voted insertions. Ties keep the draft: a draft

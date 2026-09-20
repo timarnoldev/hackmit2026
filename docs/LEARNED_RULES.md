@@ -99,43 +99,91 @@ channel gets them wrong.
 
 ---
 
-# A second finding: why the hand rules actually hurt on our Nanopore channel
+# A second finding, and a correction to an earlier version of this document
 
-The rule audit says both standard rules are **harmful** on `nanopore_budget`, reproducibly at
-3 x 300 held-out trials: reads needed go from 24.5 with the rules to 19.5 without the homopolymer
-rule and 16.0 without the GC rule. That is a large effect in the wrong direction, so we went
-looking for the mechanism instead of reporting it as a curiosity.
+An earlier version of this section claimed that **both** hand rules are harmful on our Nanopore
+channel. **That claim was wrong, and this is the rerun that disproves it.** It is kept visible
+rather than quietly deleted, because how it went wrong is the more useful part.
 
-**It is not the sequences.** Without the homopolymer rule, 25.4% of strands contain a run of 5 or
-more, and by our own calibrated channel table their mean deletion multiplier is *worse*
-(1.013 against 0.931). By sequence quality alone, the rule should help.
+## What we actually measured
 
-**It is the code.** Encoding the same file with and without the rules:
+Instead of "the fewest reads at which all 300 trials recover", which is a single threshold, we
+measured the whole recovery curve: the share of 300 held-out trials in which the 20 KB file came
+back byte for byte, at each coverage, same decoder, same seeds, same file.
+
+```bash
+uv run python scripts/rule_recovery_curve.py --profile nanopore_budget --trials 300
+```
+
+`nanopore_budget`, recovery rate against mean reads per strand:
+
+| codec | 10 | 12 | 14 | 16 | 18 | 20 | 22 | 24 |
+|---|---|---|---|---|---|---|---|---|
+| both rules (standard) | 0.000 | **0.807** | **0.993** | 1.000 | 1.000 | 0.993 | 0.997 | 1.000 |
+| homopolymer rule off | 0.000 | 0.000 | 0.287 | 0.990 | 1.000 | 1.000 | 1.000 | 1.000 |
+| GC rule off | 0.000 | 0.833 | 0.987 | 1.000 | 0.993 | 1.000 | 0.997 | 1.000 |
+| both rules off | 0.000 | 0.000 | 0.257 | 0.977 | 1.000 | 1.000 | 1.000 | 1.000 |
+| both rules, payload only | 0.000 | 0.713 | 0.997 | 0.997 | 1.000 | 1.000 | 1.000 | 1.000 |
+
+Full data: [`results/rule_recovery_curve_rules_nanopore_budget.json`](../results/rule_recovery_curve_rules_nanopore_budget.json).
+
+**The homopolymer rule pays off, clearly.** At 12 reads per strand it is the difference between
+recovering the file four times in five and never recovering it at all. That is worth roughly two
+reads per strand, and it agrees with the rule audit's headline in
+[NUMBERS.md](NUMBERS.md) (19.5 reads with the rule, 24.5 without).
+
+**The GC rule is neutral**, exactly as section 2 above says the model believes. Its curve tracks
+the standard codec to within a fraction of a point at every coverage (0.833 against 0.807 at 12,
+with a standard error of 0.023, so the small lead is noise). Three independent measurements now
+agree on it: the model probe, the rule audit, and this curve.
+
+## Why the earlier version got it backwards
+
+Two reasons, and only the second is interesting:
+
+1. **A reading error.** The audit's columns were read in the wrong direction, turning "19.5 with
+   the rule, 24.5 without" into its opposite.
+2. **A metric that invites the error.** "Fewest reads at which *all* trials recover" is brittle
+   near the top of the curve. The standard codec reaches 1.000 at 16 reads, then dips back to
+   0.993 at 20 and 0.997 at 22: single failures out of 300, deep inside the region where the
+   codec plainly works. An all-or-nothing threshold reads those dips as failure and reports a
+   number in the twenties for a codec that is already reliable at 16. The ranking it produces can
+   flip on one trial, which is how a wrong direction survived a reproduction at 3 x 300.
+
+The curve does not have that problem, so **the curve is now the measurement we quote** when two
+codecs are close. The threshold stays as the headline number, because "the file always comes
+back" is the promise a storage system has to make, but it is no longer what we compare on.
+
+## The mechanism finding stands, its consequence does not
+
+The structural effect we found is real and reproducible. A Fountain droplet's seed lives in the
+first 16 bases, and those bases have to satisfy the sequence rules too, so screening candidates
+also screens seeds and thins out the code:
 
 | | Mean droplet degree | Minimum coverage of a data chunk |
 |---|---|---|
 | Default, both rules | 9.83 | **3** |
 | Rules off | 11.97 | **6** |
 
-The seed of a Fountain droplet lives in the first 16 bases of the strand, and **those bases have
-to satisfy the sequence rules too**. Seeds whose base-4 spelling contains a long run, or whose
-letters push the strand out of the GC window, are rejected. Since the seed is what selects which
-data chunks a droplet combines, filtering seeds filters the *structure of the code*: chunk
-coverage becomes uneven, and the worst-covered chunk sits in 3 droplets instead of 6. Lose those
-three and the file is gone, however clean the sequence was.
+What we got wrong was the conclusion drawn from it. The last row of the table above is the direct
+test: apply both rules to the payload only, leave the seed bases unconstrained, and the structural
+cost disappears by construction. It does not help. At 12 reads that codec recovers 0.713 against
+0.807 for the standard one.
 
-So the rule trades a small, real sequence benefit for a structural weakness in the erasure code,
-and on this channel the trade is a loss.
+So the trade exists, and it runs the other way: **screening seeds does thin the erasure code, and
+the sequence benefit outweighs it anyway.** On this channel, paid in reads per strand, the
+homopolymer rule is worth more than the droplet degree it costs.
 
-**Why this is worth saying out loud.** DNA Fountain, the standard construction, screens candidate
-droplets against exactly these constraints. Our measurement says that screening carries a hidden
-cost that is not usually accounted for, and it is easy to avoid:
+## On Illumina, at these settings, there is nothing to trade
 
-1. apply the constraints to the payload only, not to the seed bases, or
-2. encode the seed so that it satisfies the constraints by construction, so no droplet is ever
-   rejected for its seed.
+All five codecs are identical from 3 reads per strand upward, and within noise at 2
+(0.957 to 0.970). The channel is clean enough that sequence constraints change nothing, which is
+the same answer the model gives in section 5.
 
-We did not implement either, and we do not claim a fix that we have not measured. What we claim
-is the measurement: on a channel calibrated to real Nanopore reads, screening droplets by the two
-standard rules costs more reads than it saves, and the reason is the erasure code, not the
-chemistry.
+**One caveat, so this is not over-read.** This curve runs the *default* codec at 1.20 bits per
+base. The rule audit in [NUMBERS.md](NUMBERS.md) runs the *tuned* Illumina codec, which spends the
+clean channel on density instead of margin, and at that operating point it finds the GC rule does
+pay off (3.0 reads with it against 4.0 without). The two are not in conflict: they are different
+codecs. A rule that is free to drop when you have margin to spare is not necessarily free to drop
+once you have spent that margin. Which is, in a sentence, the reason this project measures rules
+per channel *and* per operating point rather than once.
