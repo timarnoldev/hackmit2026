@@ -497,6 +497,8 @@ html.js .scene--close .copy .asks { display: none; }
 
 /* The hero's second block: a short plain-language explainer that appears once the
    headline has cleared, for a reader who has no idea what DNA storage is. */
+/* Sits at the foot of the hero stage, centred, so the helix keeps the upper frame. */
+html.js .copy > .cb--intro { justify-content: flex-end; padding-bottom: clamp(24px, 6vh, 72px); }
 .cb--intro { max-width: 46rem; margin-inline: auto; text-align: center; }
 .cb--intro .intro {
   font-size: clamp(1.05rem, 1.6vw, 1.35rem); line-height: 1.55;
