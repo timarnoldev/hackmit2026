@@ -92,14 +92,17 @@ def test_dropouts_excluded_from_denominator():
 
 
 def test_labels_deterministic_across_workers_and_seed_dependent():
-    prof = _profile(sub_rate=0.05, ins_rate=0.05, del_rate=0.05)
+    # A channel where the first read is right about half the time. With a harsher one every
+    # label saturates at 1.0 and seeds cannot differ, which is what broke this test when the
+    # profiles' dropout was calibrated down from 2% to 0.2%.
+    prof = _profile(sub_rate=0.002, ins_rate=0.002, del_rate=0.002)
     strands = risk.generate_strands(150, 110, seed=train_seed(8))  # 3 chunks
     y1 = risk.label_failure_rates(strands, FirstReadDecoder(), prof, k=3, seed=train_seed(3), workers=1)
     y2 = risk.label_failure_rates(strands, FirstReadDecoder(), prof, k=3, seed=train_seed(3), workers=2)
     y3 = risk.label_failure_rates(strands, FirstReadDecoder(), prof, k=3, seed=train_seed(4), workers=1)
     assert np.array_equal(y1, y2, equal_nan=True)
     assert not np.array_equal(y1, y3, equal_nan=True)
-    assert 0.5 < np.nanmean(y1) <= 1.0  # first read of a noisy channel is usually wrong
+    assert 0.1 < np.nanmean(y1) < 1.0  # a mix of failures and successes, so seeds can differ
 
 
 def test_labels_with_baseline_rise_with_homopolymers():
