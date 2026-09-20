@@ -22,6 +22,7 @@
 
 #include "box_decoder.h"
 #include "box_polish.h"
+#include "box_risk.h"
 
 int main() {
   if (const char *o = getenv("BT_ORDER")) boxdec::gBacktraceOrder = atoi(o);
@@ -68,7 +69,13 @@ int main() {
     char pdraft[boxdec::kMaxLen + 1] = {0};
     if (boxpolish::begin()) boxpolish::polish(c, strandLength, pdraft, sizeof(pdraft),
                                               polished, sizeof(polished));
-    std::cout << cons << "\t" << draft << "\t" << polished << "\n";
+    // and the risk model's score for the strand we ended up with
+    float risk = -1.0f;
+    if (boxrisk::begin()) {
+      const char *judged = polished[0] ? polished : cons;
+      risk = boxrisk::score(judged, (int)strlen(judged));
+    }
+    std::cout << cons << "\t" << draft << "\t" << polished << "\t" << risk << "\n";
   }
   return 0;
 }
