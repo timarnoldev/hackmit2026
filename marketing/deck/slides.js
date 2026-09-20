@@ -580,6 +580,246 @@
       ARCH_BOXES.map(box).join('');
   }
 
+  /* ------------------------------------------------------------ slide 9: tier 2, isolated
+   * The paired scorer experiment: everything fixed, only the ranking model changes.
+   * Values live in results.js under tier2 (300 held-out trials per point).
+   */
+
+  function buildTier2Curve(R) {
+    const T = (R && R.tier2) || {};
+    const reads = Array.isArray(T.reads) ? T.reads : [];
+    const rules = Array.isArray(T.rules) ? T.rules : [];
+    const learned = Array.isArray(T.learned) ? T.learned : [];
+    const ok = reads.length > 1 && rules.length === reads.length && learned.length === reads.length;
+
+    const chips = document.getElementById('t2chips');
+    if (chips) {
+      const held = Array.isArray(T.held) && T.held.length ? T.held : ['same codec', 'same decoder', 'same seeds'];
+      chips.innerHTML =
+        `<span class="hlab frag fade" data-f="1">Held fixed</span>` +
+        held.map((h, i) => `<span class="hchip frag fade" data-f="1" style="transition-delay:${i * 50}ms">${esc(h)}</span>`).join('') +
+        `<span class="hchip change frag fade" data-f="1" style="transition-delay:${held.length * 50}ms">only the scorer changes</span>`;
+    }
+
+    const host = document.getElementById('t2plot');
+    if (!host) return;
+    if (!ok) {
+      host.innerHTML = `<div class="pending-box" style="left:0;right:0;top:40px">${ph('tier 2 recovery curve, hand rules against the learned model')}</div>`;
+      return;
+    }
+    const W = 1680;
+    const H = 430;
+    const m = { l: 130, r: 130, t: 26, b: 70 };
+    const pw = W - m.l - m.r;
+    const phh = H - m.t - m.b;
+    const lo = reads[0];
+    const hi = reads[reads.length - 1];
+    const X = (v) => m.l + ((v - lo) / (hi - lo)) * pw;
+    const Y = (v) => m.t + phh - v * phh;
+    let g = '';
+    [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
+      g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${Y(t)}" y2="${Y(t)}"/>` +
+        `<text class="tick" x="${m.l - 16}" y="${Y(t) + 7}" text-anchor="end">${Math.round(t * 100)}%</text>`;
+    });
+    reads.forEach((r) => {
+      g += `<text class="tick" x="${X(r)}" y="${m.t + phh + 34}" text-anchor="middle">${r.toFixed(1)}</text>`;
+    });
+    g += `<path class="axis" d="M${m.l} ${m.t}V${m.t + phh}H${m.l + pw}"/>` +
+      `<text class="alabel" x="${m.l + pw / 2}" y="${H - 12}" text-anchor="middle">Reads per strand</text>` +
+      `<text class="alabel" transform="translate(30 ${m.t + phh / 2}) rotate(-90)" text-anchor="middle">Files recovered</text>`;
+    const line = (vals, cls, f, label, row) => {
+      const d = vals.map((v, i) => `${i ? 'L' : 'M'}${X(reads[i]).toFixed(1)} ${Y(v).toFixed(1)}`).join('');
+      const ly = m.t + phh - 40 - row * 44;
+      const lx = m.l + pw - 30;
+      return `<g class="t2line ${cls} frag fade" data-f="${f}"><path d="${d}"/>` +
+        vals.map((v, i) => `<circle cx="${X(reads[i])}" cy="${Y(v)}" r="9"/>`).join('') +
+        `<path class="key" d="M${lx - 300} ${ly} H${lx - 250}"/>` +
+        `<circle cx="${lx - 275}" cy="${ly}" r="9"/>` +
+        `<text class="t2lab" x="${lx - 236}" y="${ly + 9}">${label}</text></g>`;
+    };
+    g += line(rules, 'rules', 2, 'ranked by the hand rules', 0);
+    g += line(learned, 'learned', 3, 'ranked by the learned model', 1);
+
+    // the gap at the read count where the two differ most
+    let k = 0;
+    reads.forEach((_, i) => { if (learned[i] - rules[i] > learned[k] - rules[k]) k = i; });
+    const gap = Math.round((learned[k] - rules[k]) * 1000) / 10;
+    const gx = X(reads[k]);
+    const tx = gx + (pw / (reads.length - 1)) * 1.25;
+    const ty = m.t + phh * 0.46;
+    g += `<g class="t2gap frag fade" data-f="3">` +
+      `<path d="M${gx} ${Y(rules[k]) - 12} V${Y(learned[k]) + 12}M${gx - 13} ${Y(rules[k]) - 12}H${gx + 13}M${gx - 13} ${Y(learned[k]) + 12}H${gx + 13}" fill="none" stroke="var(--sa-gain)" stroke-width="4" stroke-linecap="round"/>` +
+      `<path d="M${gx + 16} ${(Y(rules[k]) + Y(learned[k])) / 2} H${tx - 16}" fill="none" stroke="var(--sa-gain)" stroke-width="2.5" opacity="0.5"/>` +
+      `<text class="t2big" x="${tx}" y="${ty}">+${gap.toFixed(1)} points</text>` +
+      `<text class="t2sub" x="${tx}" y="${ty + 34}">${Math.round(rules[k] * 100)}% of files come back, against ${(learned[k] * 100).toFixed(1)}%</text>` +
+      `<text class="t2sub" x="${tx}" y="${ty + 62}">at ${reads[k].toFixed(1)} reads per strand</text></g>`;
+
+    host.innerHTML = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Share of files recovered against reads per strand, candidates ranked by the hand rules or by the learned model">${g}</svg>`;
+
+    const foot = document.getElementById('t2foot');
+    if (foot) {
+      const trials = isNum(T.trials) ? `${T.trials} held-out trials per point` : '';
+      foot.innerHTML =
+        `<span class="pill2 gain frag fade" data-f="3">${icon('check')}Choosing among candidates costs no density</span>` +
+        (isText(T.reproduced) ? `<span class="pill2 audit frag fade" data-f="4">${esc(T.reproduced)}</span>` : '') +
+        (trials ? `<span class="pill2 frag fade" data-f="2">${trials}</span>` : '');
+    }
+  }
+
+  /* ------------------------------------------------------------ slide 10: what the plot bought */
+
+  function buildParetoReading(R) {
+    const host = document.getElementById('pareto-read');
+    if (!host) return;
+    const ch = get(R, 'pareto.channel') || 'nanopore';
+    const P = get(R, `pareto.${ch}`) || {};
+    const rounds = (Array.isArray(P.rounds) ? P.rounds : []).filter(validPt);
+    const last = rounds[rounds.length - 1];
+    const md = P.matchedDefault;
+    let out = '';
+    if (validPt(md) && last) {
+      const d = md.reads - last.reads;
+      out += `<span class="pill2 gain frag fade" data-f="4">${icon('check')}Same bits per base: <b>${fmt.reads(md.reads)} → ${fmt.reads(last.reads)}</b> reads` +
+        `${d > 0 ? '' : ', no measurable gain'}</span>`;
+    } else {
+      out += `<span class="pill2 tbd frag fade" data-f="4">${ph('matched-density comparison')}</span>`;
+    }
+    out += `<span class="pill2 tbd frag fade" data-f="4">${icon('none')}Most of the drop is redundancy, not the rules</span>`;
+    host.innerHTML = out;
+  }
+
+  /* ------------------------------------------------------------ slide 12: against published decoders
+   * docs/COMPARISON.md: TReconLM (TMLR 2025) Table 7, and our held-out split.
+   */
+
+  const FIELD_READS = [2, 4, 6, 10];
+  const FIELD = [
+    { name: 'TReconLM', v: [10.9, 76.8, 91.2, 98.6], cls: 'ahead' },
+    { name: 'Erbgut', v: [7.0, 66.1, 88.8, 96.2], cls: 'ours' },
+    { name: 'DNAformer', v: [3.0, 65.9, 88.3, 95.7], cls: 'peer' },
+    { name: 'ITR', v: [4.9, 57.8, 78.1, 89.0], cls: 'other' },
+    { name: 'Majority vote', v: [4.8, 39.2, 68.0, 85.3], cls: 'other' },
+    { name: 'Trellis BMA', v: [0.1, 39.1, 64.6, 82.9], cls: 'other' },
+  ];
+
+  function buildFieldChart() {
+    const host = document.getElementById('fieldchart');
+    if (host) {
+      const W = 940;
+      const H = 540;
+      const m = { l: 80, r: 250, t: 20, b: 76 };
+      const pw = W - m.l - m.r;
+      const phh = H - m.t - m.b;
+      const X = (i) => m.l + (i / (FIELD_READS.length - 1)) * pw;
+      const Y = (v) => m.t + phh - (v / 100) * phh;
+      let g = '';
+      [0, 25, 50, 75, 100].forEach((t) => {
+        g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${Y(t)}" y2="${Y(t)}"/>` +
+          `<text class="tick" x="${m.l - 14}" y="${Y(t) + 7}" text-anchor="end">${t}%</text>`;
+      });
+      FIELD_READS.forEach((r, i) => {
+        g += `<text class="tick" x="${X(i)}" y="${m.t + phh + 36}" text-anchor="middle">${r}</text>`;
+      });
+      g += `<path class="axis" d="M${m.l} ${m.t}V${m.t + phh}H${m.l + pw}"/>` +
+        `<text class="alabel" x="${m.l + pw / 2}" y="${H - 14}" text-anchor="middle">Reads per cluster</text>` +
+        `<text class="alabel" transform="translate(22 ${m.t + phh / 2}) rotate(-90)" text-anchor="middle">Exact strands</text>`;
+      // labels at the right edge, pushed apart so they never collide
+      const order = FIELD.map((f, i) => ({ i, y: Y(f.v[3]) })).sort((a, b) => a.y - b.y);
+      const GAP = 34;
+      order.forEach((o, k) => {
+        if (k > 0 && o.y - order[k - 1].y < GAP) o.y = order[k - 1].y + GAP;
+      });
+      const labY = [];
+      order.forEach((o) => { labY[o.i] = o.y; });
+      FIELD.forEach((f, k) => {
+        const d = f.v.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join('');
+        const fr = f.cls === 'ahead' ? 2 : f.cls === 'ours' ? 3 : f.cls === 'peer' ? 3 : 1;
+        g += `<g class="fline ${f.cls} frag fade" data-f="${fr}" style="transition-delay:${k * 60}ms">` +
+          `<path d="${d}"/>` +
+          f.v.map((v, i) => `<circle cx="${X(i)}" cy="${Y(v)}" r="${f.cls === 'other' ? 5 : 8}"/>`).join('') +
+          `<path class="lead" d="M${X(3) + 10} ${Y(f.v[3])} L${X(3) + 26} ${labY[k]}" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>` +
+          `<text class="flab" x="${X(3) + 32}" y="${labY[k] + 7}">${f.name}</text></g>`;
+      });
+      host.innerHTML = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Exact strand accuracy against reads per cluster, published methods and ours">${g}</svg>`;
+    }
+
+    const cost = document.getElementById('fieldcost');
+    if (!cost) return;
+    const row = (label, ratio, ours, theirs, oursW) =>
+      `<div class="costrow frag fade" data-f="4"><div class="clab">${label}<em>${ratio}</em></div>` +
+      `<div class="cbar"><i class="ours" style="width:${oursW}%"></i><span class="ours">${ours}</span></div>` +
+      `<div class="cbar"><i class="theirs" style="width:100%"></i><span>${theirs}</span></div></div>`;
+    cost.innerHTML =
+      `<h3 class="frag fade" data-f="4">What it cost to get level</h3>` +
+      row('Parameters', '125x smaller', '0.8M', '100M', 0.8) +
+      row('Training examples', '2,400x fewer', '577k', '1.4B', 0.04) +
+      `<div class="costrow frag fade" data-f="4"><div class="clab">Training time<em>13 minutes</em></div>` +
+      `<div class="cbar"><span class="ours">one machine, once</span></div>` +
+      `<div class="cbar"><span>180 epochs on an A40</span></div></div>`;
+  }
+
+  /* ------------------------------------------------------------ slide 13: on the microcontroller
+   * hardware/esp32_ticker/README.md, tools/verify_polish.py --clusters 300.
+   */
+
+  const DEV_BARS = [
+    ['Polisher, float, laptop', 230, 'peer'],
+    ['Polisher, int8, on the chip', 229, 'ours'],
+    ['Classic majority vote', 211, 'other'],
+  ];
+
+  function buildDevice() {
+    const host = document.getElementById('devchart');
+    if (host) {
+      const W = 940;
+      const H = 330;
+      const m = { l: 400, r: 120, t: 14 };
+      const pw = W - m.l - m.r;
+      const X = (v) => m.l + (v / 300) * pw;
+      let g = '';
+      [0, 100, 200, 300].forEach((t) => {
+        g += `<line class="grid" x1="${X(t)}" x2="${X(t)}" y1="${m.t}" y2="${m.t + 3 * 76}"/>` +
+          `<text class="tick" x="${X(t)}" y="${m.t + 3 * 76 + 32}" text-anchor="middle">${t}</text>`;
+      });
+      g += `<text class="tick" x="${X(150)}" y="${m.t + 3 * 76 + 62}" text-anchor="middle">exact strands out of 300 real clusters</text>`;
+      DEV_BARS.forEach((b, i) => {
+        const y = m.t + i * 76;
+        g += `<g class="frag fade" data-f="2" style="transition-delay:${i * 90}ms">` +
+          `<text class="aucname" x="${m.l - 22}" y="${y + 44}" text-anchor="end">${b[0]}</text>` +
+          `<rect class="devbar ${b[2]}" x="${X(0)}" y="${y + 14}" width="${Math.max(3, X(b[1]) - X(0))}" height="44" rx="9"/>` +
+          `<text class="aucval ${b[2] === 'ours' ? 'ours' : ''}" x="${X(b[1]) + 16}" y="${y + 45}">${b[1]}</text></g>`;
+      });
+      host.innerHTML = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Exact strands of 300 real clusters, on device and on a laptop">${g}</svg>`;
+    }
+    const facts = document.getElementById('devfacts');
+    if (!facts) return;
+    facts.innerHTML =
+      `<div class="dcard frag fade" data-f="1"><div class="n">2 of 2</div><div class="d">learned models on the chip: 0.8M polisher in int8, 63k risk model in float32</div></div>` +
+      `<div class="dcard frag fade" data-f="2"><div class="n">1<br>strand</div><div class="d">is all that quantizing costs, 229 on device against 230 in float</div></div>` +
+      `<div class="dcard accent frag fade" data-f="3"><div class="n">0</div><div class="d">published systems here run on a microcontroller. No laptop, no network</div></div>`;
+  }
+
+  /* ------------------------------------------------------------ slide 14: the verdicts nobody else measures */
+
+  function buildVerdicts(R) {
+    const host = document.getElementById('verdicts');
+    if (!host) return;
+    const rows = (Array.isArray(R && R.ruleAudit) ? R.ruleAudit : []).filter((r) => !/^redundancy/.test(r.id || ''));
+    let html = '<div class="vhead"></div><div class="vhead">Nanopore</div><div class="vhead">Illumina</div>';
+    rows.forEach((row, i) => {
+      html += `<div class="vname frag fade" data-f="3" style="transition-delay:${i * 90}ms">${esc(row.label || row.id)}</div>`;
+      ['nanopore', 'illumina'].forEach((ch) => {
+        const cell = row[ch] || {};
+        const reads = isNum(cell.readsOn) && isNum(cell.readsOff)
+          ? `${fmt.reads(cell.readsOn)} reads with it, ${fmt.reads(cell.readsOff)} without`
+          : '';
+        html += `<div class="vcell frag fade" data-f="3" style="transition-delay:${i * 90 + 60}ms">` +
+          badge(cell.verdict, `verdict, ${CH[ch]}`) + (reads ? `<div class="vreads">${reads}</div>` : '') + '</div>';
+      });
+    });
+    host.innerHTML = html;
+  }
+
   /* ------------------------------------------------------------ slide 7: cycle and Pareto */
 
   function buildCycle() {
@@ -635,8 +875,8 @@
     const hasData = validPt(def) && rounds.length > 0;
 
     const W = 880;
-    const H = 640;
-    const m = { l: 104, r: 36, t: 70, b: 96 };
+    const H = 560;
+    const m = { l: 104, r: 36, t: 64, b: 86 };
     const pw = W - m.l - m.r;
     const phh = H - m.t - m.b;
     let body = '';
@@ -698,7 +938,7 @@
         body += `<circle class="pt round" style="--i:${i}" cx="${X(p.bpb)}" cy="${Y(p.reads)}" r="${isLast ? 15 : 11}" fill="var(--sa-audit)"/>`;
         if (isLast) {
           body += `<text class="ptlab round" style="--i:${i};font-size:24px;font-weight:600;fill:var(--sa-audit)" x="${X(p.bpb) + 26}" y="${Y(p.reads) + 9}">Tuned${p.label ? ', ' + esc(p.label) : ''}</text>`;
-        } else {
+        } else if (i === 0) {
           body += `<text class="ptlab round" style="--i:${i};font-size:19px" x="${X(p.bpb) - 18}" y="${Y(p.reads) + 36}" text-anchor="end">${esc(p.label || 'round ' + (i + 1))}</text>`;
         }
       });
@@ -711,8 +951,8 @@
         const word = delta > 0 ? [`${fmt.reads(delta)} fewer reads`, 'per strand'] : delta < 0 ? [`${fmt.reads(-delta)} more reads`, 'per strand'] : ['same reads', 'per strand'];
         body +=
           `<circle class="pt matched" cx="${mx}" cy="${my}" r="15" fill="none" stroke="var(--sa-ink)" stroke-width="3.5" stroke-dasharray="6 5"/>` +
-          `<text class="ptlab matched" x="${mx}" y="${my - 56}" text-anchor="middle" style="font-size:21px;font-weight:600;fill:var(--sa-ink)">Default rules at the</text>` +
-          `<text class="ptlab matched" x="${mx}" y="${my - 30}" text-anchor="middle" style="font-size:21px;font-weight:600;fill:var(--sa-ink)">same bits per base</text>`;
+          `<text class="ptlab matched" x="${mx}" y="${my - 78}" text-anchor="middle" style="font-size:21px;font-weight:600;fill:var(--sa-ink)">Default rules at the</text>` +
+          `<text class="ptlab matched" x="${mx}" y="${my - 52}" text-anchor="middle" style="font-size:21px;font-weight:600;fill:var(--sa-ink)">same bits per base</text>`;
         const dx = mx + 44;
         const txt = (y) =>
           `<text x="${dx + 20}" y="${y}" style="font-size:25px;font-weight:600;fill:var(--sa-audit)">${word[0]}</text>` +
@@ -723,8 +963,6 @@
           body +=
             `<g class="dim"><path d="M${dx} ${top}V${bot}M${dx - 12} ${top}H${dx + 12}M${dx - 12} ${bot}H${dx + 12}" stroke="var(--sa-audit)" stroke-width="4" stroke-linecap="round" fill="none"/>` +
             `${txt((top + bot) / 2 - 6)}</g>`;
-        } else {
-          body += `<g class="dim">${txt(Math.min(my, ly) - 90)}</g>`;
         }
       }
       host.innerHTML = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pareto plot, ${esc(CH[chName] || chName)}">${header}${axes}${body}${better}</svg>`;
@@ -739,86 +977,6 @@
 
   // The A and B rungs describe which decoder the run used, so they come from the data. A run made
   // with the classic decoder on every rung must not be labelled as if it used the polisher.
-  const LADDER = [
-    ['A', 'Fixed rules', 'majority vote'],
-    ['B', 'Fixed rules', 'polished decoder'],
-    ['C', 'Audited rules', 'tuned redundancy'],
-    ['D', 'C plus', 'risk model'],
-    ['E', 'Full loop', 'all rounds'],
-  ];
-
-  function ladderFor(ab) {
-    const rows = LADDER.map((l) => l.slice());
-    if (ab && ab.decoder === 'baseline') {
-      rows[0][2] = 'majority vote';
-      rows[1][2] = 'the same decoder';
-    }
-    return rows;
-  }
-
-  function buildAblation(R) {
-    const host = document.getElementById('ladder');
-    if (!host) return;
-    const ab = (R && R.ablation) || {};
-    const chName = ab.channel || 'nanopore';
-    const sub = document.getElementById('ablation-sub');
-    if (sub) sub.textContent = `${CH[chName] || chName}: reads per strand needed at the recovery target, lower is better. The default is always B.`;
-    const ladder = ladderFor(ab);
-    const vals = ladder.map((l) => ab[l[0]]);
-    const known = vals.filter(isNum);
-    const complete = known.length === ladder.length;
-
-    const W = 900;
-    const H = 510;
-    const m = { l: 20, r: 20, t: 46, b: 200 };
-    const slot = (W - m.l - m.r) / ladder.length;
-    const bw = 104;
-    const base = H - m.b;
-    const top = m.t;
-    const vmax = known.length ? Math.max(...known) * 1.1 : 1;
-    let s = `<line x1="${m.l}" x2="${W - m.r}" y1="${base}" y2="${base}" stroke="var(--sa-muted)" stroke-width="2.5"/>`;
-
-    ladder.forEach((l, i) => {
-      const cx = m.l + slot * i + slot / 2;
-      const v = vals[i];
-      const isB = l[0] === 'B';
-      if (isNum(v)) {
-        const h = ((base - top) * v) / vmax;
-        const fill = i >= 2 ? 'var(--sa-audit)' : isB ? 'var(--sa-muted)' : 'var(--sa-rule)';
-        s += `<rect class="bar" style="--i:${i}" x="${cx - bw / 2}" y="${base - h}" width="${bw}" height="${h}" rx="10" fill="${fill}"/>`;
-        s += `<text class="barval tick" style="--i:${i};font-size:30px;font-weight:600;fill:var(--sa-ink)" x="${cx}" y="${base - h - 14}" text-anchor="middle">${fmt.reads(v)}</text>`;
-      } else {
-        const h = (base - top) * 0.42;
-        s += `<rect class="bar" style="--i:${i}" x="${cx - bw / 2}" y="${base - h}" width="${bw}" height="${h}" rx="10" fill="var(--sa-tbd-bg)" stroke="var(--sa-tbd-line)" stroke-width="3" stroke-dasharray="9 7"/>`;
-        s += `<text class="barval" style="--i:${i};font-size:40px;font-weight:600;fill:var(--sa-tbd)" x="${cx}" y="${base - h / 2 + 14}" text-anchor="middle">?</text>`;
-      }
-      s += `<text x="${cx}" y="${base + 44}" text-anchor="middle" style="font-size:36px;font-weight:600;fill:${isB ? 'var(--sa-ink)' : 'var(--sa-ink)'}">${l[0]}</text>`;
-      s += `<text x="${cx}" y="${base + 76}" text-anchor="middle" style="font-size:20px">${l[1]}</text>`;
-      s += `<text x="${cx}" y="${base + 100}" text-anchor="middle" style="font-size:20px">${l[2]}</text>`;
-      if (isB) s += `<text x="${cx}" y="${base + 124}" text-anchor="middle" style="font-size:19px;font-weight:600;fill:var(--sa-audit)">the default</text>`;
-    });
-
-    const brk = [
-      ['decoder', false],
-      ['tier 1', true],
-      ['tier 2', true],
-      ['loop', false],
-    ];
-    brk.forEach((b, i) => {
-      const x0 = m.l + slot * i + slot / 2 + 8;
-      const x1 = m.l + slot * (i + 1) + slot / 2 - 8;
-      const y = base + 146;
-      s +=
-        `<g class="brk${b[1] ? ' ours' : ''}"><path d="M${x0} ${y - 10}V${y}H${x1}V${y - 10}"/>` +
-        `<text x="${(x0 + x1) / 2}" y="${y + 32}" text-anchor="middle" style="font-size:23px">${b[0]}</text></g>`;
-    });
-    let html = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ablation ladder">${s}</svg>`;
-    if (!complete) {
-      html += `<div class="pending-box" style="left:90px;right:90px;top:10px">[RESULT: reads per strand needed, systems A to E, ${esc(CH[chName] || chName)}]<small>Results pending. Fills from results.js, ablation</small></div>`;
-    }
-    host.innerHTML = html;
-  }
-
   function buildCrossover(R) {
     const host = document.getElementById('xm');
     if (!host) return;
@@ -937,17 +1095,17 @@
     if (!host) return;
     const F = (R && R.firewall) || {};
     const steps = [
-      ['Optimize', 'Simulator A, calibrated, train seeds only', null, true],
       ['Test 1: Simulator A', 'Held-out seeds', statusBadge(F.simAHeldout, 'gain on held-out seeds')],
       ['Test 2: Simulator B', 'Different mechanisms, context table from another dataset, never optimized on', statusBadge(F.simB, 'does the gain survive Simulator B')],
-      ['Test 3: Real reads', "Decoder accuracy and the risk model's ranking on held-out real clusters", statusBadge(F.real, 'risk model ranking on real reads')],
+      ['Test 3: Real reads', "The risk model's ranking on held-out real clusters", statusBadge(F.real, 'risk model ranking on real reads')],
     ];
     host.innerHTML =
       `<h3 class="frag fade" data-f="3">Sim-to-real firewall</h3>` +
+      `<p class="fwsub frag fade" data-f="3">Optimized on Simulator A with train seeds only, then:</p>` +
       steps
         .map(
           (s, i) =>
-            `<div class="fwstep${s[3] ? ' opt' : ''}" style="--i:${i}"><span class="stepno"${s[3] ? ' style="background:var(--sa-muted)"' : ''}>${i === 0 ? '0' : i}</span>` +
+            `<div class="fwstep" style="--i:${i}"><span class="stepno">${i + 1}</span>` +
             `<div><div class="t">${s[0]}</div><div class="d">${s[1]}</div>${s[2] ? `<div class="st">${s[2]}</div>` : ''}</div></div>`
         )
         .join('');
@@ -981,8 +1139,9 @@
     host.innerHTML =
       card(0, 'Nanopore, same bits per base', n[0], n[1]) +
       card(1, 'Illumina, same bits per base', il[0], il[1]) +
-      card(2, 'Crossover', say.crossover(R), '') +
-      card(3, 'Image through DNA at 6 reads per strand', say.imageDemo(R), '');
+      card(2, 'Crossover', say.crossover(R), '');
+    const demo = document.getElementById('results-demo');
+    if (demo) demo.innerHTML = `<h4>An image through DNA at 6 reads per strand</h4>${say.imageDemo(R)}`;
   }
 
   /* ------------------------------------------------------------ spoken sentences for notes */
@@ -1090,11 +1249,15 @@
       buildLearned();
       buildTwoModels();
       buildCycle();
+      buildTier2Curve(R);
+      buildFieldChart();
+      buildDevice();
       buildPareto(R);
-      buildAblation(R);
       buildCrossover(R);
       buildCalibration();
       buildFirewall(R);
+      buildParetoReading(R);
+      buildVerdicts(R);
       buildResults(R);
       renderRes(R);
     },

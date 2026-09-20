@@ -36,6 +36,8 @@
  *                                    base. The results slide compares this with the last round.
  *
  *   ablation             reads per strand needed at the target for systems A to E, one channel
+ *   tier2                the paired scorer experiment: reads[], rules[], learned[] as recovery
+ *                        rates over 300 held-out trials, plus held[] and reproduced
  *   crossover.<codec>.<channel>      reads per strand needed; codec is "default", "nanopore"
  *                                    (tuned for Nanopore) or "illumina"
  *   crossover.summary    optional one-line outcome; otherwise computed if the pattern is
@@ -180,6 +182,15 @@ window.RESULTS = {
         "reads": 5.5
       }
     }
+  },
+  "tier2": {
+    "channel": "nanopore",
+    "trials": 300,
+    "reads": [4.0, 4.5, 5.0, 5.5, 6.0],
+    "rules": [0.0, 0.27, 1.0, 1.0, 1.0],
+    "learned": [0.1, 0.983, 0.997, 1.0, 1.0],
+    "held": ["same redundancy", "same strand length", "same hard rules", "32 candidates", "same decoder", "same seeds", "same file"],
+    "reproduced": "Repeated with the learned decoder on both simulators: strand failures fall 2.8 points"
   },
   "ablation": {
     "channel": "nanopore",
