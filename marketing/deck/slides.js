@@ -383,8 +383,8 @@
     const wires =
       // the storage path
       wire(1, `M292 156 H309 ${arrow(292, 156, 313, 156)}`) +
-      wire(1, `M290 66 C 420 18, 540 18, 686 34 ${arrow(662, 28, 694, 36)}`) +
-      label(1, 470, 10, 'the channel, fit on real reads', 'middle') +
+      wire(1, `M150 34 C150 12, 804 12, 804 34 ${arrow(804, 20, 804, 34)}`) +
+      label(1, 477, 2, 'the channel, fit on real reads', 'middle') +
       wire(1, `M631 156 H646 ${arrow(631, 156, 650, 156)}`) +
       wire(1, `M958 156 H973 ${arrow(958, 156, 977, 156)}`) +
       wire(1, `M1325 156 H1340 ${arrow(1325, 156, 1344, 156)}`) +

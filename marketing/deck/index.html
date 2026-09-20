@@ -386,8 +386,24 @@
   </aside>
 </section>
 
+<!-- ================================================================ What we actually built -->
+<section class="slide" id="a-arch" data-title="What we actually built" data-plan="122-146"
+  data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
+  <p class="kicker">In one diagram</p>
+  <h2 class="title sm">What we actually built</h2>
+  <div class="arch" id="arch"></div>
+  <aside class="notes">
+    <p>Zoom out for a second: here is the whole system in one diagram, before we walk through the pieces.</p>
+    <p><i class="cue"></i> The storage path. A channel profile describes one situation as JSON: error rates, the 5-letter context table, dropout, the read budget, costs. It is fit on real reads. The encoder is a Fountain code: for every slot it makes 8 to 32 candidate strands, puts a checksum in each, and a scorer keeps one. Simulator A plays the lab: dropouts, uneven coverage, per-read quality, errors every read shares, and context errors. The decoder chain gets the noisy reads back. Then a checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file.</p>
+    <p><i class="cue"></i> The one learned part in that path is the polisher. The classic baseline aligns the reads and votes a draft; a small dilated CNN, about 0.8 million parameters, looks at 17 vote features per position and says keep, substitute, delete, or insert.</p>
+    <p><i class="cue"></i> Around it runs the loop. Freeze the decoder, label strands by simulating each one 32 times to see where the decoder fails, train the risk model on those labels, search the settings, and hand the risk model back to the encoder so it keeps the safest candidate. At most three rounds.</p>
+    <p><i class="cue"></i> Everything is judged by one evaluation: 300 held-out trials, the fewest reads per strand at the recovery target, written to a result file that the dashboard, this deck and the demo all read. And Simulator B sits outside the loop, built from different mechanisms, only to check that a gain survives.</p>
+    <p class="aside">Indigo is learned, grey is classic code. Two learned models in the whole system. The rest of the deck walks through these pieces one at a time.</p>
+  </aside>
+</section>
+
 <!-- ================================================================ 6. Pipeline -->
-<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="122-146"
+<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="146-170"
   data-labels="Bits become letters|Synthesis writes copies|Sequencing returns noisy reads|Decoder votes a consensus|Checksum marks a wrong strand missing|Fountain code rebuilds the file">
   <p class="kicker">How DNA storage works</p>
   <h2 class="title sm">From bits to strands, and back</h2>
@@ -461,7 +477,7 @@
 </section>
 
 <!-- ================================================================ 7. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="146-159"
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="170-183"
   data-labels="Several candidates per slot|Rules reject some|A scorer keeps one|The knobs we measure">
   <p class="kicker">Where the rules come in</p>
   <h2 class="title sm">The encoder picks one of several candidate strands</h2>
@@ -492,7 +508,7 @@
 </section>
 
 <!-- ================================================================ 8. Tier 1 -->
-<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="159-186"
+<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="183-210"
   data-labels="Switch each rule off and measure|Nanopore verdicts|Illumina verdicts|Same rule, different verdict">
   <p class="kicker">Tier 1 <span class="tag">rule audit</span></p>
   <h2 class="title">Does this rule pay off on this channel?</h2>
@@ -510,7 +526,7 @@
 </section>
 
 <!-- ================================================================ 9. Tier 2 -->
-<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="186-206"
+<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="210-230"
   data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
   <h2 class="title sm">Learn where the decoder fails, then steer around it</h2>
@@ -538,7 +554,7 @@
 </section>
 
 <!-- ================================================================ 10. Loop -->
-<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="206-228" data-steps="4"
+<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="230-252" data-steps="4"
   data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
   <p class="kicker">The loop</p>
   <h2 class="title sm">Alternate and freeze, then judge on the Pareto plot</h2>
@@ -556,7 +572,7 @@
 </section>
 
 <!-- ================================================================ 11. Evidence: ablation and crossover -->
-<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="228-246"
+<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="252-270"
   data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">Where the gain comes from, and where it holds</h2>
@@ -583,7 +599,7 @@
 </section>
 
 <!-- ================================================================ 12. Evidence: simulator -->
-<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="246-260"
+<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="270-284"
   data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">No wet lab, so the simulator is checked against real reads</h2>
@@ -613,7 +629,7 @@
 </section>
 
 <!-- ================================================================ 13. Results and close -->
-<section class="slide" id="s-results" data-title="Results and close" data-plan="260-274" data-steps="2"
+<section class="slide" id="s-results" data-title="Results and close" data-plan="284-298" data-steps="2"
   data-labels="Headline results|Close: tagline, team, repo">
   <p class="kicker">Results</p>
   <h2 class="title sm">What the audit measured</h2>
@@ -639,23 +655,8 @@
 </section>
 
 <!-- ================================================================ Appendix -->
-<section class="slide appx" id="a-arch" data-appendix data-title="Appendix: what we built"
-  data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
-  <p class="kicker">Appendix <span class="tag">A0</span></p>
-  <h2 class="title sm">What we actually built</h2>
-  <div class="arch" id="arch"></div>
-  <aside class="notes">
-    <p>Backup slide. When a judge asks what we actually built, jump here. 40 to 60 seconds.</p>
-    <p><i class="cue"></i> The storage path. A channel profile describes one situation as JSON: error rates, the 5-letter context table, dropout, the read budget, costs. It is fit on real reads. The encoder is a Fountain code: for every slot it makes 8 to 32 candidate strands, puts a checksum in each, and a scorer keeps one. Simulator A plays the lab: dropouts, uneven coverage, per-read quality, errors every read shares, and context errors. The decoder chain gets the noisy reads back. Then a checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file.</p>
-    <p><i class="cue"></i> The one learned part in that path is the polisher. The classic baseline aligns the reads and votes a draft; a small dilated CNN, about 0.8 million parameters, looks at 17 vote features per position and says keep, substitute, delete, or insert.</p>
-    <p><i class="cue"></i> Around it runs the loop. Freeze the decoder, label strands by simulating each one 32 times to see where the decoder fails, train the risk model on those labels, search the settings, and hand the risk model back to the encoder so it keeps the safest candidate. At most three rounds.</p>
-    <p><i class="cue"></i> Everything is judged by one evaluation: 300 held-out trials, the fewest reads per strand at the recovery target, written to a result file that the dashboard, this deck and the demo all read. And Simulator B sits outside the loop, built from different mechanisms, only to check that a gain survives.</p>
-    <p class="aside">Indigo is learned, grey is classic code. Two learned models in the whole system.</p>
-  </aside>
-</section>
-
 <section class="slide appx" id="a-sim" data-appendix data-title="Appendix: the channel simulator">
-  <p class="kicker">Appendix <span class="tag">A1</span></p>
+  <p class="kicker">Appendix <span class="tag">A0</span></p>
   <h2 class="title sm">The channel simulator, step by step</h2>
   <div class="layout two">
     <div class="box card">
@@ -687,7 +688,7 @@
 </section>
 
 <section class="slide appx" id="a-models" data-appendix data-title="Appendix: the two AI models">
-  <p class="kicker">Appendix <span class="tag">A2</span></p>
+  <p class="kicker">Appendix <span class="tag">A1</span></p>
   <h2 class="title sm">Exactly two learned models</h2>
   <div class="layout two">
     <div class="box card">
@@ -719,7 +720,7 @@
 </section>
 
 <section class="slide appx" id="a-gx10" data-appendix data-title="Appendix: the GX10 setup">
-  <p class="kicker">Appendix <span class="tag">A3</span></p>
+  <p class="kicker">Appendix <span class="tag">A2</span></p>
   <h2 class="title sm">Everything heavy runs on one ASUS Ascent GX10</h2>
   <div class="layout two">
     <div class="box card">
@@ -746,7 +747,7 @@
 </section>
 
 <section class="slide appx" id="a-qa1" data-appendix data-title="Appendix: judge questions 1">
-  <p class="kicker">Appendix <span class="tag">A4</span></p>
+  <p class="kicker">Appendix <span class="tag">A3</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">You have no wet lab. How do you know it's real?</p><p class="a">We don't synthesize or sequence anything. The simulator matches real held-out reads within about 3 points at every read count. Every gain must survive Simulator B, and the risk model's ranking is checked on real reads: <span class="res" data-key="qa.riskModelRealAuc" data-fmt="text" data-ph="RESULT: real-read AUC"></span></p></div>
@@ -758,7 +759,7 @@
 </section>
 
 <section class="slide appx" id="a-qa2" data-appendix data-title="Appendix: judge questions 2">
-  <p class="kicker">Appendix <span class="tag">A5</span></p>
+  <p class="kicker">Appendix <span class="tag">A4</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">Couldn't you buy accuracy with more redundancy?</p><p class="a">That's what we rule out. Codecs are judged on the Pareto front of bits per base against reads per strand, at a fixed recovery target.</p></div>
@@ -770,7 +771,7 @@
 </section>
 
 <section class="slide appx" id="a-qa3" data-appendix data-title="Appendix: judge questions 3">
-  <p class="kicker">Appendix <span class="tag">A6</span></p>
+  <p class="kicker">Appendix <span class="tag">A5</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">The Microsoft dataset has known issues. Does that matter?</p><p class="a">Yes, and we handle it. Its references aren't uniformly random, so we use it for calibration and benchmarks, never to learn risky motifs. Simulator B uses a context table fit on DNAformer.</p></div>
