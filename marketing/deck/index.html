@@ -385,120 +385,172 @@
   </aside>
 </section>
 
-<!-- ================================================================ 9. Tier 2 -->
-<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="145-165"
-  data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
+<!-- ================================================================ 9. Tier 2, isolated -->
+<section class="slide" id="s-tier2" data-title="Tier 2, isolated" data-plan="145-168" data-steps="4"
+  data-labels="Everything held fixed|Ranked by the hand rules|Ranked by the learned model|Reproduced with the learned decoder">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
-  <h2 class="title sm">Learn where the decoder fails, then steer around it</h2>
-  <div class="layout">
-    <div>
-      <div class="strandbox" id="t2-strandbox"></div>
-      <div class="risk frag" data-f="4">
-        <div class="model card"><b>Risk model:</b> a small CNN trained on where our decoder actually fails. It predicts each candidate's failure rate on this channel, and the encoder keeps the safest one. Picking among candidates costs no density.</div>
-      </div>
-    </div>
-    <div class="stats">
-      <div class="stat card frag" data-f="3"><div class="n">45 to 66<small>%</small></div><div class="d">of the variation in the errors all Nanopore reads share is explained by the local 5-letter context</div></div>
-      <div class="stat card frag" data-f="3" style="transition-delay:0.15s"><div class="n">0.80 to 0.90</div><div class="d">AUC for predicting error hot spots from that context, on held-apart data</div></div>
-      <div class="stat card frag" data-f="3" style="transition-delay:0.3s"><div class="n">2 datasets</div><div class="d">Microsoft and DNAformer Nanopore reads, same context families lead in both</div></div>
-    </div>
-  </div>
-  <p class="foot-note frag fade" data-f="3">Shared errors are the ones more reads can't average away. The hand rules (run length, GC window) don't cover these contexts.</p>
+  <h2 class="title sm">Same codec. Same reads. Only the scorer changes.</h2>
+  <div class="t2chips" id="t2chips"></div>
+  <div class="t2plot" id="t2plot"></div>
+  <div class="footline" id="t2foot"></div>
   <aside class="notes">
-    <p>Tier two goes beyond the hand rules.</p>
-    <p><i class="cue"></i> This strand passes every hand rule. No long runs, GC in the window.</p>
-    <p><i class="cue"></i> But on real Nanopore reads, some short contexts are hot spots. Substitutions around CGGG and CCCG, deletions right after CCCT.</p>
-    <p><i class="cue"></i> We measured it. The errors every read shares, the ones more reads can't fix, are 45 to 66% predictable from the local five-letter context. Hot spots with AUC 0.80 to 0.90. Two independent datasets.</p>
-    <p><i class="cue"></i> So a small CNN learns from where our decoder actually fails, and the encoder keeps the safest candidate. That costs no density at all.</p>
+    <p>This is the cleanest evidence in the project, so take it slowly.</p>
+    <p><i class="cue"></i> Everything is held fixed. Same codec, same redundancy, same strand length, same hard rules, the same 32 candidates per slot, the same decoder, the same seeds, the same file. One thing changes: which model ranks those candidates.</p>
+    <p><i class="cue"></i> Rank them with the hand rules, and at four and a half reads per strand the file comes back in 27% of 300 trials.</p>
+    <p><i class="cue"></i> Rank them with the model that learned from decoder failures, and it comes back 98.3% of the time. Seventy-one points, at a standard error of 2.7. And choosing among candidates is free: no extra strands, no extra reads, no density.</p>
+    <p><i class="cue"></i> We then repeated the whole thing with the learned decoder, which is the harder test because a better decoder repairs more of what the model steers around. Strand failures still fall by 2.8 points, on our simulator and on the firewall simulator.</p>
+    <p class="aside">If asked where this comes from: 300 held-out trials per point, run 2 strict, raw curve in the repo. The ablation ladder's C to D rung is a worse measurement of the same thing, because the settings search can move redundancy between rungs; we quote this paired experiment instead. One blemish we keep visible: at five reads the learned codec sits at 0.997, one failed trial in 300, where the hand rules reach 1.000.</p>
   </aside>
 </section>
 
-<!-- ================================================================ 10. Loop -->
-<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="165-187" data-steps="4"
-  data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
+<!-- ================================================================ 10. The loop -->
+<section class="slide" id="s-loop" data-title="The loop" data-plan="168-186" data-steps="4"
+  data-labels="Alternate and freeze|The default codec|Every round of tuning|What it actually bought">
   <p class="kicker">The loop</p>
-  <h2 class="title sm">Alternate and freeze, then judge on the Pareto plot</h2>
+  <h2 class="title sm">Search the settings, then judge them on one plot</h2>
   <div class="layout">
     <div class="cycle" id="cycle"></div>
     <div class="plot" id="pareto"></div>
   </div>
+  <div class="footline" id="pareto-read"></div>
   <aside class="notes">
-    <p>It runs as a loop.</p>
-    <p><i class="cue"></i> Adapt the decoder to the channel and freeze it. Label strands by simulating each one 32 times. Train the risk model on those labels. Search the settings. Re-adapt the decoder. Alternate and freeze, so nothing learns from a moving target.</p>
-    <p><i class="cue"></i> Here's the default codec. Down is fewer reads, right is more bits per base.</p>
-    <p><i class="cue"></i> And each round of tuning.</p>
-    <p><i class="cue"></i> Against the default rules at the same bits per base: <span class="res" data-say="pareto"></span>.</p>
+    <p>How the tuned codec is found.</p>
+    <p><i class="cue"></i> Adapt the decoder and freeze it. Label strands by simulating each one 32 times. Train the risk model on those labels. Search the settings. Re-adapt. Nothing ever learns from a moving target.</p>
+    <p><i class="cue"></i> Here is the default codec: hand rules, 30% redundancy. Down is fewer reads, right is more bits per base.</p>
+    <p><i class="cue"></i> And every round of tuning, moving down and to the left.</p>
+    <p><i class="cue"></i> Read it honestly. Most of that drop is bought with density, not with the rules. Hold the density fixed and the tuned codec still wins, but by one step of the coverage grid. The clean tier-2 result is the one on the previous slide.</p>
   </aside>
 </section>
 
-<!-- ================================================================ 11. Evidence: ablation and crossover -->
-<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="187-205"
-  data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
-  <p class="kicker">Evidence we don't fake</p>
-  <h2 class="title sm">Where the gain comes from, and where it holds</h2>
-  <div class="layout">
-    <div class="ladder-wrap">
-      <h3>Ablation ladder</h3>
-      <p class="sub" id="ablation-sub">Reads per strand needed at the recovery target, lower is better</p>
-      <div class="ladder" id="ladder"></div>
+<!-- ================================================================ 11. Tuned, not just better -->
+<section class="slide" id="s-cross" data-title="Tuned for a channel" data-plan="186-200" data-steps="3"
+  data-labels="Each codec at home|Each codec away|What that proves">
+  <p class="kicker">Evidence</p>
+  <h2 class="title sm">Tuned for a channel, not just better</h2>
+  <div class="xwrap">
+    <div class="xm" id="xm"></div>
+  </div>
+  <div class="footline">
+    <span class="pill2 gain frag fade" data-f="3">Each tuned codec wins at home</span>
+    <span class="pill2 cost frag fade" data-f="3">and loses away, one of them completely</span>
+  </div>
+  <aside class="notes">
+    <p>If a tuned codec were simply better, it would be better everywhere. So we swap them.</p>
+    <p><i class="cue"></i> Down the left, the three codecs. Across the top, the two channels. Each number is the reads per strand needed to recover the file every time.</p>
+    <p><i class="cue"></i> Each tuned codec is cheapest on the channel it was tuned for, and pays for it on the other.</p>
+    <p><i class="cue"></i> <span class="res" data-say="crossover"></span>. That is the difference between a tuned codec and a better codec, and it is why the audit has to be run per channel rather than once.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 12. Against published work -->
+<section class="slide" id="s-field" data-title="Against published decoders" data-plan="200-222" data-steps="4"
+  data-labels="The published field|Where we lose|Level with DNAformer|At a 125th of the size">
+  <p class="kicker">Against published work <span class="tag">same dataset</span></p>
+  <h2 class="title sm">Level with a 100M model. Behind the best one.</h2>
+  <div class="fieldgrid">
+    <div class="fieldchart" id="fieldchart"></div>
+    <div class="costpanel" id="fieldcost"></div>
+  </div>
+  <div class="footline">
+    <span class="pill2 cost frag fade" data-f="2">TReconLM is ahead of us at every read count. <b>91.2 against 88.8</b> at six</span>
+  </div>
+  <aside class="notes">
+    <p>Where our decoder actually stands, on the same public dataset, against published numbers.</p>
+    <p><i class="cue"></i> Every line here reconstructs strands from noisy reads. The grey ones are the classical algorithms, our own classic baseline among them.</p>
+    <p><i class="cue"></i> Say this plainly: the magenta line is TReconLM, published this year, and it beats us at every read count. 76.8 against 66.1 at four reads, 91.2 against 88.8 at six. It trains on the same split we do, so we have no excuse. It is a better model, trained better, with more compute.</p>
+    <p><i class="cue"></i> The cyan line is a fine-tuned DNAformer, and we sit on top of it at four, six and ten reads, inside our own seed noise.</p>
+    <p><i class="cue"></i> And that is the point of the slide: level with a hundred million parameter model at 0.8 million, 577 thousand training examples against 1.4 billion, and thirteen minutes of training instead of GPU days. We are not the most accurate. We are the cheapest thing here that is this accurate.</p>
+    <p class="aside">Sources if asked: TReconLM, TMLR 2025, Table 7, and the fine-tuned DNAformer from the same table. Ours is our held-out split. The protocols differ in cluster counts and in exact against at-most read counts; the full comparison is written up in the repo.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 13. On the chip -->
+<section class="slide" id="s-device" data-title="Both models on a microcontroller" data-plan="222-238" data-steps="3"
+  data-labels="Both models on the chip|What quantizing costs|Nothing published runs here">
+  <p class="kicker">Where it runs</p>
+  <h2 class="title sm">The whole codec fits on a 50 dollar chip</h2>
+  <div class="devgrid">
+    <div class="devchart" id="devchart"></div>
+    <div class="devfacts" id="devfacts"></div>
+  </div>
+  <aside class="notes">
+    <p>One more axis, and nobody in that comparison competes on it.</p>
+    <p><i class="cue"></i> Both learned models run on a microcontroller. The polisher quantized to int8, the risk model in float32. No laptop, no network.</p>
+    <p><i class="cue"></i> And it stays accurate there. On 300 real clusters the on-device polisher gets 229 strands exactly right, against 230 for the same model in float on a laptop, and 211 for the classic majority vote. Quantizing costs one strand.</p>
+    <p><i class="cue"></i> No published system in that comparison runs on a chip like this. This is the demo you can hold, running the same decoder that produced every number in the deck.</p>
+    <p class="aside">Numbers are from the deterministic on-device verification in the repo, 300 real clusters, int8 weights with int16 activations.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 14. The question nobody else answers -->
+<section class="slide" id="s-question" data-title="The question nobody else answers" data-plan="238-254" data-steps="3"
+  data-labels="What the field measures|What we measure|The measured verdicts">
+  <p class="kicker">Our actual claim</p>
+  <h2 class="title sm">The question nobody else answers</h2>
+  <div class="qgrid">
+    <div class="qbox frag fade" data-f="1">
+      <div class="who">TReconLM, DNAformer, BBS, Trellis BMA, ITR</div>
+      <div class="what">Given noisy reads, recover the strand</div>
     </div>
-    <div class="xwrap">
-      <h3>Crossover matrix</h3>
-      <p class="sub">Each tuned codec on its own channel and on the other. Reads per strand needed, lower is better.</p>
-      <div class="xm" id="xm"></div>
+    <div class="qbox accent frag fade" data-f="2">
+      <div class="who">Erbgut, per channel, at a fixed recovery target</div>
+      <div class="what">Given a channel, does this rule pay for what it costs?</div>
     </div>
   </div>
-  <p class="takeaway frag" data-f="4"><span class="res" data-say="crossover"></span></p>
+  <div class="verdicts" id="verdicts"></div>
+  <div class="footline">
+    <span class="pill2 frag fade" data-f="3">Each standard rule earns its place on exactly one of our two channels</span>
+  </div>
   <aside class="notes">
-    <p>How do we know where a gain comes from?</p>
-    <p><i class="cue"></i> The ablation ladder. The default we compare against is B, which already uses the same decoder.</p>
-    <p><i class="cue"></i> B to C is the rule audit, tier one. C to D is learned selection, tier two. A to B is the decoder, and we don't claim that.</p>
-    <p><i class="cue"></i> And how do we know the codec is tuned, and not just better? We swap them. The Nanopore codec runs on Illumina and the other way round.</p>
-    <p><i class="cue"></i> <span class="res" data-say="crossover"></span>.</p>
+    <p>So if we are behind on reconstruction, what is new here?</p>
+    <p><i class="cue"></i> Every published method in that comparison answers one question: given noisy reads, recover the strand.</p>
+    <p><i class="cue"></i> None of them answers this one: on your channel, does this coding rule pay for what it costs? You cannot answer it without a decoder in the loop, which is what our loop is.</p>
+    <p><i class="cue"></i> And the answer differs by channel. Run length pays off on Nanopore and buys nothing on Illumina. GC is the other way round. Each standard rule earns its place on exactly one of our two channels, and you only know which by measuring it.</p>
   </aside>
 </section>
 
-<!-- ================================================================ 12. Evidence: simulator -->
-<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="205-219"
-  data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
+<!-- ================================================================ 15. What we have not shown -->
+<section class="slide" id="s-honest" data-title="What we have not shown" data-plan="254-274" data-steps="4"
+  data-labels="The simulator against real reads|The firewall|What we retracted|What we have not shown">
   <p class="kicker">Evidence we don't fake</p>
-  <h2 class="title sm">No wet lab, so the simulator is checked against real reads</h2>
-  <div class="layout">
+  <h2 class="title sm">No wet lab, so everything is built to catch us out</h2>
+  <div class="hgrid">
     <div>
       <div class="calchart" id="calchart"></div>
-      <div class="frag" data-f="2">
-        <table>
-          <thead><tr><th>Reads per strand</th><th>2</th><th>4</th><th>6</th><th>10</th><th>16</th></tr></thead>
-          <tbody>
-            <tr><td>Real, held-out</td><td>4.9%</td><td>39.8%</td><td>66.5%</td><td>84.5%</td><td>90.1%</td></tr>
-            <tr><td class="audit">Simulator A</td><td>3.6%</td><td>40.3%</td><td>63.7%</td><td>83.0%</td><td>90.3%</td></tr>
-            <tr><td>Difference, points</td><td class="diff">&minus;1.3</td><td class="diff">+0.5</td><td class="diff">&minus;2.8</td><td class="diff">&minus;1.5</td><td class="diff">+0.3</td></tr>
-          </tbody>
-        </table>
-        <p class="src">Exact strands, majority vote baseline, Microsoft Nanopore held-out split (1,996 clusters no calibration step touched).</p>
+    </div>
+    <div class="hcol">
+      <div class="fw" id="firewall"></div>
+      <div class="retract frag fade" data-f="3">
+        <h3>We publish our own retractions</h3>
+        <p><b>"Both hand rules are harmful on Nanopore."</b> Our own rerun disproved it. The standard limit of 3 wins.</p>
+        <p><b>"6 reads against 8."</b> Winner's curse in an early run. We quote the one with a margin check.</p>
       </div>
     </div>
-    <div class="fw" id="firewall"></div>
+  </div>
+  <div class="footline">
+    <span class="pill2 tbd frag fade" data-f="4">Not shown: that ranking candidates by the model lowers failures on real DNA. That needs synthesis</span>
   </div>
   <aside class="notes">
-    <p>We have no wet lab, so we built the evidence to catch us out.</p>
-    <p><i class="cue"></i> Our simulator is calibrated on real Nanopore and Illumina reads. Here it is against real held-out reads: the decoder's accuracy at every read count.</p>
-    <p><i class="cue"></i> Within about 3 points everywhere, and where it's off, it's slightly harder than reality.</p>
-    <p><i class="cue"></i> And every gain has to survive a second, structurally different simulator, and a check on real reads. <span class="res" data-say="firewall"></span></p>
+    <p>We have no wet lab, so the evidence is built to catch us out.</p>
+    <p><i class="cue"></i> The simulator is calibrated on real reads. Here it is against real held-out reads at every read count: within about three points everywhere, and where it is off it is slightly harder than reality, which is the safe direction.</p>
+    <p><i class="cue"></i> Then the firewall. Every gain has to survive held-out seeds and a structurally different second simulator that is never optimized on. <span class="res" data-say="firewall"></span></p>
+    <p><i class="cue"></i> And two claims in this project were killed by our own reruns. Both corrections are written up with the wrong version kept visible. If a number survived that, you can lean on it.</p>
+    <p><i class="cue"></i> The limit, out loud: we have shown the model's ranking transfers to real reads. We have not shown that selecting candidates by it lowers failures on real DNA. That needs strands synthesized and sequenced, and we have not done that.</p>
   </aside>
 </section>
 
-<!-- ================================================================ 13. Results and close -->
-<section class="slide" id="s-results" data-title="Results and close" data-plan="219-233" data-steps="2"
-  data-labels="Headline results|Close: tagline, team, repo">
+<!-- ================================================================ 16. Close -->
+<section class="slide" id="s-results" data-title="Results and close" data-plan="274-292" data-steps="2"
+  data-labels="What we measured|Close: tagline, team, repo">
   <p class="kicker">Results</p>
   <h2 class="title sm">What the audit measured</h2>
   <div class="grid" id="results-grid"></div>
+  <div class="demo" id="results-demo"></div>
   <div class="close">
     <span data-mark></span>
     <div>
       <div class="tl"><span>Measure the rule.</span> Keep what pays.</div>
-      <div class="honest">If the hand rules are already right on a channel, that's the answer. Now it's measured.</div>
+      <div class="honest">Each standard rule earns its place on exactly one of our two channels. Now it is measured, not assumed.</div>
       <div class="who">
         <span class="team"><span class="res" data-key="meta.team" data-fmt="text" data-ph="TEAM: names"></span></span>
         <span>HackMIT 2026</span>
@@ -507,8 +559,8 @@
     </div>
   </div>
   <aside class="notes">
-    <p><i class="cue"></i> On Nanopore: <span class="res" data-say="headlineNanopore"></span>. On Illumina: <span class="res" data-say="headlineIllumina"></span>. The image at 6 reads per strand: <span class="res" data-say="imageDemo"></span>.</p>
-    <p><i class="cue"></i> And if on some channel the answer is "the hand rules are already right", that's a result too. Now it's measured instead of assumed.</p>
+    <p><i class="cue"></i> What the audit measured. On Nanopore: <span class="res" data-say="headlineNanopore"></span>. On Illumina: <span class="res" data-say="headlineIllumina"></span>. And an image through the channel at 6 reads per strand: <span class="res" data-say="imageDemo"></span>.</p>
+    <p><i class="cue"></i> The rules are not universally wrong. Each earns its place on exactly one of our two channels, and until you measure it on yours you are guessing.</p>
     <p>Erbgut. Measure the rule. Keep what pays.</p>
     <p class="aside">Say the tagline, then stop talking.</p>
   </aside>

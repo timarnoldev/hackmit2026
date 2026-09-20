@@ -32,11 +32,11 @@ html[data-theme="dark"] {
   --sa-tbd-bg: #1E2A0C;
   --sa-tbd-line: #D4B62E;
   --on-accent: #060F0A;
-  --tint-audit: rgba(163, 166, 255, 0.14);
-  --tint-cost: rgba(255, 134, 176, 0.15);
+  --tint-audit: rgba(57, 230, 255, 0.14);
+  --tint-cost: rgba(255, 46, 156, 0.15);
   --tint-gain: rgba(57, 255, 110, 0.18);
   --tint-ink: rgba(230, 236, 234, 0.06);
-  --shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 24px rgba(57, 255, 110, 0.03);
+  --shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 26px rgba(57, 255, 110, 0.07);
   /* logo mark, inverted for dark backgrounds (logo-dark.svg) */
   --mark-tile: #EAFFF3;
   --mark-a: #10A6C4;
@@ -61,10 +61,10 @@ html[data-theme="light"] {
   --sa-tbd-bg: #EAF5DA;
   --sa-tbd-line: #A9B81C;
   --on-accent: #FFFFFF;
-  --tint-audit: rgba(58, 63, 194, 0.09);
-  --tint-cost: rgba(176, 42, 99, 0.09);
-  --tint-gain: rgba(11, 116, 101, 0.09);
-  --tint-ink: rgba(19, 27, 32, 0.045);
+  --tint-audit: rgba(16, 166, 196, 0.12);
+  --tint-cost: rgba(196, 20, 119, 0.10);
+  --tint-gain: rgba(14, 156, 85, 0.12);
+  --tint-ink: rgba(8, 19, 11, 0.05);
   --shadow: 0 24px 50px rgba(19, 27, 32, 0.12);
   --mark-tile: #08130B;
   --mark-a: #39E6FF;
@@ -1931,3 +1931,129 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   background: var(--tint-audit); border-radius: 18px; padding: 16px 26px;
 }
 #a-two .closer svg { width: 46px; height: 28px; flex: none; color: var(--sa-audit); }
+
+/* ---------------------------------------------------------------- slides 9 to 16, rebuilt
+ * Colour carries meaning, per BRAND.md section 9: gain = what pays off and where we win,
+ * cost = what costs and where we lose, audit = the tool and the tailored codec, tbd = pending.
+ * Every coloured mark keeps a word or a symbol next to it.
+ */
+
+.lede2 { position: absolute; left: 120px; right: 120px; top: 246px; font-size: 26px; color: var(--sa-muted); }
+.footline {
+  position: absolute; left: 120px; right: 120px; bottom: 96px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+}
+.pill2 {
+  display: inline-flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 600;
+  border: 2px solid var(--sa-rule); border-radius: 999px; padding: 8px 22px; color: var(--sa-muted);
+}
+.pill2 b { font-weight: 600; color: var(--sa-ink); }
+.pill2.gain { border-color: var(--sa-gain); color: var(--sa-gain); background: var(--tint-gain); }
+.pill2.gain b { color: var(--sa-gain); }
+.pill2.cost { border-color: var(--sa-cost); color: var(--sa-cost); background: var(--tint-cost); }
+.pill2.cost b { color: var(--sa-cost); }
+.pill2.audit { border-color: var(--sa-audit); color: var(--sa-audit); background: var(--tint-audit); }
+.pill2.tbd { border-color: var(--sa-tbd-line); color: var(--sa-tbd); background: var(--sa-tbd-bg); }
+.pill2 svg { width: 26px; height: 26px; flex: none; }
+.srcline { position: absolute; left: 120px; right: 120px; bottom: 54px; font-size: 19px; color: var(--sa-muted); }
+
+/* --- 9. the risk model on real DNA */
+#s-tier2 .t2grid { position: absolute; left: 120px; right: 120px; top: 300px; display: grid; grid-template-columns: 1fr 470px; gap: 60px; align-items: start; }
+#s-tier2 .aucname { font-size: 26px; fill: var(--sa-ink); }
+#s-tier2 .aucbar { fill: var(--sa-rule); }
+#s-tier2 .aucbar.ours { fill: var(--sa-gain); }
+#s-tier2 .aucval { font-family: var(--mono); font-size: 25px; font-weight: 600; fill: var(--sa-muted); }
+#s-tier2 .aucval.ours { fill: var(--sa-gain); }
+#s-tier2 .caption { font-size: 22px; color: var(--sa-muted); margin: 0 0 14px; }
+#s-tier2 .lchip { padding: 16px 22px; border-radius: 18px; border: 2px solid var(--sa-rule); background: var(--sa-surface); margin-bottom: 14px; }
+#s-tier2 .lchip b { display: block; font-family: var(--mono); font-size: 30px; font-weight: 600; color: var(--sa-gain); }
+#s-tier2 .lchip.flat b { color: var(--sa-muted); }
+#s-tier2 .lchip span { font-size: 21px; color: var(--sa-muted); }
+#s-tier2 .decisive { margin-top: 16px; font-size: 25px; line-height: 1.35; }
+#s-tier2 .decisive .hi { font-family: var(--mono); font-weight: 600; color: var(--sa-gain); }
+#s-tier2 .decisive .lo { font-family: var(--mono); font-weight: 600; color: var(--sa-cost); }
+
+/* --- 10. the loop */
+#s-loop .layout { top: 268px; }
+#s-loop .cycle { transform: scale(0.84); transform-origin: 0 0; height: 560px; }
+#s-loop .plot { height: 560px; }
+
+/* --- 12. against published work */
+#s-field .fieldgrid { position: absolute; left: 120px; right: 120px; top: 284px; display: grid; grid-template-columns: 1fr 520px; gap: 56px; align-items: start; }
+#s-field .fline path { fill: none; stroke: var(--sa-rule); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+#s-field .fline circle { fill: var(--sa-rule); }
+#s-field .fline .flab { font-size: 21px; fill: var(--sa-muted); }
+#s-field .fline.ours path { stroke: var(--sa-gain); stroke-width: 6; }
+#s-field .fline.ours circle { fill: var(--sa-gain); }
+#s-field .fline.ours .flab { fill: var(--sa-gain); font-weight: 600; font-size: 24px; }
+#s-field .fline.ahead path { stroke: var(--sa-cost); stroke-width: 6; stroke-dasharray: 11 8; }
+#s-field .fline.ahead circle { fill: var(--sa-cost); }
+#s-field .fline.ahead .flab { fill: var(--sa-cost); font-weight: 600; font-size: 24px; }
+#s-field .fline.peer path { stroke: var(--sa-audit); stroke-width: 5; }
+#s-field .fline.peer circle { fill: var(--sa-audit); }
+#s-field .fline.peer .flab { fill: var(--sa-audit); font-size: 22px; }
+#s-field .costpanel h3 { margin: 0 0 16px; font-size: 28px; font-weight: 600; color: var(--sa-gain); }
+#s-field .costrow { margin-bottom: 22px; }
+#s-field .clab { font-size: 23px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+#s-field .clab em { font-style: normal; font-family: var(--mono); font-size: 24px; color: var(--sa-gain); }
+#s-field .cbar { position: relative; height: 30px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+#s-field .cbar i { height: 24px; border-radius: 6px; background: var(--sa-audit); display: block; min-width: 5px; }
+#s-field .cbar i.ours { background: var(--sa-gain); }
+#s-field .cbar span { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--sa-muted); white-space: nowrap; }
+#s-field .cbar span.ours { color: var(--sa-gain); }
+
+/* --- 13. on the chip */
+#s-device .devgrid { position: absolute; left: 120px; right: 120px; top: 300px; display: grid; grid-template-columns: 1fr 520px; gap: 60px; align-items: start; }
+#s-device .aucname { font-size: 26px; fill: var(--sa-ink); }
+#s-device .devbar { fill: var(--sa-rule); }
+#s-device .devbar.ours { fill: var(--sa-gain); }
+#s-device .devbar.peer { fill: var(--sa-audit); }
+#s-device .aucval { font-family: var(--mono); font-size: 28px; font-weight: 600; fill: var(--sa-muted); }
+#s-device .aucval.ours { fill: var(--sa-gain); }
+#s-device .dcard { padding: 18px 24px; border-radius: 20px; border: 2px solid var(--sa-rule); background: var(--sa-surface); margin-bottom: 16px; display: grid; grid-template-columns: 130px 1fr; gap: 18px; align-items: center; }
+#s-device .dcard .n { font-family: var(--mono); font-size: 38px; font-weight: 600; color: var(--sa-ink); line-height: 1.05; }
+#s-device .dcard .d { font-size: 22px; line-height: 1.3; color: var(--sa-muted); }
+#s-device .dcard.accent { border-color: var(--sa-gain); background: var(--tint-gain); }
+#s-device .dcard.accent .n, #s-device .dcard.accent .d { color: var(--sa-gain); }
+
+/* --- 14. the question nobody answers */
+#s-question .qgrid { position: absolute; left: 120px; right: 120px; top: 292px; display: grid; grid-template-columns: 1fr 1fr; gap: 44px; }
+#s-question .qbox { padding: 26px 30px; border-radius: 20px; border: 2px solid var(--sa-rule); background: var(--sa-surface); }
+#s-question .qbox .who { font-size: 21px; color: var(--sa-muted); margin-bottom: 8px; }
+#s-question .qbox .what { font-size: 30px; line-height: 1.3; font-weight: 600; color: var(--sa-ink); }
+#s-question .qbox.accent { border-color: var(--sa-gain); background: var(--tint-gain); }
+#s-question .qbox.accent .what { color: var(--sa-gain); }
+#s-question .verdicts {
+  position: absolute; left: 120px; right: 120px; top: 540px;
+  display: grid; grid-template-columns: 420px 1fr 1fr; gap: 14px 24px; align-items: center;
+}
+#s-question .vhead { font-size: 25px; font-weight: 600; color: var(--sa-muted); padding-bottom: 8px; border-bottom: 2px solid var(--sa-rule); }
+#s-question .vname { font-size: 29px; font-weight: 600; }
+#s-question .vcell { padding: 8px 0; }
+#s-question .vcell .verdict { font-size: 27px; }
+#s-question .vreads { font-size: 21px; color: var(--sa-muted); font-family: var(--mono); margin-top: 6px; }
+
+/* --- 15. simulator, firewall, retractions */
+#s-sim .fwcol { display: grid; gap: 14px; align-content: start; }
+#s-sim .fwsub { margin: -4px 0 4px; font-size: 20px; color: var(--sa-muted); }
+#s-sim .fwstep { padding: 10px 18px; }
+#s-sim .fwstep .t { font-size: 24px; }
+#s-sim .fwstep .d { font-size: 19px; }
+#s-sim .fwstep .st { margin-top: 6px; font-size: 19px; }
+#s-sim .fwstep .st .verdict { font-size: 20px; padding: 3px 12px 3px 6px; }
+#s-sim .retract { padding: 16px 22px; border-radius: 18px; border: 2px dashed var(--sa-tbd-line); background: var(--sa-tbd-bg); }
+#s-sim .retract h3 { margin: 0 0 8px; font-size: 24px; font-weight: 600; color: var(--sa-tbd); }
+#s-sim .retract p { margin: 0 0 6px; font-size: 19px; line-height: 1.3; color: var(--sa-muted); }
+#s-sim .retract p b { color: var(--sa-ink); }
+#s-sim .retract p:last-child { margin-bottom: 0; }
+
+/* --- 16. results and close */
+#s-results .grid { position: absolute; left: 120px; right: 120px; top: 276px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
+#s-results .rc { min-height: 0; }
+#s-results .demo {
+  position: absolute; left: 120px; right: 120px; top: 528px; padding: 20px 26px; border-radius: 20px;
+  border: 2px solid var(--sa-audit); background: var(--tint-audit); font-size: 23px; line-height: 1.4; color: var(--sa-ink);
+  opacity: 0; transform: translateY(16px); transition: opacity 0.45s, transform 0.6s var(--ease-out);
+}
+#s-results.s1 .demo { opacity: 1; transform: none; }
+#s-results .demo h4 { margin: 0 0 6px; font-size: 22px; font-weight: 600; color: var(--sa-audit); }
+#s-results .close { top: 706px; }
