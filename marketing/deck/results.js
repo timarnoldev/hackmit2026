@@ -48,63 +48,183 @@
 window.RESULTS = {
   "meta": {
     "sample": false,
-    "source": null,
+    "source": "results/run2_strict",
     "team": null
   },
   "ruleAudit": [
     {
       "id": "max_homopolymer=3",
       "label": "No run longer than 3",
-      "detail": "max_homopolymer = 3",
-      "nanopore": { "verdict": null, "readsOn": null, "readsOff": null },
-      "illumina": { "verdict": null, "readsOn": null, "readsOff": null }
+      "detail": "max_homopolymer=3",
+      "nanopore": {
+        "verdict": "pays off",
+        "readsOn": 19.5,
+        "readsOff": 24.5
+      },
+      "illumina": {
+        "verdict": "no measurable benefit",
+        "readsOn": 3.0,
+        "readsOff": 2.5
+      }
     },
     {
       "id": "gc 0.4-0.6",
       "label": "GC 40 to 60%",
-      "detail": "gc_min 0.4, gc_max 0.6",
-      "nanopore": { "verdict": null, "readsOn": null, "readsOff": null },
-      "illumina": { "verdict": null, "readsOn": null, "readsOff": null }
+      "detail": "gc 0.4-0.6",
+      "nanopore": {
+        "verdict": "no measurable benefit",
+        "readsOn": 19.5,
+        "readsOff": 20.0
+      },
+      "illumina": {
+        "verdict": "pays off",
+        "readsOn": 3.0,
+        "readsOff": 4.0
+      }
     },
     {
       "id": "redundancy 0.3 vs tuned",
       "label": "30% extra strands",
       "detail": "redundancy 0.3 vs tuned",
-      "nanopore": { "verdict": null, "readsOn": null, "readsOff": null, "tunedRedundancy": null, "bpbOn": null, "bpbOff": null },
-      "illumina": { "verdict": null, "readsOn": null, "readsOff": null, "tunedRedundancy": null, "bpbOn": null, "bpbOff": null }
+      "nanopore": {
+        "verdict": "tuned is better",
+        "readsOn": 19.5,
+        "readsOff": 5.5,
+        "tunedRedundancy": 1.6,
+        "bpbOn": 1.2021424902780835,
+        "bpbOff": 0.6010712451390418
+      },
+      "illumina": {
+        "verdict": "tuned is better",
+        "readsOn": 3.0,
+        "readsOff": 5.5,
+        "tunedRedundancy": 0.1,
+        "bpbOn": 1.2021424902780835,
+        "bpbOff": 1.419880405581073
+      }
     }
   ],
   "pareto": {
     "channel": "nanopore",
     "nanopore": {
-      "default": { "bpb": null, "reads": null },
-      "rounds": [],
-      "matchedDefault": { "bpb": null, "reads": null }
+      "default": {
+        "bpb": 1.2021424902780835,
+        "reads": 19.5
+      },
+      "rounds": [
+        {
+          "label": "tier 1",
+          "bpb": 0.6363706983609104,
+          "reads": 5.5
+        },
+        {
+          "label": "round 1",
+          "bpb": 0.6363706983609104,
+          "reads": 5.0
+        },
+        {
+          "label": "round 2",
+          "bpb": 0.7192905435068926,
+          "reads": 5.5
+        },
+        {
+          "label": "round 3",
+          "bpb": 0.6794956867949569,
+          "reads": 5.0
+        },
+        {
+          "label": "round 5",
+          "bpb": 0.7192905435068926,
+          "reads": 5.5
+        }
+      ],
+      "matchedDefault": {
+        "bpb": 0.7192905435068926,
+        "reads": 6.0
+      }
     },
     "illumina": {
-      "default": { "bpb": null, "reads": null },
-      "rounds": [],
-      "matchedDefault": { "bpb": null, "reads": null }
+      "default": {
+        "bpb": 1.2021424902780835,
+        "reads": 3.0
+      },
+      "rounds": [
+        {
+          "label": "tier 1",
+          "bpb": 1.5042232831435915,
+          "reads": 5.5
+        },
+        {
+          "label": "round 1",
+          "bpb": 1.5042232831435915,
+          "reads": 5.5
+        },
+        {
+          "label": "round 2",
+          "bpb": 1.5042232831435915,
+          "reads": 5.0
+        },
+        {
+          "label": "round 3",
+          "bpb": 1.5042232831435915,
+          "reads": 5.5
+        },
+        {
+          "label": "round 5",
+          "bpb": 1.5042232831435915,
+          "reads": 5.0
+        }
+      ],
+      "matchedDefault": {
+        "bpb": 1.5042232831435915,
+        "reads": 5.5
+      }
     }
   },
-  "ablation": { "channel": "nanopore", "A": null, "B": null, "C": null, "D": null, "E": null },
+  "ablation": {
+    "channel": "nanopore",
+    "decoder": "baseline",
+    "A": 19.5,
+    "B": 19.5,
+    "C": 5.5,
+    "D": 5.0,
+    "E": 5.5
+  },
   "crossover": {
-    "default": { "nanopore": null, "illumina": null },
-    "nanopore": { "nanopore": null, "illumina": null },
-    "illumina": { "nanopore": null, "illumina": null },
-    "summary": null
+    "default": {
+      "nanopore": 19.5,
+      "illumina": 3.0
+    },
+    "nanopore": {
+      "nanopore": 5.5,
+      "illumina": 1.5
+    },
+    "illumina": {
+      "nanopore": "not reached",
+      "illumina": 5.0
+    },
+    "summary": "Each tuned codec wins at home and loses away, and the Illumina codec never recovers the file on Nanopore at all."
   },
   "firewall": {
-    "simAHeldout": { "status": null, "note": null },
-    "simB": { "status": null, "note": null },
-    "real": { "status": null, "note": null }
+    "simAHeldout": {
+      "status": "holds",
+      "note": "6 vs 5.5 reads per strand"
+    },
+    "simB": {
+      "status": "holds",
+      "note": "24.5 vs 6 reads per strand"
+    },
+    "real": {
+      "status": "measured",
+      "note": "risk model AUC 0.52 on held-out real clusters"
+    }
   },
   "headline": {
-    "imageDemo": null
+    "imageDemo": "At 6 reads per strand the default codec lost the image in all 5 seeds and the tuned codec recovered it exactly in all 5. The tuned codec spends 0.63 bits per letter instead of 1.19 to do it, and at that same density the default rules also reach the target, so this is the tuned redundancy talking, not the rules."
   },
   "qa": {
-    "riskModelRealAuc": null,
-    "riskTopPatterns": null,
-    "handRulesOptimalOn": null
+    "riskModelRealAuc": "AUC 0.69 on 1,996 held-out real clusters with coverage held fixed. Hold the longest run fixed too and it still reaches 0.61, while the hand rule itself drops to 0.50.",
+    "riskTopPatterns": "Nanopore: G and C runs first, GGGGG 0.707 and CCCCC 0.685 against a 0.526 background, and deletion contexts ranked far above substitution contexts. Illumina: every pattern 0.000, nothing worth avoiding.",
+    "handRulesOptimalOn": "On Nanopore the run-length rule holds up, and a threshold sweep says the field\u2019s limit of 3 beats 4, 5, 6 and none. We published that against our own earlier claim."
   }
 };

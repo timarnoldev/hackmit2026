@@ -1115,6 +1115,9 @@ html.results-broken .load-error { display: block; }
 #s-evidence .xm .xc.worse { background: var(--tint-cost); }
 #s-evidence .xm .xc.worse .cmp { color: var(--sa-cost); }
 #s-evidence .xm .xc.same .cmp, #s-evidence .xm .xc.base .cmp { color: var(--sa-muted); }
+#s-evidence .xm .xc.miss { background: var(--tint-cost); border-style: dashed; }
+#s-evidence .xm .xc.miss .val { font-family: var(--mono); font-weight: 600; font-size: 26px; color: var(--sa-cost); }
+#s-evidence .xm .xc.miss .cmp { color: var(--sa-cost); }
 #s-evidence .xm .xc .ph { font-size: 19px; }
 #s-evidence .takeaway { position: absolute; left: 1090px; right: 120px; top: 852px; font-size: 30px; font-weight: 600; line-height: 1.3; }
 

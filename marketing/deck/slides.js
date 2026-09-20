@@ -710,6 +710,8 @@
 
   /* ------------------------------------------------------------ slide 8: ablation and crossover */
 
+  // The A and B rungs describe which decoder the run used, so they come from the data. A run made
+  // with the classic decoder on every rung must not be labelled as if it used the polisher.
   const LADDER = [
     ['A', 'Fixed rules', 'majority vote'],
     ['B', 'Fixed rules', 'polished decoder'],
@@ -718,6 +720,15 @@
     ['E', 'Full loop', 'all rounds'],
   ];
 
+  function ladderFor(ab) {
+    const rows = LADDER.map((l) => l.slice());
+    if (ab && ab.decoder === 'baseline') {
+      rows[0][2] = 'majority vote';
+      rows[1][2] = 'the same decoder';
+    }
+    return rows;
+  }
+
   function buildAblation(R) {
     const host = document.getElementById('ladder');
     if (!host) return;
@@ -725,21 +736,22 @@
     const chName = ab.channel || 'nanopore';
     const sub = document.getElementById('ablation-sub');
     if (sub) sub.textContent = `${CH[chName] || chName}: reads per strand needed at the recovery target, lower is better. The default is always B.`;
-    const vals = LADDER.map((l) => ab[l[0]]);
+    const ladder = ladderFor(ab);
+    const vals = ladder.map((l) => ab[l[0]]);
     const known = vals.filter(isNum);
-    const complete = known.length === LADDER.length;
+    const complete = known.length === ladder.length;
 
     const W = 900;
     const H = 510;
     const m = { l: 20, r: 20, t: 46, b: 200 };
-    const slot = (W - m.l - m.r) / LADDER.length;
+    const slot = (W - m.l - m.r) / ladder.length;
     const bw = 104;
     const base = H - m.b;
     const top = m.t;
     const vmax = known.length ? Math.max(...known) * 1.1 : 1;
     let s = `<line x1="${m.l}" x2="${W - m.r}" y1="${base}" y2="${base}" stroke="var(--sa-muted)" stroke-width="2.5"/>`;
 
-    LADDER.forEach((l, i) => {
+    ladder.forEach((l, i) => {
       const cx = m.l + slot * i + slot / 2;
       const v = vals[i];
       const isB = l[0] === 'B';
@@ -799,6 +811,12 @@
         const d = get(X, `default.${c}`);
         let cls = '';
         let cmp = '';
+        if (v === 'not reached') {
+          // A measured failure, not a missing number: this codec never recovered the file.
+          html += `<div class="xc miss" style="--i:${n++}"><span class="val">not reached</span>` +
+            `<span class="cmp">${icon('cross')}never recovers</span></div>`;
+          return;
+        }
         if (!isNum(v)) {
           html += `<div class="xc" style="--i:${n++}">${ph('reads')}</div>`;
           return;
