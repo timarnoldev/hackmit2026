@@ -113,12 +113,11 @@
   const MARK =
     '<svg class="mark" viewBox="0 0 64 64" aria-hidden="true">' +
     '<rect class="tile" width="64" height="64" rx="14"/>' +
-    '<rect class="bar ba" x="8" y="26" width="9" height="20" rx="2"/>' +
-    '<rect class="bar bc" x="21" y="26" width="9" height="20" rx="2"/>' +
-    '<rect class="bar bg" x="34" y="26" width="9" height="20" rx="2"/>' +
-    '<rect class="bar bg" x="47" y="26" width="9" height="20" rx="2"/>' +
-    '<rect class="ln" x="8" y="50" width="48" height="3" rx="1.5"/>' +
-    '<path class="dim" d="M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5" fill="none" stroke-width="3" stroke-linecap="round"/>' +
+    '<path class="strand s1" d="M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54" fill="none" stroke-width="3.4" stroke-linecap="round"/>' +
+    '<path class="strand s2" d="M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54" fill="none" stroke-width="3.4" stroke-linecap="round"/>' +
+    '<line class="rung r1" x1="24" y1="16" x2="40" y2="16" stroke-width="3" stroke-linecap="round"/>' +
+    '<line class="rung r2" x1="27" y1="30" x2="37" y2="30" stroke-width="3" stroke-linecap="round"/>' +
+    '<line class="rung r3" x1="24" y1="48" x2="40" y2="48" stroke-width="3" stroke-linecap="round"/>' +
     '</svg>';
 
   /* ------------------------------------------------------------ slide 1: ribbon */
