@@ -713,8 +713,40 @@
   <aside class="notes"><p>Backup only. Both models plug into shared interfaces, so either can be swapped for the classic alternative: majority vote, or the rule scorer.</p></aside>
 </section>
 
-<section class="slide appx" id="a-gx10" data-appendix data-title="Appendix: the GX10 setup">
+<section class="slide appx" id="a-cctt" data-appendix data-title="Appendix: the CCCT example">
   <p class="kicker">Appendix <span class="tag">A2</span></p>
+  <h2 class="title sm">One real pattern, learned on both sides</h2>
+  <div class="layout two">
+    <div class="box card">
+      <h3>What the channel actually does</h3>
+      <p>On real Nanopore reads, the base right after a <span class="mono">CCCT</span> run is deleted far more often than elsewhere &mdash; measured directly from the 5-mer context table fit on real train reads, and one of the leading hot-spot families in <b>two independent datasets</b> (Microsoft and DNAformer).</p>
+      <div class="ccex">
+        <span class="seq"><span class="nt nt-G">G</span><span class="nt nt-A">A</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-T">T</span><span class="hi-motif"><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-T">T</span></span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-T">T</span><span class="nt nt-G">G</span></span>
+        <span class="cclab">deletions land right after this run</span>
+      </div>
+      <p class="callout-line">The hand rule doesn't catch it: "no run longer than 3" allows <span class="mono">CCC</span> outright, since it's exactly the limit. No hand-written rule ever looks at this pattern.</p>
+    </div>
+    <div class="box card">
+      <h3>Two learned models, the same discovery</h3>
+      <p><b>The risk model steers the encoder around it.</b> Where an equally valid alternate seed exists, it scores a candidate that ends a slot in <span class="mono">CCCT</span> as riskier, and the encoder keeps the other one instead &mdash; for free, since trying another seed costs no density.</p>
+      <div class="pair">
+        <div class="prow bad"><span class="ptag">discarded</span><span class="seq mono small">&hellip;GA<span class="hi-motif">CCCT</span>GTC&hellip;</span></div>
+        <div class="prow good"><span class="ptag">kept</span><span class="seq mono small">&hellip;GATGACAGTC&hellip;</span><span class="psame">same data, different seed</span></div>
+      </div>
+      <p><b>The polisher learned the same thing from the decoding side.</b> Its roughly 65-position receptive field lets it down-weight the base right after <span class="mono">CCCT</span> even when the majority vote disagrees, because training on real reads taught it that position fails more than most.</p>
+      <p class="callout-line">Neither model was told about <span class="mono">CCCT</span>. One found it from decoder failures, the other from correcting reads &mdash; independently, from a real channel property no fixed rulebook could have written down in advance.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>Backup slide. Pull this up for "what did the model actually learn" or "give me one concrete example".</p>
+    <p><i class="cue"></i> On real Nanopore reads, the base right after a CCCT run gets deleted more than elsewhere. It's measured, it shows up in two independent datasets, and the hand rule never catches it because CCC is exactly the legal limit of 3.</p>
+    <p><i class="cue"></i> Two things learned this independently. The risk model steers the encoder to a different seed when one is available, for free. The polisher, on the decoding side, learned to distrust that position too.</p>
+    <p><i class="cue"></i> That's the strongest version of the tier two claim: not "the model found some pattern", but this specific, checkable, real one, confirmed twice.</p>
+  </aside>
+</section>
+
+<section class="slide appx" id="a-gx10" data-appendix data-title="Appendix: the GX10 setup">
+  <p class="kicker">Appendix <span class="tag">A3</span></p>
   <h2 class="title sm">Everything heavy runs on one ASUS Ascent GX10</h2>
   <div class="layout two">
     <div class="box card">
@@ -741,7 +773,7 @@
 </section>
 
 <section class="slide appx" id="a-qa1" data-appendix data-title="Appendix: judge questions 1">
-  <p class="kicker">Appendix <span class="tag">A3</span></p>
+  <p class="kicker">Appendix <span class="tag">A4</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">You have no wet lab. How do you know it's real?</p><p class="a">We don't synthesize or sequence anything. The simulator matches real held-out reads within about 3 points at every read count. Every gain must survive Simulator B, and the risk model's ranking is checked on real reads: <span class="res" data-key="qa.riskModelRealAuc" data-fmt="text" data-ph="RESULT: real-read AUC"></span></p></div>
@@ -753,7 +785,7 @@
 </section>
 
 <section class="slide appx" id="a-qa2" data-appendix data-title="Appendix: judge questions 2">
-  <p class="kicker">Appendix <span class="tag">A4</span></p>
+  <p class="kicker">Appendix <span class="tag">A5</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">Couldn't you buy accuracy with more redundancy?</p><p class="a">That's what we rule out. Codecs are judged on the Pareto front of bits per base against reads per strand, at a fixed recovery target.</p></div>
@@ -765,7 +797,7 @@
 </section>
 
 <section class="slide appx" id="a-qa3" data-appendix data-title="Appendix: judge questions 3">
-  <p class="kicker">Appendix <span class="tag">A5</span></p>
+  <p class="kicker">Appendix <span class="tag">A6</span></p>
   <h2 class="title sm">Questions we expect</h2>
   <div class="layout qa">
     <div class="card"><p class="q">The Microsoft dataset has known issues. Does that matter?</p><p class="a">Yes, and we handle it. Its references aren't uniformly random, so we use it for calibration and benchmarks, never to learn risky motifs. Simulator B uses a context table fit on DNAformer.</p></div>
