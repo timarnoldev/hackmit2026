@@ -30,6 +30,7 @@
 #include <ArduinoJson.h>
 
 #include "board_config.h"
+#include "box_data.h"
 
 // The panel. LovyanGFX ships a profile for this exact board, so we use it instead of
 // hand writing pins: LGFX_ESP32_S3_BOX_V3 in the library's LGFX_AutoDetect_ESP32_all.hpp.
@@ -162,6 +163,16 @@ static uint32_t mix(uint32_t a, uint32_t b, float t) {
          (uint32_t)(ab + (bb - ab) * t);
 }
 
+// Where the strands are coming from. The box never asks anyone to choose: it plays the
+// frozen run that is compiled into it, and hands over to the Mac the moment a host line
+// arrives, then takes over again when the host goes quiet.
+enum Source { SRC_EMBEDDED, SRC_HOST };
+static Source source = SRC_EMBEDDED;
+
+// Is the strand currently on screen the polisher's work? Only when a host is attached and
+// that host said its model is live. The frozen run is always the classic vote.
+static bool modelOnScreen();
+
 static inline float clamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
 // Ease out cubic, for anything that slides into place.
 static inline float easeOut(float t) { const float u = 1.0f - clamp01(t); return 1.0f - u * u * u; }
@@ -243,9 +254,15 @@ static Counter cDone, cAcc, cFix, cProg, cReads, cErrors;
 static uint8_t spark[SPARK_N];  // 0 none, 1 exact, 2 wrong, 3 dropout
 static int sparkAt = 0;
 
+static int embeddedAt = 0;          // next record in the frozen run, wraps for a seamless loop
+static uint32_t embDone = 0, embOk = 0, embFix = 0, embErr = 0, embReads = 0;
+
 static char decoderName[36] = "waiting for the Mac";
 static char decoderTag[10] = "";
-static bool modelLive = false;
+// What the HOST said about itself, from its hello event. Kept separate from what is
+// currently on screen: falling back to the frozen run must not erase it, or the tag goes
+// stale and stops telling the truth the moment the host comes back.
+static bool hostModelLive = false;
 static char channelName[34] = "";
 static bool linkUp = false;
 static bool paused = false;
@@ -254,6 +271,8 @@ static uint32_t lastLineMs = 0;
 static char touchNote[24] = "";
 static uint32_t touchNoteUntil = 0;
 static float fps = 0;
+
+static bool modelOnScreen() { return source == SRC_HOST && hostModelLive; }
 
 // ---------------------------------------------------------------- marks
 
@@ -288,6 +307,104 @@ static void unpackReplaced(const char *packed, const char *replaced, char *out) 
       value = -1;
     }
   }
+}
+
+// ---------------------------------------------------------------- the frozen run
+
+// One record of box_data.h into a Strand. The format is documented at the top of that file
+// and is deliberately line based, so this is a walk over the text with no allocation.
+static bool parseRecord(const char *rec, Strand &out, int &nfix) {
+  out = Strand();
+  nfix = 0;
+  int lane = 0;
+  const char *p = rec;
+  while (*p) {
+    const char kind = *p;
+    const char *line = p + 2;  // skip "k|"
+    const char *eol = strchr(line, '\n');
+    const size_t len = eol ? (size_t)(eol - line) : strlen(line);
+
+    if (kind == 'i') {
+      int idx = 0, ok = 0, nr = 0, nf = 0;
+      sscanf(line, "%d|%d|%d|%d", &idx, &ok, &nr, &nf);
+      out.index = idx;
+      out.ok = ok != 0;
+      out.nreads = nr;
+      out.dropout = nr == 0;
+      nfix = nf;
+    } else if (kind == 'c') {
+      char cons[VISIBLE_LETTERS + 1] = {0}, marks[64] = {0}, from[32] = {0};
+      // the line is cons|marks|from, any of the last two may be empty
+      const char *a = line, *b = (const char *)memchr(line, '|', len);
+      if (b) {
+        const size_t n = (size_t)(b - a) < VISIBLE_LETTERS ? (size_t)(b - a) : VISIBLE_LETTERS;
+        memcpy(cons, a, n);
+        const char *c = (const char *)memchr(b + 1, '|', len - (b + 1 - line));
+        if (c) {
+          const size_t m = (size_t)(c - b - 1) < sizeof(marks) - 1 ? (size_t)(c - b - 1) : sizeof(marks) - 1;
+          memcpy(marks, b + 1, m);
+          const size_t k = (size_t)(line + len - c - 1) < sizeof(from) - 1
+                               ? (size_t)(line + len - c - 1) : sizeof(from) - 1;
+          memcpy(from, c + 1, k);
+        }
+      }
+      strncpy(out.cons, cons, VISIBLE_LETTERS);
+      unpackMarks(marks, out.fix);
+      unpackReplaced(marks, from, out.was);
+    } else if (kind == 'r' && lane < MAX_READ_LANES) {
+      const char *b = (const char *)memchr(line, '|', len);
+      const size_t n = b ? (size_t)(b - line) : len;
+      const size_t keep = n < VISIBLE_LETTERS ? n : VISIBLE_LETTERS;
+      memcpy(out.reads[lane], line, keep);
+      out.reads[lane][keep] = 0;
+      char marks[64] = {0};
+      if (b) {
+        const size_t m = (size_t)(line + len - b - 1) < sizeof(marks) - 1
+                             ? (size_t)(line + len - b - 1) : sizeof(marks) - 1;
+        memcpy(marks, b + 1, m);
+      }
+      unpackMarks(marks, out.rmark[lane]);
+      ++lane;
+    }
+    // 'f' full reads and 'x' the reference are for the on-device decoder, not the display
+
+    if (!eol) break;
+    p = eol + 1;
+  }
+  out.shown = lane;
+  out.used = true;
+  return true;
+}
+
+// Feed the next frozen strand, and keep the header's own running totals. In this mode
+// nobody is sending statistics, so the box counts what it plays.
+static void feedEmbedded() {
+  Strand b;
+  int nfix = 0;
+  parseRecord(kBoxData[embeddedAt], b, nfix);
+  embeddedAt = (embeddedAt + 1) % BOX_DATA_STRANDS;  // wraps, so the run loops seamlessly
+
+  ++embDone;
+  embOk += b.ok ? 1 : 0;
+  embFix += nfix;
+  embReads += b.nreads;
+  for (int r = 0; r < b.shown; ++r)
+    for (int i = 0; i < VISIBLE_LETTERS; ++i)
+      if (b.rmark[r][i] != ' ') ++embErr;
+
+  cDone.set((float)embDone, true);
+  cAcc.set(embDone ? 100.0f * embOk / embDone : 0.0f, true);
+  cFix.set((float)embFix, true);
+  cErrors.set((float)embErr, false);
+  cReads.set(embDone ? (float)embReads / embDone : 0.0f, true);
+  cProg.set((float)embeddedAt / BOX_DATA_STRANDS, true);
+
+  spark[sparkAt] = b.dropout ? 3 : (b.ok ? 1 : 2);
+  sparkAt = (sparkAt + 1) % SPARK_N;
+
+  pending = b;
+  hasPending = true;
+  haveData = true;
 }
 
 // ---------------------------------------------------------------- drawing
@@ -473,15 +590,17 @@ static void drawHeader() {
 
   canvas.setFont(&fonts::Font0);
   canvas.setTextSize(1);
-  char caption[44];
+  char caption[48];
   uint32_t capColour = C_MUTED;
   if (touchNote[0] && millis() < touchNoteUntil) {
     snprintf(caption, sizeof(caption), "%s", touchNote);
     capColour = C_AUDIT;
-  } else if (!modelLive && decoderTag[0]) {
-    // a silent drop to the classic decoder would make "fixes" sit at 0 for the whole demo,
-    // so it is called out in cost magenta rather than left to be discovered
-    snprintf(caption, sizeof(caption), "no model, %s", decoderTag);
+  } else if (source == SRC_EMBEDDED) {
+    // standing on its own: say so, and say which decoder produced what is on screen
+    snprintf(caption, sizeof(caption), "majority vote, embedded run");
+  } else if (!hostModelLive) {
+    // the Mac is attached but its polisher is not loaded, which would otherwise be invisible
+    snprintf(caption, sizeof(caption), "majority vote, on the Mac");
     capColour = C_COST;
   } else {
     // The tape is slower than the decode, so it shows a sample. The numbers above count
@@ -489,9 +608,9 @@ static void drawHeader() {
     const uint32_t seen = shownStrands ? shownStrands : 1;
     const uint32_t one_in = (uint32_t)(cDone.target / seen + 0.5f);
     if (one_in > 1)
-      snprintf(caption, sizeof(caption), "%.10s  tape 1 in %u", decoderTag, (unsigned)one_in);
+      snprintf(caption, sizeof(caption), "polish on the Mac, tape 1 in %u", (unsigned)one_in);
     else
-      snprintf(caption, sizeof(caption), "%.10s  %.1f reads", decoderTag, cReads.shown);
+      snprintf(caption, sizeof(caption), "polish on the Mac");
   }
   canvas.setTextColor(rgb(capColour), rgb(C_SURFACE));
   const int cw = strlen(caption) * 6;
@@ -530,7 +649,9 @@ static void drawHeader() {
   canvas.setFont(&fonts::Font0);
   canvas.setTextSize(1);
   canvas.setTextColor(rgb(C_MUTED), rgb(C_SURFACE));
-  const char *labels[3] = {"strands", "exact", "fixes"};
+  // "fixes" is the model's edits when the polisher is live, and the vote's own corrections
+  // when it is not. Different things, so the label says which.
+  const char *labels[3] = {"strands", "exact", modelOnScreen() ? "fixes" : "vote fixes"};
   for (int i = 0; i < 3; ++i) {
     canvas.setCursor(col[i], H_LABEL_Y);
     canvas.print(labels[i]);
@@ -596,6 +717,8 @@ static void pushCol(const Col &c) {
 // played, or an idle gap when nothing is queued.
 static void appendColumn() {
   Col c;
+  // nothing queued and no host talking: take the next strand from the frozen run
+  if (!curActive && curDivider == 0 && !hasPending && source == SRC_EMBEDDED) feedEmbedded();
   if (!curActive && curDivider == 0 && hasPending) {
     cur = pending;
     hasPending = false;
@@ -635,6 +758,23 @@ static void appendColumn() {
 // ---------------------------------------------------------------- animation step
 
 static void step(float dt) {
+  // The host wins while it is talking. When it stops, the frozen run takes over, and the
+  // counters restart from what the box itself has played, because the two sources count
+  // different runs and adding them together would be a lie.
+  const bool hostTalking = linkUp && (millis() - lastLineMs) < HOST_TIMEOUT_MS;
+  const Source want = hostTalking ? SRC_HOST : SRC_EMBEDDED;
+  if (want != source) {
+    source = want;
+    if (source == SRC_EMBEDDED) {
+      embDone = embOk = embFix = embErr = embReads = 0;
+    } else {
+      // ask the host to say what it is running, so the tag is right within a frame or two
+      Serial.println('?');
+    }
+    Serial.printf("source=%s\n", source == SRC_HOST ? "host" : "embedded");
+    haveData = true;
+  }
+
   cDone.step();
   cAcc.step();
   cFix.step();
@@ -719,8 +859,8 @@ static void handleEvent(JsonDocument &doc) {
   } else if (!strcmp(t, "hello")) {
     strncpy(decoderName, doc["dec"] | "?", sizeof(decoderName) - 1);
     const char *layer = doc["layer"] | "";
-    modelLive = !strcmp(layer, "model");
-    snprintf(decoderTag, sizeof(decoderTag), "%s", modelLive ? "polish" : "vote only");
+    hostModelLive = !strcmp(layer, "model");
+    snprintf(decoderTag, sizeof(decoderTag), "%s", hostModelLive ? "polish" : "vote only");
     snprintf(channelName, sizeof(channelName), "%s", doc["ch"] | "");
   } else if (!strcmp(t, "pass")) {
     snprintf(channelName, sizeof(channelName), "%.14s %.12s", doc["ch"] | "", doc["file"] | "");
