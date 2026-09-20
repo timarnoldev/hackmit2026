@@ -305,6 +305,48 @@ def test_real_like_crossover_renders(mock_run, results_dir):
     assert "per letter" in text or "at the same density" in text  # density is always named with reads
 
 
+def test_presentation_mode(mock_run):
+    at = run_app()
+    assert any("Details" in h.value for h in at.header)  # laptop layout has a Details section
+    at.sidebar.toggle[0].set_value(True).run()  # first sidebar toggle is presentation mode
+    assert not at.exception, at.exception
+    present_headers = [h.value for h in at.header]
+    assert not any("Details" in h for h in present_headers)  # moved into a collapsed expander
+    text = markdown_text(at)
+    assert "rule pay off" in present_headers[0]  # same order, rule audit still first
+    assert "font-size: 27px" in text  # projector stylesheet is applied
+    assert "MOCK DATA" in text
+    # Back to the laptop layout.
+    at.sidebar.toggle[0].set_value(False).run()
+    assert not at.exception, at.exception
+    assert any("Details" in h.value for h in at.header)
+
+
+def test_presentation_mode_via_url(mock_run):
+    at = AppTest.from_file(str(APP), default_timeout=60)
+    at.query_params["present"] = "1"
+    at.run()
+    assert not at.exception, at.exception
+    assert at.sidebar.toggle[0].value is True
+    assert "font-size: 27px" in markdown_text(at)
+
+
+def test_present_tier2_filter():
+    app = load_app_module()
+    entries = [tier2_entry(), tier2_entry(simulator="B"),
+               dataclasses.replace(tier2_entry(), candidates_per_strand=32),
+               dataclasses.replace(tier2_entry(), coverage=19.5)]
+    app.set_mode(False)
+    assert app.present_tier2(entries) == entries
+    app.set_mode(True)
+    try:
+        kept = app.present_tier2(entries)
+        # One row per coverage, simulator A, the most candidates tried.
+        assert [(e.coverage, e.candidates_per_strand, e.simulator) for e in kept] == [(6.0, 32, "A"), (19.5, 8, "A")]
+    finally:
+        app.set_mode(False)
+
+
 def test_no_runs_shows_hint(results_dir):
     at = run_app()
     assert not at.exception, at.exception

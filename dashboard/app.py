@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import html
+import math
 import re
 import time
 from datetime import datetime
@@ -73,7 +74,22 @@ PALETTES = {
     },
 }
 
+# Presentation mode (projector, seen from several meters): bigger type, thicker marks, fewer words.
+# Set once per script run in main(); Streamlit re-executes the module on every run, so this stays in sync.
+PRESENT = False
 FONT_SIZE = 16
+SCALE = 1.0
+
+
+def px(value: float) -> float:
+    """Scale a line width, marker size or height for the projector."""
+    return value * SCALE
+
+
+def set_mode(present: bool) -> None:
+    global PRESENT, FONT_SIZE, SCALE
+    PRESENT, FONT_SIZE, SCALE = present, 24 if present else 16, 1.45 if present else 1.0
+
 
 HEADLINE = ("We built a tool that measures whether a DNA coding rule actually pays off on your channel, "
             "and tunes the codec accordingly.")
@@ -405,11 +421,42 @@ table.audit .effect { font-size: 1.05rem; line-height: 1.4; }
 </style>
 """
 
+# Projector overrides: read from several meters, so everything grows and the page breathes.
+CSS_PRESENT = """
+<style>
+html { font-size: 27px; }
+.block-container { padding: 2rem 3rem 4rem 3rem; max-width: 100%; }
+h1 { font-size: 2.9rem !important; max-width: 44rem; }
+h2 { font-size: 2.3rem !important; margin-top: 2.6rem !important; }
+h3 { font-size: 1.7rem !important; margin-top: 1.4rem !important; }
+[data-testid="stMetricValue"] { font-size: 4.2rem; line-height: 1.1; }
+[data-testid="stMetricLabel"] p { font-size: 1.25rem; }
+[data-testid="stMetricDelta"] { font-size: 1.3rem; }
+[data-testid="stCaptionContainer"] p { font-size: 1.0rem; }
+.lede { font-size: 1.45rem; max-width: 52rem; }
+.overline { font-size: 1.05rem; }
+.contrast { font-size: 1.9rem; margin: 0.8rem 0 1.2rem 0; }
+.headline { font-size: 1.7rem; margin: 0.6rem 0 0.6rem 0; }
+.changes, .gloss { font-size: 1.15rem; }
+.muted { font-size: 1.1rem; }
+table.dash { font-size: 1.35rem; }
+table.dash th, table.dash td { padding: 0.9rem 1rem; }
+table.audit .verdict { font-size: 1.45rem; padding: 0.25rem 1rem; }
+table.audit .effect { font-size: 1.3rem; }
+table.audit .noise { font-size: 1.1rem; }
+table.compare { font-size: 1.45rem; }
+table.compare td { padding: 0.6rem 0.5rem; }
+table.compare th { font-size: 1.1rem; }
+.badge { font-size: 1.2rem; padding: 0.15rem 0.8rem; }
+[data-testid="stExpander"] summary p { font-size: 1.2rem; }
+</style>
+"""
+
 
 def base_layout(fig: go.Figure, height: int = 360) -> go.Figure:
     pal = palette()
     fig.update_layout(
-        height=height,
+        height=int(height * (1.3 if PRESENT else 1.0)),
         margin=dict(l=10, r=10, t=50, b=10),
         font=dict(size=FONT_SIZE),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=FONT_SIZE)),
@@ -420,6 +467,14 @@ def base_layout(fig: go.Figure, height: int = 360) -> go.Figure:
     fig.update_xaxes(**axis)
     fig.update_yaxes(**axis)
     return fig
+
+
+def cap(text: str, short: str | None = None) -> None:
+    """Caption. In presentation mode only the short version is shown, or nothing when there is none."""
+    if not PRESENT:
+        st.caption(text)
+    elif short:
+        st.caption(short)
 
 
 def show(fig: go.Figure, key: str) -> None:
@@ -452,6 +507,8 @@ def glossary() -> None:
         ("Rule", "a hand-written constraint like “never AAAA”, or a fixed share of spare strands."),
         ("Default (B)", "the usual fixed rules and redundancy, with the same AI decoder as ours."),
     ]
+    if PRESENT:  # fewer words on the projector; the rest stays in the developer details
+        items = [items[1], items[2], items[4]]
     for col, (term, text) in zip(st.columns(len(items)), items):
         col.markdown(f'<div class="gloss"><b>{term}</b>: {text}</div>', unsafe_allow_html=True)
 
@@ -547,14 +604,14 @@ def rule_audit_table(entries, situations: list[str]) -> str:
     head = "<th>Rule</th>" + "".join(f"<th>{html.escape(pretty_situation(s))}</th>" for s in sits)
     rows = []
     for rule in rules:
-        cells = [f'<td class="knob"><b>{html.escape(pretty_rule(rule))}</b>'
-                 f"<small>{html.escape(rule)}</small></td>"]
+        raw = "" if PRESENT else f"<small>{html.escape(rule)}</small>"
+        cells = [f'<td class="knob"><b>{html.escape(pretty_rule(rule))}</b>{raw}</td>']
         for s in sits:
             e = by.get((rule, s))
             if e is None:
                 cells.append('<td class="same">not audited</td>')
                 continue
-            note = f'<div class="muted">{html.escape(e.note)}</div>' if e.note else ""
+            note = "" if PRESENT else (f'<div class="muted">{html.escape(e.note)}</div>' if e.note else "")
             noise = f" {NOISE_BADGE}" if single_step(e) else ""
             cells.append(f'<td>{verdict_badge(e.verdict)}{noise}'
                          f'<div class="effect">{html.escape(rule_effect(e))}</div>{note}</td>')
@@ -610,11 +667,20 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
     ypad = max(0.5, (max(ys) - min(ys)) * 0.35)
     xr = [min(xs) - xpad, max(xs) + xpad]
     yr = [max(0, min(ys) - ypad), max(ys) + ypad]
+    # A default needing several times more reads than the tuned points would squash them into one corner,
+    # so switch the reads axis to log and label the measured values.
+    log_y = min(ys) > 0 and max(ys) / min(ys) >= 2.5
+    if log_y:
+        yr = [math.log10(min(ys) * 0.8), math.log10(max(ys) * 1.25)]
+
+    def yc(value: float) -> float:
+        """Shapes and annotations take log10 coordinates on a log axis; traces take the raw value."""
+        return math.log10(value) if log_y and value > 0 else value
 
     fig = go.Figure()
     if dx is not None and dy is not None:
         # Everything right of and below the default beats it on both axes.
-        fig.add_shape(type="rect", x0=dx, x1=xr[1], y0=yr[0], y1=dy, line_width=0,
+        fig.add_shape(type="rect", x0=dx, x1=xr[1], y0=yr[0], y1=yc(dy), line_width=0,
                       fillcolor=pal["better_fill"], layer="below")
         if (xr[1] - dx) >= 0.45 * (xr[1] - xr[0]):  # only label the region when the text fits inside it
             fig.add_annotation(x=dx, y=yr[0], xanchor="left", yanchor="bottom", showarrow=False,
@@ -622,25 +688,25 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
                                font=dict(color=pal["tailored"], size=FONT_SIZE - 1))
     path = ([(None, dx, dy)] if dx is not None and dy is not None else []) + pts
     for (_, x0, y0), (_, x1, y1) in zip(path, path[1:]):  # arrows along the tuning path
-        fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", text="",
-                           showarrow=True, arrowhead=2, arrowsize=1.3, arrowwidth=2, arrowcolor=pal["tailored_soft"],
+        fig.add_annotation(x=x1, y=yc(y1), ax=x0, ay=yc(y0), xref="x", yref="y", axref="x", ayref="y", text="",
+                           showarrow=True, arrowhead=2, arrowsize=1.3, arrowwidth=px(2), arrowcolor=pal["tailored_soft"],
                            standoff=11, startstandoff=11)
     if dx is not None and dy is not None:
         fig.add_trace(go.Scatter(
             x=[dx], y=[dy], mode="markers+text", name="Default codec (B)",
-            marker=dict(symbol="diamond", size=20, color=pal["default"], line=dict(color="white", width=2)),
+            marker=dict(symbol="diamond", size=px(20), color=pal["default"], line=dict(color="white", width=px(2))),
             text=["Default"], textposition="top center", textfont=dict(size=FONT_SIZE, color=pal["default"]),
             hovertemplate="Default (B)<br>%{x:.2f} bits per base<br>%{y:.1f} reads needed<extra></extra>",
         ))
     if matched:
         by_it = {id(it): y for it, _, y in pts}
         for it, x, m in matched:  # dotted link: the gap is the reads saved at equal density
-            fig.add_shape(type="line", x0=x, x1=x, y0=m, y1=by_it[id(it)], layer="below",
+            fig.add_shape(type="line", x0=x, x1=x, y0=yc(m), y1=yc(by_it[id(it)]), layer="below",
                           line=dict(color=pal["default"], width=1.5, dash="dot"))
         fig.add_trace(go.Scatter(
             x=[x for _, x, _ in matched], y=[m for _, _, m in matched], mode="markers",
             name="Default rules at the same bits per base",
-            marker=dict(symbol="diamond-open", size=15, color=pal["default"], line=dict(width=2.5)),
+            marker=dict(symbol="diamond-open", size=px(15), color=pal["default"], line=dict(width=px(2.5))),
             customdata=[step_name(run, it) for it, _, _ in matched],
             hovertemplate="Default rules at the bits per base of %{customdata}<br>%{x:.2f} bits per base"
                           "<br>%{y:.1f} reads needed<extra></extra>",
@@ -655,10 +721,12 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
         if any(labels) and crowded(pts, xr, yr):  # long labels would collide: use C / D / E1 (caption explains)
             labels = [short_step(run, it) if stage_label(run, it) else lab for lab, (it, _, _) in zip(labels, pts)]
         labels = merge_coincident_labels(run, pts, labels)
+        if PRESENT and len(labels) > 2:  # projector: label where the tuning starts and where it ends
+            labels = [labels[0]] + [""] * (len(labels) - 2) + [labels[-1]]
         fig.add_trace(go.Scatter(
             x=[x for _, x, _ in pts], y=[y for _, _, y in pts], mode="markers+text",
             name="Tuning steps",
-            marker=dict(size=[14] * last + [22], color=pal["tailored"], line=dict(color="white", width=2)),
+            marker=dict(size=[px(14)] * last + [px(22)], color=pal["tailored"], line=dict(color="white", width=px(2))),
             text=labels,
             textposition=["bottom left"] * last + ["bottom right"],
             textfont=dict(size=FONT_SIZE, color=pal["tailored"]),
@@ -672,6 +740,12 @@ def pareto_chart(run: RunResult) -> go.Figure | None:
                       legend=dict(orientation="h", yanchor="top", y=-0.22, x=0, font=dict(size=FONT_SIZE - 2)))
     fig.update_xaxes(title="bits per base (more data →)", range=xr)
     fig.update_yaxes(title="reads per strand needed (fewer ↓)", range=yr)
+    if log_y:  # label the measured values, not powers of ten, and drop ticks that would touch
+        ticks: list[float] = []
+        for v in sorted({round(v, 1) for v in ys}):
+            if not ticks or math.log10(v) - math.log10(ticks[-1]) > 0.05:
+                ticks.append(v)
+        fig.update_yaxes(type="log", tickmode="array", tickvals=ticks, ticktext=[f"{v:g}" for v in ticks])
     return fig
 
 
@@ -698,7 +772,9 @@ def compare_table(run: RunResult, best: IterationResult) -> str:
     """Default vs tailored, with a colored change (green = better, red = worse, plus arrow)."""
     pal = palette()
     rows = []
-    for label, get, fmt, higher_better, as_points in COMPARE_ROWS:
+    # On the projector, keep the four numbers the claim rests on; costs are placeholders anyway.
+    compare_rows = COMPARE_ROWS[:4] if PRESENT else COMPARE_ROWS
+    for label, get, fmt, higher_better, as_points in compare_rows:
         old, cur = get(run, None), get(run, best)
         if label == "Reads per strand needed":
             old, matched = reference_reads(run, best)
@@ -889,7 +965,7 @@ def crossover_chart(summary: ExperimentSummary) -> go.Figure | None:
         if codec in channels:
             xi = channels.index(codec)
             fig.add_shape(type="rect", x0=xi - 0.5, x1=xi + 0.5, y0=ci - 0.5, y1=ci + 0.5,
-                          line=dict(color=pal["tailored"], width=4))
+                          line=dict(color=pal["tailored"], width=px(4)))
     base_layout(fig, height=130 + 125 * len(codecs))
     fig.update_layout(margin=dict(t=40, l=10))
     fig.update_xaxes(title="evaluated on channel", side="top", showgrid=False, tickfont=dict(size=FONT_SIZE + 1))
@@ -956,6 +1032,21 @@ def tier2_config(e, compact: bool = False) -> str:
     return base + ("<br>other simulator (B)" if compact else " · other simulator (B)")
 
 
+def present_tier2(entries: list) -> list:
+    """Projector: one row per coverage, simulator A, the configuration with the most candidates tried.
+    The full grid stays in the developer details."""
+    if not PRESENT:
+        return entries
+    best: dict[float, object] = {}
+    for e in entries:
+        if getattr(e, "simulator", "A") != "A":
+            continue
+        cur = best.get(e.coverage)
+        if cur is None or e.candidates_per_strand > cur.candidates_per_strand:
+            best[e.coverage] = e
+    return [best[c] for c in sorted(best)] or entries[:2]
+
+
 def tier2_order(e) -> tuple:
     return (getattr(e, "simulator", "A") != "A", e.coverage, e.candidates_per_strand)
 
@@ -996,9 +1087,9 @@ def tier2_chart(entries, situation: str) -> go.Figure:
     colors = [pal["good"] if h < 0 else pal["bad"] if lo_ > 0 else pal["muted"] for lo_, h in zip(los, his)]
     fig.add_trace(go.Scatter(
         y=ys, x=diffs, mode="markers", showlegend=False,
-        marker=dict(size=14, color=colors, line=dict(color="white", width=1.5)),
+        marker=dict(size=px(14), color=colors, line=dict(color="white", width=px(1.5))),
         error_x=dict(type="data", symmetric=False, array=[h - d for h, d in zip(his, diffs)],
-                     arrayminus=[d - lo_ for d, lo_ in zip(diffs, los)], thickness=2.5, width=8, color=pal["muted"]),
+                     arrayminus=[d - lo_ for d, lo_ in zip(diffs, los)], thickness=px(2.5), width=px(8), color=pal["muted"]),
         customdata=list(zip(los, his)),
         hovertemplate="%{x:+.2f} points (95% CI %{customdata[0]:+.2f} to %{customdata[1]:+.2f})<extra></extra>",
     ), row=1, col=2)
@@ -1141,7 +1232,7 @@ def coverage_chart(run: RunResult, target: float) -> tuple[go.Figure | None, str
         fig.add_trace(go.Scatter(
             x=[p.coverage for p in pts], y=[p.strand_accuracy * 100 for p in pts],
             mode="lines+markers", name=label,
-            line=dict(color=color, width=4 if name == "tailored" else 2.5), marker=dict(size=9),
+            line=dict(color=color, width=px(4 if name == "tailored" else 2.5)), marker=dict(size=px(9)),
             hovertemplate="%{x:g} reads: %{y:.1f}% exact<extra>" + label + "</extra>",
         ))
         need = coverage_needed(pts, target)
@@ -1150,7 +1241,7 @@ def coverage_chart(run: RunResult, target: float) -> tuple[go.Figure | None, str
             pos = {"tailored": "top left", "transformer": "bottom right"}.get(name)
             fig.add_trace(go.Scatter(
                 x=[need], y=[target * 100], mode="markers+text" if pos else "markers", showlegend=False,
-                marker=dict(size=14, color=color, line=dict(color="white", width=2)),
+                marker=dict(size=px(14), color=color, line=dict(color="white", width=px(2))),
                 text=[f"{need:.1f} reads"], textposition=pos or "top center",
                 textfont=dict(size=FONT_SIZE, color=color),
                 hovertemplate=f"{label} reaches {target:.0%} at %{{x:.1f}} reads<extra></extra>",
@@ -1217,13 +1308,13 @@ def loop_chart(runs: list[RunResult], metric: str) -> go.Figure:
         first = col == 1
         if dflt is not None:
             fig.add_trace(go.Scatter(
-                x=[0], y=[dflt], mode="markers", marker=dict(symbol="diamond", size=16, color=pal["default"]),
+                x=[0], y=[dflt], mode="markers", marker=dict(symbol="diamond", size=px(16), color=pal["default"]),
                 name="Default (B)", legendgroup="d", showlegend=first, hovertemplate="Default: %{y:.2f}<extra></extra>",
             ), row=1, col=col)
         fig.add_trace(go.Scatter(
             x=([0] if dflt is not None else []) + xs, y=([dflt] if dflt is not None else []) + ys,
             customdata=(["default"] if dflt is not None else []) + names,
-            mode="lines+markers", line=dict(color=pal["tailored"], width=3), marker=dict(size=10),
+            mode="lines+markers", line=dict(color=pal["tailored"], width=px(3)), marker=dict(size=px(10)),
             name="Tuned, per step", legendgroup="t", showlegend=first,
             hovertemplate="%{customdata}: %{y:.2f}<extra></extra>",
         ), row=1, col=col)
@@ -1233,7 +1324,7 @@ def loop_chart(runs: list[RunResult], metric: str) -> go.Figure:
             if mx:
                 fig.add_trace(go.Scatter(
                     x=[x for x, _ in mx], y=[m for _, m in mx], mode="markers",
-                    marker=dict(symbol="diamond-open", size=14, color=pal["default"], line=dict(width=2.5)),
+                    marker=dict(symbol="diamond-open", size=px(14), color=pal["default"], line=dict(width=px(2.5))),
                     name="Default rules at the same bits per base", legendgroup="m", showlegend=True,
                     hovertemplate="Default at same bits per base: %{y:.2f}<extra></extra>",
                 ), row=1, col=col)
@@ -1297,12 +1388,12 @@ def render_body(run_id: str, focus: str, target: float) -> None:
 
     st.markdown('<div class="overline">Adaptive DNA codec · HackMIT 2026</div>', unsafe_allow_html=True)
     st.title(HEADLINE)
-    st.markdown(
-        '<p class="lede">DNA storage pipelines copy the same hand-written rules to every sequencing channel. '
-        "We switch each rule on and off, measure what it costs and what it buys, and keep only what pays off. "
-        "Then decoder failures teach the encoder what else to avoid. Same encoder, <b>same decoder</b>.</p>",
-        unsafe_allow_html=True,
-    )
+    lede = ("Every channel gets the same hand-written rules. We measure each one and keep only what pays off. "
+            "Same encoder, <b>same decoder</b>.") if PRESENT else (
+        "DNA storage pipelines copy the same hand-written rules to every sequencing channel. We switch each rule "
+        "on and off, measure what it costs and what it buys, and keep only what pays off. Then decoder failures "
+        "teach the encoder what else to avoid. Same encoder, <b>same decoder</b>.")
+    st.markdown(f'<p class="lede">{lede}</p>', unsafe_allow_html=True)
     glossary()
 
     audit = list(getattr(summary, "rule_audit", None) or [])
@@ -1315,9 +1406,11 @@ def render_body(run_id: str, focus: str, target: float) -> None:
 
     if audit:
         section("Does each rule pay off on this channel?")
-        st.caption("Each rule is measured on the default codec with the same decoder: switched off (or replaced by "
-                   "a tuned value) with everything else unchanged. Reads needed = reads per strand to recover the "
-                   "file every time.")
+        cap("Each rule is measured on the default codec with the same decoder: switched off (or replaced by "
+            "a tuned value) with everything else unchanged. Reads needed = reads per strand to recover the "
+            "file every time.",
+            "Each rule switched off on the default codec, same decoder. Reads needed = reads per strand to "
+            "recover the file every time.")
         contrast = audit_contrast(audit, audit_sits)
         if contrast:
             st.markdown(f'<div class="contrast">{html.escape(contrast)}</div>', unsafe_allow_html=True)
@@ -1325,18 +1418,22 @@ def render_body(run_id: str, focus: str, target: float) -> None:
 
     if runs:
         section("The tuned codec moves past the default")
-        st.caption("Each panel is one channel. Gray diamond = default codec, blue dots = tuning steps "
-                   "(C = rules audited, D = + learned selection, E = full loop). Hollow gray diamond = the default "
-                   "rules at the same bits per base as the blue dot above it, so the gap is reads saved at equal "
-                   "density. Down and right is better.")
+        cap("Each panel is one channel. Gray diamond = default codec, blue dots = tuning steps "
+            "(C = rules audited, D = + learned selection, E = full loop). Hollow gray diamond = the default "
+            "rules at the same bits per base as the blue dot above it, so the gap is reads saved at equal "
+            "density. Down and right is better.",
+            "Gray = default codec, blue = tuning steps, hollow gray = default rules at the same density. "
+            "Down and right is better.")
         in_columns(runs, verdict)
 
     if summary is not None and summary.crossover:
         section("Each codec at home and away")
-        st.caption("Every tuned codec on every channel: reads per strand needed to recover the file, bits per base "
-                   "it stores, and file recovery at the channel's read budget. Changes are against the default on "
-                   "that channel. Blue = better than the default in reads and density, red = worse in both or "
-                   "target missed, gray = a trade-off. Outlined cells: the codec on its own channel.")
+        cap("Every tuned codec on every channel: reads per strand needed to recover the file, bits per base "
+            "it stores, and file recovery at the channel's read budget. Changes are against the default on "
+            "that channel. Blue = better than the default in reads and density, red = worse in both or "
+            "target missed, gray = a trade-off. Outlined cells: the codec on its own channel.",
+            "Blue = better than the default in reads and density, red = worse in both, gray = a trade-off. "
+            "Outlined: the codec on its own channel.")
         fig = crossover_chart(summary)
         cols = st.columns([3, 2]) if len(shown) <= 2 else [st.container(), st.container()]
         with cols[0]:
@@ -1353,9 +1450,11 @@ def render_body(run_id: str, focus: str, target: float) -> None:
     if summary is not None and (summary.ablation or tier2):
         section("Where the gain comes from")
     if summary is not None and summary.ablation:
-        st.caption("A and B use the same fixed rules; B swaps in the AI decoder and is the default we compare "
-                   "against. Tier 1 (B to C): rules audited and redundancy tuned, same decoder. Tier 2 (C to D): "
-                   "a risk model learned from decoder failures picks the candidates. E re-tunes the decoder too.")
+        cap("A and B use the same fixed rules; B swaps in the AI decoder and is the default we compare "
+            "against. Tier 1 (B to C): rules audited and redundancy tuned, same decoder. Tier 2 (C to D): "
+            "a risk model learned from decoder failures picks the candidates. E re-tunes the decoder too.",
+            "B is the default we compare against. Tier 1 (B to C): rules audited. Tier 2 (C to D): learned "
+            "candidate picking, same decoder.")
         sits = [s for s in shown if any(e.situation == s for e in summary.ablation)] or sorted(
             {e.situation for e in summary.ablation}, key=situation_rank)
         for start in range(0, len(sits), 3):
@@ -1365,16 +1464,18 @@ def render_body(run_id: str, focus: str, target: float) -> None:
                     show(ablation_chart(summary, s), key=f"ablation-{s}")
     if tier2:
         st.subheader("Tier 2, measured directly")
-        st.caption("Same settings, same decoder, same test trials. Only the candidate picker differs: the hand-written "
-                   "rule scorer or the risk model learned from decoder failures. Strand failure = share of strands "
-                   "not read back exactly. Error bars: 95% confidence interval of the paired difference.")
+        cap("Same settings, same decoder, same test trials. Only the candidate picker differs: the hand-written "
+            "rule scorer or the risk model learned from decoder failures. Strand failure = share of strands "
+            "not read back exactly. Error bars: 95% confidence interval of the paired difference.",
+            "Same settings, same decoder, same trials. Only the candidate picker differs. Error bars: 95% CI "
+            "of the paired difference.")
         t2_sits = [s for s in shown if any(e.situation == s for e in tier2)] or sorted(
             {e.situation for e in tier2}, key=situation_rank)
         for start in range(0, len(t2_sits), 3):
             chunk = t2_sits[start:start + 3]
             for col, s in zip(st.columns(len(chunk), gap="large"), chunk):
                 with col:
-                    entries = sorted((e for e in tier2 if e.situation == s), key=tier2_order)
+                    entries = present_tier2(sorted((e for e in tier2 if e.situation == s), key=tier2_order))
                     show(tier2_chart(entries, s), key=f"tier2-{s}")
                     for e in entries:
                         prefix = f"**{tier2_config(e)}:** " if len(entries) > 1 else ""
@@ -1382,7 +1483,8 @@ def render_body(run_id: str, focus: str, target: float) -> None:
 
     if runs:
         section("What the encoder learned")
-        st.caption("Short DNA patterns each channel's risk model learned to fear. The encoder steers around them.")
+        cap("Short DNA patterns each channel's risk model learned to fear. The encoder steers around them.",
+            "Patterns each channel's risk model learned to avoid.")
 
         def render_risky(run: RunResult) -> None:
             best = tailored(run)
@@ -1398,68 +1500,102 @@ def render_body(run_id: str, focus: str, target: float) -> None:
             show(risky_chart(run, best), key=f"risky-{run.situation}")
 
         in_columns(runs, render_risky)
-        if summary is not None and summary.examples:
+        if summary is not None and summary.examples and not PRESENT:
             st.subheader("Same strand, different verdict per channel")
             st.markdown(examples_table(summary, shown), unsafe_allow_html=True)
         st.subheader("Encoder settings per channel")
-        st.caption("Blue cells: rules the loop changed from the default for that channel.")
+        cap("Blue cells: rules the loop changed from the default for that channel.",
+            "Blue cells: what the loop changed.")
         st.markdown(settings_table(runs), unsafe_allow_html=True)
 
-    section("Details")
-    if summary is not None and summary.firewall:
-        st.subheader("Does it hold outside our own simulator?")
-        st.caption("Tuned on our simulator only. Checked on unseen seeds, a differently built simulator, and real reads.")
-        st.markdown(firewall_table(summary), unsafe_allow_html=True)
+    # On the projector the details are one collapsed expander: nothing to squint at unless asked.
+    if PRESENT:
+        details_box = st.expander("Developer details: simulator checks, curves, per-position errors, raw numbers",
+                                  expanded=False)
+    else:
+        section("Details")
+        details_box = st.container()
+    with details_box:
+        if PRESENT and summary is not None and summary.examples:
+            st.subheader("Same strand, different verdict per channel")
+            st.markdown(examples_table(summary, shown), unsafe_allow_html=True)
+        if PRESENT and tier2:
+            st.subheader("Tier 2, every configuration")
+            for s_ in sorted({e.situation for e in tier2}, key=situation_rank):
+                entries = sorted((e for e in tier2 if e.situation == s_), key=tier2_order)
+                show(tier2_chart(entries, s_), key=f"tier2-all-{s_}")
+        if summary is not None and summary.firewall:
+            st.subheader("Does it hold outside our own simulator?")
+            cap("Tuned on our simulator only. Checked on unseen seeds, a differently built simulator, and real reads.")
+            st.markdown(firewall_table(summary), unsafe_allow_html=True)
 
-    if runs:
-        st.subheader("Strand accuracy vs reads per strand")
+        if runs:
+            st.subheader("Strand accuracy vs reads per strand")
 
-        def render_cov(run: RunResult) -> None:
-            fig, msg = coverage_chart(run, target)
-            if fig is None:
-                st.info(f"{pretty_situation(run.situation)}: no coverage curve yet.")
-                return
-            if msg:
-                st.markdown(msg)
-            show(fig, key=f"cov-{run.situation}")
+            def render_cov(run: RunResult) -> None:
+                fig, msg = coverage_chart(run, target)
+                if fig is None:
+                    st.info(f"{pretty_situation(run.situation)}: no coverage curve yet.")
+                    return
+                if msg:
+                    st.markdown(msg)
+                show(fig, key=f"cov-{run.situation}")
 
-        in_columns(runs, render_cov)
+            in_columns(runs, render_cov)
 
-        st.subheader("Where along the strand errors happen")
-        st.caption("Darker = more letters decoded wrong at that position. Lower rows are later loop alternations.")
+            st.subheader("Where along the strand errors happen")
+            cap("Darker = more letters decoded wrong at that position. Lower rows are later loop alternations.")
 
-        def render_pos(run: RunResult) -> None:
-            if not run.default_metrics.per_position_error and not run.iterations:
-                st.info("No per-position data.")
-                return
-            show(position_chart(run), key=f"pos-{run.situation}")
+            def render_pos(run: RunResult) -> None:
+                if not run.default_metrics.per_position_error and not run.iterations:
+                    st.info("No per-position data.")
+                    return
+                show(position_chart(run), key=f"pos-{run.situation}")
 
-        in_columns(runs, render_pos)
+            in_columns(runs, render_pos)
 
-        if any(r.iterations for r in runs):
-            st.subheader("The loop, alternation by alternation")
-            show(loop_chart(runs, "min_reads_at_target"), key="loop-reads")
-            show(loop_chart(runs, "bits_per_base"), key="loop-bits")
+            if any(r.iterations for r in runs):
+                st.subheader("The loop, alternation by alternation")
+                show(loop_chart(runs, "min_reads_at_target"), key="loop-reads")
+                show(loop_chart(runs, "bits_per_base"), key="loop-bits")
 
-        with st.expander("Raw numbers per channel"):
-            for run in runs:
-                st.markdown(f"**{pretty_situation(run.situation)}** ({run.situation}): "
-                            f"{html.escape(run.profile.description)}. Target: {target_text(run)}. "
-                            f"Created {run.created_at}. Profile calibrated from: "
-                            f"{run.profile.calibrated_from or 'not calibrated (guessed)'}.")
-                st.dataframe(iteration_table(run), hide_index=True)
-            st.caption("* cost columns use placeholder prices.")
+            with st.expander("Raw numbers per channel"):
+                for run in runs:
+                    st.markdown(f"**{pretty_situation(run.situation)}** ({run.situation}): "
+                                f"{html.escape(run.profile.description)}. Target: {target_text(run)}. "
+                                f"Created {run.created_at}. Profile calibrated from: "
+                                f"{run.profile.calibrated_from or 'not calibrated (guessed)'}.")
+                    st.dataframe(iteration_table(run), hide_index=True)
+                st.caption("* cost columns use placeholder prices.")
 
     st.caption(f"Run `{run_id}` · {len(runs)} channel(s) · refreshed {datetime.now():%H:%M:%S}")
 
 
+def query_flag(name: str) -> bool:
+    try:
+        value = st.query_params.get(name)
+    except Exception:  # no browser context (tests)
+        return False
+    return str(value).lower() in ("1", "true", "yes", "on")
+
+
 def main() -> None:
-    st.set_page_config(page_title="Adaptive DNA codec", page_icon="🧬", layout="wide")
+    from_url = query_flag("present")
+    st.set_page_config(page_title="Adaptive DNA codec", page_icon="🧬", layout="wide",
+                       initial_sidebar_state="collapsed" if from_url else "auto")
+    # The toggle lives in the sidebar, but the whole page has to know before anything is drawn.
+    if "present_mode" not in st.session_state:
+        st.session_state["present_mode"] = from_url
+    set_mode(bool(st.session_state["present_mode"]))
     st.markdown(CSS, unsafe_allow_html=True)
+    if PRESENT:
+        st.markdown(CSS_PRESENT, unsafe_allow_html=True)
 
     run_ids = list_run_ids()
     with st.sidebar:
         st.header("Controls")
+        st.toggle("Presentation mode", key="present_mode",
+                  help="Projector layout: large type, fewer words, details collapsed. Also `?present=1` in the URL.")
         if not run_ids:
             st.warning("No runs in results/. Generate mock data with "
                        "`uv run python -m scripts.make_mock_results`.")
