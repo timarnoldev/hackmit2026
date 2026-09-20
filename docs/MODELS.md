@@ -73,10 +73,13 @@ corrected strand
 
 Measured on the real Microsoft **held-out** split (1,996 clusters), exact strands, with the protocol of `scripts/eval_real.py`:
 
-| Reads per strand | 2 | 4 | 6 | 10 | 16 | full |
-|---|---|---|---|---|---|---|
-| Baseline (majority vote) | 5.0% | 41.0% | 67.0% | 83.0% | 90.0% | 90.3% |
-| **Polisher** | 5.9% | **56.8%** | **82.5%** | **92.7%** | **95.1%** | **95.3%** |
+Averaged over 20 independent read draws per point, mean ± sd:
+
+| Reads per strand | 2 | 4 | 6 | 10 | 16 |
+|---|---|---|---|---|---|
+| Baseline (majority vote) | 5.2% ±0.5 | 39.9% ±0.9 | 67.2% ±0.8 | 84.1% ±0.5 | 89.7% ±0.3 |
+| **Polisher, default** | 5.8% ±0.5 | **56.7%** ±1.2 | **82.3%** ±0.9 | **92.9%** ±0.3 | **95.3%** ±0.2 |
+| **Polisher, best inference variant** | 7.0% ±0.7 | **66.6%** ±1.1 | **88.1%** ±0.5 | **95.7%** ±0.3 | **97.2%** ±0.2 |
 
 The gain is largest at 4 to 6 reads, which is the range the loop operates in. At 2 reads it's a tie: the draft is essentially a single read there, so there is nothing to correct with.
 

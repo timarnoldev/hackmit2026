@@ -10,14 +10,18 @@ Status legend: ✅ measured and independently re-checked · ☑️ measured once
 
 **Setup:** Microsoft clustered Nanopore reads, **held-out split** (1,996 clusters; every 5th cluster, never used for training, tuning or calibration). Each cluster subsampled to at most N reads with fixed seeds from `heldout_seeds()`. Metric: **share of strands reconstructed exactly**, all 110 letters correct. Protocol: `scripts/eval_real.py`, numbers from `dnacodec.evaluate.evaluate`.
 
-| Reads per strand | 2 | 4 | 6 | 10 | 16 | full (mean 27) | Status |
-|---|---|---|---|---|---|---|---|
-| Baseline (align + majority vote) | 4.8% | 39.2% | 68.0% | 85.3% | 90.5% | 90.3% | ✅ |
-| Polisher, default (used in the loops) | 5.2% | 56.0% | 83.3% | 93.2% | 95.4% | 95.3% | ✅ |
-| Polisher, best variant (3 drafts, 2 rounds, gain-mode edits) | 7.0% | 66.1% | 88.8% | 96.2% | 97.2% | 97.3% | ☑️ |
+Averaged over **20 independent read draws per point** (a single draw moves the number by up to a point, which is why earlier tables in this repo disagreed slightly). Mean ± standard deviation:
 
-- **Independent re-check** (architect, own counting code, different subsample seeds): baseline 5.0 / 41.0 / 67.0 / 83.0 / 90.0%, polisher default 5.9 / 56.8 / 82.5 / 92.7 / 95.1%. Differences of about one point against the table above are subsample noise.
-- **Headline sentence:** at 6 reads per strand the learned decoder reconstructs 88.8% of strands exactly, against 68.0% for the classic method, on real Nanopore data it never saw.
+| Reads per strand | 2 | 4 | 6 | 10 | 16 | Status |
+|---|---|---|---|---|---|---|
+| Baseline (align + majority vote) | 5.2% ±0.5 | 39.9% ±0.9 | 67.2% ±0.8 | 84.1% ±0.5 | 89.7% ±0.3 | ✅ |
+| Polisher, default (used in the loops) | 5.8% ±0.5 | 56.7% ±1.2 | 82.3% ±0.9 | 92.9% ±0.3 | 95.3% ±0.2 | ✅ |
+| Polisher, best variant (3 drafts, 2 rounds, gain-mode edits) | 7.0% ±0.7 | **66.6% ±1.1** | **88.1% ±0.5** | 95.7% ±0.3 | 97.2% ±0.2 | ✅ |
+
+Reproduce: `uv run --extra train python scripts/stable_decoder_numbers.py --draws 20`, raw numbers in `results/decoder_real_heldout.json`. Note that "16 reads" is also our highest-coverage number: both decoders cap at 16 reads per cluster, so we have no all-reads figure.
+
+- **Independently re-checked** by the architect with separate counting code and different seeds; every value sits inside the spread above.
+- **Headline sentence:** at 6 reads per strand the learned decoder reconstructs 88.1% of strands exactly, against 67.2% for the classic method, on real Nanopore data it never saw. That is 21 points, and it more than halves the failures, from 32.8% to 11.9%.
 - **Speed:** baseline about 7,600 clusters/s, polisher default about 3,800, best variant about 860 (single process, GX10).
 
 **Ceiling, measured:** with *all* reads the polisher still fails on **4.7%** of strands, so those are unrecoverable in principle (errors shared by every read, plus malformed clusters). At 6 reads it fails on 18.6%, of which 19.6% are in that hopeless group. ✅
