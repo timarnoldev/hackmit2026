@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erbgut, a DNA codec tuner that measures its own rules</title>
+<meta name="description" content="Erbgut measures whether each DNA coding rule actually pays off on a given sequencing channel, and tunes the codec accordingly. Measured on real held-out Nanopore reads. HackMIT 2026.">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#EAF3ED">
+<link rel="canonical" href="https://timarnoldev.github.io/hackmit2026/">
+
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/favicon.svg">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Erbgut">
+<meta property="og:title" content="Erbgut, a DNA codec tuner that measures its own rules">
+<meta property="og:description" content="Every DNA coding rule is a hypothesis. Erbgut measures which ones pay off on your sequencing channel, and tunes the codec to the answer.">
+<meta property="og:url" content="https://timarnoldev.github.io/hackmit2026/">
+<meta property="og:image" content="https://timarnoldev.github.io/hackmit2026/assets/og.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Erbgut. Measure the rule. Keep what pays. A DNA strand with a run of four identical letters marked by a measuring bracket.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Erbgut, a DNA codec tuner that measures its own rules">
+<meta name="twitter:description" content="Every DNA coding rule is a hypothesis. Erbgut measures which ones pay off on your sequencing channel, and tunes the codec to the answer.">
+<meta name="twitter:image" content="https://timarnoldev.github.io/hackmit2026/assets/og.png">
+<meta name="twitter:image:alt" content="Erbgut. Measure the rule. Keep what pays.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./">
+      <img src="assets/mark.svg" alt="" width="34" height="34">
+      <span>Erbgut</span>
+    </a>
+    <nav aria-label="Sections">
+      <a href="#problem">Problem</a>
+      <a href="#product">What it does</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#moat">Defensibility</a>
+      <a href="#next">What is next</a>
+      <a href="#team">Team</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ===================================================== 1. Hero -->
+<section class="hero">
+  <div class="wrap">
+    <p class="tagline">Measure the rule. Keep what pays.</p>
+    <h1>Every DNA coding rule is a hypothesis. We measure which ones pay off.</h1>
+    <p class="lead">Erbgut audits the sequence rules and the redundancy a DNA storage pipeline uses, one sequencing channel at a time, then tunes the codec to what the measurement says. Same encoder, same decoder, one fixed recovery target on both sides of every comparison.</p>
+    <p class="gloss">Erbgut is German for the genetic material an organism inherits and passes on. The repository name is Adaptive DNA Codec.</p>
+
+    <div class="claim">
+      <span class="big">88.1%<small> against 67.2%</small></span>
+      <p>Share of strands reconstructed exactly at six reads per strand, our decoder against the classic majority vote, on 1,996 real Nanopore clusters that no training, tuning or calibration step ever touched. Mean over 20 independent read draws, spread ±0.5 and ±0.8 points. It more than halves the failures, from 32.8% to 11.9%.</p>
+    </div>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/timarnoldev/hackmit2026">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        Read the code on GitHub
+      </a>
+      <a class="btn btn-ghost" href="deck/">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        Open the pitch deck
+      </a>
+    </div>
+
+    <div class="strip">
+      <div>
+        <div class="n">1 of 2</div>
+        <div class="d">Each of the two standard sequence rules pays off on exactly one of the two channels we measured, and does nothing on the other. Nobody measures that today.</div>
+      </div>
+      <div>
+        <div class="n">&minus;4.2 pts</div>
+        <div class="d">Strand failures on Nanopore at six reads when the encoder picks candidates with a learned risk model instead of the hand rules. Survives a structurally different second simulator.</div>
+      </div>
+      <div>
+        <div class="n">0.8M</div>
+        <div class="d">Parameters in the decoder, matching a fine-tuned 100M-parameter published model at four, six and ten reads, after 13 minutes of training on one machine.</div>
+      </div>
+      <div>
+        <div class="n">170 ms</div>
+        <div class="d">To decode one strand on a 50 dollar ESP32-S3 microcontroller. No published trace reconstruction system runs on a chip that small.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== 2. Problem -->
+<section id="problem" class="alt">
+  <div class="wrap prose">
+    <p class="kicker">The problem</p>
+    <div class="intro">
+      <h2>Writing DNA keeps getting cheaper. Reading it is the bill that comes back.</h2>
+    </div>
+
+    <div class="cards two">
+      <div class="card">
+        <h3>The medium is real, and the industry is organised</h3>
+        <p>Archival demand keeps growing. IDC forecast in 2018 that the global datasphere would grow from 33 zettabytes in 2018 to <b>175 zettabytes by 2025</b>, and that more than 22 zettabytes of storage capacity would have to ship across all media types in between (<a href="https://www.seagate.com/files/www-content/our-story/trends/files/idc-seagate-dataage-whitepaper.pdf">IDC and Seagate, <cite>The Digitization of the World</cite>, November 2018</a>).</p>
+        <p>DNA is no longer only an academic idea. The DNA storage industry now runs as a <a href="https://www.snia.org/groups/snia-dna-technology-affiliate">SNIA Technology Affiliate</a> and has published interoperability specifications, <a href="https://www.snia.org/sites/default/files/technical-work/dna/release/DNA%20Data%20Storage%20Sector%20Zero%20v1.0.pdf">Sector Zero</a> and <a href="https://www.snia.org/sites/default/files/technical-work/dna/release/DNA%20Data%20Storage%20Sector%20One%20v1.0.pdf">Sector One</a>, which is what a field does when it expects products.</p>
+        <p>Writing is still the gating cost, and it is the one everyone is attacking. Array synthesis was <b>estimated at about $0.0001 per base in 2019</b>, which the authors put at roughly $800 million per terabyte, seven to eight orders of magnitude above tape (Carlson's estimate, reported in Ceze, Nivala and Strauss, <a href="https://www.nature.com/articles/s41576-019-0125-3"><cite>Molecular digital data storage using DNA</cite></a>, Nature Reviews Genetics, 2019). Array synthesis already sits two to four orders of magnitude below column synthesis (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC7098426/">Kosuri and Church, Nature Methods, 2014</a>).</p>
+      </div>
+      <div class="card">
+        <h3>Reading is the bill that comes back</h3>
+        <p>Sequencing has fallen further and faster than almost anything in computing. NHGRI's cost accounting puts the price of producing one megabase of sequence at <b>$0.0058 as of its May 2022 data point</b>, against $5,292.39 in September 2001 (<a href="https://www.genome.gov/about-genomics/fact-sheets/DNA-Sequencing-Costs-Data">NHGRI, <cite>DNA Sequencing Costs: Data</cite></a>, figures in the <a href="https://www.genome.gov/sites/default/files/media/files/2023-05/Sequencing_Cost_Data_Table_May2022.xls">May 2022 data table</a>).</p>
+        <p>You still pay it every time you read, and you pay it per read, not per strand. The DNA Data Storage Alliance derives a sequencing cost of <b>$800 to $1,500 per gigabyte</b> of stored data, and its own footnote states the assumption behind it: <b>10x read coverage</b>, that is ten reads of every fragment, so that none is missed (<a href="https://dnastoragealliance.org/wp-content/uploads/2021/06/DNA-Data-Storage-Alliance-An-Introduction-to-DNA-Data-Storage.pdf"><cite>An Introduction to DNA Data Storage</cite></a>, June 2021). The same document notes that sequencing cost is what gates archival use, because archives get read.</p>
+        <p>Published experiments show the same multiplier in practice. Organick and colleagues recovered files at a <b>mean sequencing coverage of 35x</b> with about ten physical copies of each sequence, and wrote plainly that increasing sequencing coverage significantly increases the cost of recovery (<a href="https://www.nature.com/articles/s41467-020-14319-8"><cite>Probing the physical limits of reliable DNA data retrieval</cite></a>, Nature Communications, 2020).</p>
+      </div>
+    </div>
+
+    <div class="cards two" style="margin-top:18px">
+      <div class="card">
+        <h3>The rules are folklore</h3>
+        <p>To survive that noise, pipelines follow rules that were chosen once, copied between papers, and then applied to every sequencing channel: no run of the same letter longer than three, GC content between 40 and 60%, a fixed amount of redundancy, often 30% extra strands. Nanopore and Illumina fail in very different ways, and the rules do not distinguish between them.</p>
+        <p><b>Every rule costs something.</b> A rule that rejects candidate strands costs density or reads. Redundancy costs strands you have to synthesize. If a rule does not reduce failures on your channel, you are paying for it and getting nothing back.</p>
+      </div>
+      <div class="card">
+        <h3>What we sell, mechanically</h3>
+        <p>Notice what the Alliance's dollar figure actually rests on. It is a cost per gigabyte <em>at an assumed coverage</em>. Coverage is the multiplier, and it is set by how many reads your codec and decoder need before the file comes back intact. That quantity, <b>reads per strand at the recovery target</b>, is what Erbgut optimises, at a fixed density, with the decoder held constant so the improvement cannot come from anywhere else.</p>
+        <p>The same measurement also produces the opposite answer when it is true. If the hand rules are already near optimal on a channel, the audit says so, with numbers instead of assumption.</p>
+      </div>
+    </div>
+
+    <div class="table-card" style="margin-top:26px">
+      <div class="table-scroll">
+        <table>
+          <caption>The three settings every DNA storage pipeline fixes by hand, and what each one costs. Sources: <a href="https://github.com/timarnoldev/hackmit2026/blob/main/README.md">README</a>, <a href="https://github.com/timarnoldev/hackmit2026/blob/main/marketing/ONE_PAGER.md">one pager</a>.</caption>
+          <thead>
+            <tr><th scope="col">Setting</th><th scope="col">The usual value</th><th scope="col">What it costs</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Longest run of one letter</td><td class="num">at most 3</td><td>Rejects candidate strands, so the encoder has fewer to choose from</td></tr>
+            <tr><td>GC content</td><td class="num">40 to 60%</td><td>Rejects candidate strands, so the encoder has fewer to choose from</td></tr>
+            <tr><td>Redundancy</td><td class="num">0.3</td><td>30% more strands to synthesize, on every channel, whether it needs them or not</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== 3. What it does -->
+<section id="product">
+  <div class="wrap prose">
+    <p class="kicker">What we built</p>
+    <div class="intro">
+      <h2>Two tiers, one fixed target</h2>
+      <p>Every setting is judged the same way: a fixed 20 KB file has to come back exactly in all 300 held-out trials. Then we count the reads per strand and the bits per base it took. The encoder and the decoder never change between the two sides of a comparison. Only the rules, the redundancy and the choice of candidate strands do.</p>
+    </div>
+
+    <div class="cards two">
+      <article class="card">
+        <span class="tier-no">Tier 1</span>
+        <h3>Rule audit</h3>
+        <p>Switch each rule off, one at a time, on one channel. Measure the reads per strand and bits per base needed to hit the recovery target. Tune the redundancy the same way. Keep only what pays off. This is the tool's main output, and it is a verdict per rule and per channel.</p>
+        <p><b>The result we did not expect:</b> the homopolymer rule pays off on Nanopore and does nothing on Illumina. The GC rule does the exact opposite. Both rules are applied to both channels today.</p>
+      </article>
+      <article class="card">
+        <span class="tier-no">Tier 2</span>
+        <h3>Learned selection</h3>
+        <p>A Fountain encoder can write the same data as many different strands at no cost in density. A small CNN, trained only on where the decoder actually failed on this channel, scores the candidates, and the encoder keeps the safest one.</p>
+        <p>On Nanopore at six reads per strand this cuts strand failures from <b>51.96% to 48.01%</b>, a difference of <b>3.95 points</b> (95% confidence interval 4.18 to 3.72 points), measured on paired held-out trials with the same decoder on both sides. On Illumina the difference is about zero, which is the correct answer: that channel does not fail on sequence grounds.</p>
+        <p><b>It found the hand rule by itself, then corrected it.</b> Probed afterwards, the model's risk barely moves for runs of up to four identical letters and then climbs steeply, so it puts the danger line at five where the standard rule puts it at three. It rates G and C runs as more dangerous than A and T runs, which no standard rule distinguishes. And it is alarmed by the contexts where the channel <em>deletes</em> a letter and relaxed about the ones where it merely <em>substitutes</em> one, because voting across reads repairs a substitution and a deletion shifts everything after it. It did not learn where errors happen. It learned where errors are fatal.</p>
+      </article>
+    </div>
+
+    <div class="table-card" style="margin-top:26px">
+      <div class="table-scroll">
+        <table>
+          <caption>The rule audit, re-measured at three seed blocks by 300 held-out trials each. Lower reads per strand is better. Source: <a href="https://github.com/timarnoldev/hackmit2026/blob/main/docs/NUMBERS.md">docs/NUMBERS.md</a>, section 5.</caption>
+          <thead>
+            <tr><th scope="col">Rule</th><th scope="col">Nanopore</th><th scope="col">Illumina</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Max 3 identical letters in a row</th>
+              <td><span class="pill pays"><span class="sym" aria-hidden="true">&check;</span> Pays off</span><br><span class="mono muted" style="font-size:14.5px">19.5 reads with it, 24.5 without</span></td>
+              <td><span class="pill flat"><span class="sym" aria-hidden="true">&asymp;</span> No measurable benefit</span><br><span class="mono muted" style="font-size:14.5px">3.0 with it, 2.5 without</span></td>
+            </tr>
+            <tr>
+              <th scope="row">GC content between 40 and 60%</th>
+              <td><span class="pill flat"><span class="sym" aria-hidden="true">&asymp;</span> No measurable benefit</span><br><span class="mono muted" style="font-size:14.5px">19.5 with it, 20.0 without</span></td>
+              <td><span class="pill pays"><span class="sym" aria-hidden="true">&check;</span> Pays off</span><br><span class="mono muted" style="font-size:14.5px">3.0 reads with it, 4.0 without</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Redundancy, default against tuned</th>
+              <td><span class="pill pays"><span class="sym" aria-hidden="true">&check;</span> Tuning pays off</span><br><span class="mono muted" style="font-size:14.5px">19.5 reads down to 5.5</span></td>
+              <td><span class="pill pays"><span class="sym" aria-hidden="true">&check;</span> Tuning pays off</span><br><span class="mono muted" style="font-size:14.5px">1.20 up to 1.50 bits per base</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="plain-note"><b>Read the redundancy row honestly.</b> On Nanopore the tuned codec reaches the target at 5.5 reads per strand instead of 19.5, but it gets there at 0.64 bits per base against the default's 1.202, so it is buying reads with density. That is a real trade and a useful one when sequencing is the recurring cost, but it is not a free lunch, and we do not present it as one. On Illumina the trade runs the other way: same read budget, more data per base.</p>
+  </div>
+</section>
+
+<!-- ===================================================== 4. Evidence -->
+<section id="evidence" class="alt">
+  <div class="wrap prose">
+    <p class="kicker">Evidence</p>
+    <div class="intro">
+      <h2>Built so that we cannot fool ourselves</h2>
+      <p>We have no wet lab. Everything is measured on a channel simulator calibrated on real sequencing reads, and checked back against real held-out reads. The evidence design was fixed before any run, and every comparison isolates one change.</p>
+    </div>
+
+    <div class="evidence">
+      <div>
+        <h3>The simulator lands on reality</h3>
+        <p>Same decoder, same held-out clusters, real reads against simulated reads of the same references. Within about three points everywhere, and where it deviates it is slightly harder than reality, not easier. Calibration used train data only.</p>
+        <div class="table-scroll" style="margin-top:14px">
+          <table style="min-width:380px">
+            <thead><tr><th scope="col">Reads per strand</th><th scope="col" class="num">2</th><th scope="col" class="num">4</th><th scope="col" class="num">6</th><th scope="col" class="num">10</th><th scope="col" class="num">16</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Real reads</th><td class="num">4.9%</td><td class="num">39.8%</td><td class="num">66.5%</td><td class="num">84.5%</td><td class="num">90.1%</td></tr>
+              <tr><th scope="row">Calibrated simulator</th><td class="num">3.6%</td><td class="num">40.3%</td><td class="num">63.7%</td><td class="num">83.0%</td><td class="num">90.3%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h3>Held-out means held out</h3>
+        <p>Every seed used for training, tuning or choosing a setting comes from a separate train pool. The real data split is fixed in code: every fifth cluster, 1,996 of 10,000, never used for training, tuning or calibration. A codec is evaluated on held-out seeds exactly once, after it is chosen.</p>
+        <p>The recovery target is absolute: the file comes back exactly in <b>all 300</b> held-out trials, or the setting does not count. Candidate settings are screened at 50 trials, re-checked at 300 on train seeds, and given a margin check at 10% fewer reads.</p>
+      </div>
+
+      <div>
+        <h3>The ablation isolates the claim</h3>
+        <p>Five systems on the same channel and the same held-out seeds. The default we compare against always uses the <b>same decoder</b> as the tuned codec, so no gain can leak in from the decoder. Step B to C is the rule audit. Step C to D is learned selection.</p>
+        <p>Run 1's numbers were thrown out and are marked superseded in our own notes: they were a winner's curse from picking the best of hundreds of settings on the same trials, and the final codec then missed the target on held-out data, 297 of 300. Run 2 added a margin check, three seed blocks and train-only selection. We say this openly because it is the reason the later numbers can be trusted.</p>
+      </div>
+
+      <div>
+        <h3>We publish our own corrections</h3>
+        <p>An earlier version of our write-up claimed both hand rules were actively harmful on Nanopore. It was wrong, and the record of how it went wrong is kept in the repository rather than quietly deleted.</p>
+        <p>The fix was a better metric. "Fewest reads at which all 300 trials recover" is brittle near the top of the curve, where a single failure out of 300 can flip a ranking. So we now measure the whole recovery curve. At <b>12 reads per strand the homopolymer rule is the difference between recovering the file in 80.7% of 300 held-out trials and never recovering it at all</b>, while the GC rule tracks the standard codec to within noise at every coverage. Three independent measurements now agree: the rule audit, the curve, and what the risk model says when you probe it.</p>
+      </div>
+
+      <div>
+        <h3>The sim-to-real firewall</h3>
+        <p>The loop might learn a quirk of our simulator instead of a property of DNA. Two checks catch that.</p>
+        <p><b>A structurally different second simulator</b>, built from different mechanisms and never used for optimisation, reproduces the tier 2 gain: strand failures 50.92% down to 46.76%, a difference of 4.16 points (95% CI 4.37 to 3.96).</p>
+        <p><b>Real reads.</b> Holding coverage fixed, our risk model ranks real decoder failures at <b>AUC 0.69</b>, against 0.66 for the homopolymer rule, 0.61 for a calibrated 5-mer context table and 0.50, chance, for GC deviation. Holding coverage <em>and</em> longest run fixed, so the hand rule's own feature is neutralised, the model still reaches 0.61 while the rule drops to 0.50. On real DNA the model knows something the hand rule does not.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:34px">The decoder, on real reads it has never seen</h3>
+    <p class="muted" style="margin-top:10px;max-width:68ch">Exact strand reconstruction on the held-out Microsoft Nanopore split, 1,996 clusters. Mean over 20 independent read draws per point, with the standard deviation across those draws. A single read, with no decoder at all, is exactly right 1.1% of the time.</p>
+    <div class="table-card" style="margin-top:18px">
+      <div class="table-scroll">
+        <table>
+          <caption>Share of strands reconstructed exactly, all 110 letters correct. Empty clusters count as failures. Source: <a href="https://github.com/timarnoldev/hackmit2026/blob/main/docs/NUMBERS.md">docs/NUMBERS.md</a>, section 1.</caption>
+          <thead><tr><th scope="col">Reads per strand</th><th scope="col" class="num">2</th><th scope="col" class="num">4</th><th scope="col" class="num">6</th><th scope="col" class="num">10</th><th scope="col" class="num">16</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Classic, align and majority vote</th><td class="num">5.2% ±0.5</td><td class="num">39.9% ±0.9</td><td class="num">67.2% ±0.8</td><td class="num">84.1% ±0.5</td><td class="num">89.7% ±0.3</td></tr>
+            <tr class="highlight"><th scope="row">Ours, best variant</th><td class="num">7.0% ±0.7</td><td class="num">66.6% ±1.1</td><td class="num">88.1% ±0.5</td><td class="num">95.7% ±0.3</td><td class="num">97.2% ±0.2</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="plain-note">There is a measured ceiling. Given every read available, the decoder still fails on 4.7% of strands, so those errors are shared by every read of the strand, or the cluster is malformed in the dataset. At six reads it fails on 18.6%, of which about a fifth are in that hopeless group.</p>
+  </div>
+</section>
+
+<!-- ===================================================== 5. Defensibility -->
+<section id="moat">
+  <div class="wrap prose">
+    <p class="kicker">Why it is defensible</p>
+    <div class="intro">
+      <h2>Accuracy per unit of compute, and a question nobody else asks</h2>
+    </div>
+
+    <div class="cards three">
+      <div class="card">
+        <h3>Same accuracy, 1/125 the model</h3>
+        <p>Our decoder matches a fine-tuned DNAformer at four, six and ten reads on the same dataset (66.1, 88.8 and 96.2% against 65.9, 88.3 and 95.7%) with <b>0.8M parameters against their 100M</b>, <b>577k training examples against 1.4 billion</b>, and <b>13 minutes of training</b> on one machine instead of GPU days.</p>
+        <p>The reason is placement, not scale. The classic algorithm already does the alignment well. The small model only corrects what is left, using the local context and the coverage that voting throws away. A from-scratch 9.6M-parameter transformer that tried to learn the whole task failed, and that failure is documented in the repository.</p>
+      </div>
+      <div class="card">
+        <h3>It runs where the others cannot</h3>
+        <p>The same decoder fits on an <b>ESP32-S3 microcontroller</b> and reconstructs a strand there in <b>170 ms</b>, so the demo runs unplugged from any computer. No published trace reconstruction system runs on a chip that cheap. That is what accuracy per unit of compute buys you in practice.</p>
+      </div>
+      <div class="card">
+        <h3>The methodology is the product</h3>
+        <p>Every published system in this space reconstructs strands. None of them measures what a coding rule or a redundancy level costs and buys on a given channel at a fixed recovery target. The audit harness, the fixed objective, the ablation ladder and the sim-to-real firewall are the asset, and they apply to any channel and any codec, not only ours.</p>
+        <p>A risk model is specific to one channel, one read budget and one decoder. That is the point: the same strand can be safe on one channel and risky on another, and the tool is what tells you which.</p>
+      </div>
+    </div>
+
+    <div class="notice">
+      <b>Where we are behind, plainly.</b> On raw reconstruction accuracy, TReconLM (TMLR 2025) is better than us at every read count from two to ten on this dataset, 91.2% against our 88.8% at six reads, and it trains on the same split we do. We are level with a fine-tuned DNAformer and ahead of the classical algorithms. The decoder was never meant to be a contribution to trace reconstruction. It had to be solid, fast and identical on both sides of every comparison, and it is. The full table is in the repository, written to be unflattering where the numbers are.
+    </div>
+
+    <p class="plain-note"><b>And the limit that matters most.</b> Everything here is simulated on a channel calibrated against real reads, and checked back against real held-out reads. We have shown that the risk model's ranking transfers to real DNA. We have <em>not</em> shown that selecting candidate strands by it reduces failures on real DNA, because that needs new strands synthesized and sequenced. No wet lab work went into this project, and nothing on this page should be read as if it had.</p>
+  </div>
+</section>
+
+<!-- ===================================================== 6. What is next -->
+<section id="next" class="alt">
+  <div class="wrap prose">
+    <p class="kicker">What is next</p>
+    <div class="intro">
+      <h2>Three things, in the order they matter</h2>
+      <p>None of these is done. They are listed because they are the honest answer to what would have to be true for this to be a product rather than a measurement.</p>
+    </div>
+
+    <ol class="steps">
+      <li>
+        <h3>Wet lab validation</h3>
+        <p>Synthesize and sequence a file encoded with a tuned codec and one encoded with the default, on the same run, and check whether the reads per strand we predict is the reads per strand we need. This is the one experiment that converts a calibrated simulation into a claim about DNA. Until it is run, every number here carries that caveat.</p>
+      </li>
+      <li>
+        <h3>Inner codes</h3>
+        <p>Right now a strand tells the decoder only what it reads. An inner code inside each strand would let it also say <em>where</em> it is probably wrong, so the decoder spends its effort on the positions that need it. That is the largest remaining gap to the published leaders at low coverage, where the whole economic argument lives.</p>
+      </li>
+      <li>
+        <h3>Per channel decoders</h3>
+        <p>Today one decoder is adapted per channel inside the loop. The next step is a decoder trained against the specific codec it will be paired with, so the encoder and the decoder co-adapt across rounds instead of the encoder adapting to a frozen decoder. The alternating structure is already built for it.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ===================================================== 7. Team and links -->
+<section id="team">
+  <div class="wrap prose">
+    <p class="kicker">Team and links</p>
+    <div class="team-grid">
+      <div>
+        <h2>Built at HackMIT 2026</h2>
+        <p style="margin-top:18px">Coding agents wrote much of the code in parallel. The team owned the interfaces, the held-out data discipline, the verification of every number on this page, and the story.</p>
+        <p><b>The team:</b> <span class="tbd">[TEAM: names, roles and contact]</span></p>
+        <p>What we do not claim: a new encoder (ours is a standard Fountain code on purpose), a decoder that beats the published leaders, or any wet lab work. Our opponent is the hand-tuned default, with the same decoder on both sides.</p>
+        <ul class="links">
+          <li><a href="https://github.com/timarnoldev/hackmit2026">Source code, GitHub</a></li>
+          <li><a href="deck/">Pitch deck</a></li>
+          <li><a href="https://github.com/timarnoldev/hackmit2026/blob/main/docs/NUMBERS.md">Every number on this page, with its provenance</a></li>
+          <li><a href="https://github.com/timarnoldev/hackmit2026/blob/main/docs/COMPARISON.md">Where we stand against published work</a></li>
+          <li><a href="https://github.com/timarnoldev/hackmit2026/blob/main/docs/LEARNED_RULES.md">What the risk model learned, read back out of it</a></li>
+        </ul>
+      </div>
+      <dl class="specs">
+        <dt>Codebase</dt><dd>About 11,000 lines of Python, about 2,500 of them tests, 226 tests green</dd>
+        <dt>Models</dt><dd>A 0.8M-parameter 1D CNN decoder and a small CNN risk model. Everything else is classic code</dd>
+        <dt>Classic parts</dt><dd>Fountain (LT) encoder with a checksum per strand, calibrated channel simulator, settings grid search</dd>
+        <dt>Hardware</dt><dd>One ASUS Ascent GX10 (NVIDIA GB10, 20 ARM cores, 128 GB unified memory), plus an ESP32-S3 for the demo</dd>
+        <dt>Data</dt><dd>Two public datasets, Microsoft (MIT licence) and DNAformer / Technion (CC BY 4.0). No wet lab</dd>
+        <dt>Objective</dt><dd>A fixed 20 KB file, recovered exactly in all 300 held-out trials</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Real reads come from the Microsoft clustered Nanopore reads dataset (MIT licence) and the DNAformer binned reads dataset from Technion (CC BY 4.0). We thank their authors for publishing them. Naming a dataset or a published method implies no endorsement by its authors.</p>
+    <p>Erbgut is a HackMIT 2026 project. Every measured number on this page is listed with its provenance in <a href="https://github.com/timarnoldev/hackmit2026/blob/main/docs/NUMBERS.md">docs/NUMBERS.md</a>. Anything not in that file is not claimed.</p>
+  </div>
+</footer>
+
+</body>
+</html>
