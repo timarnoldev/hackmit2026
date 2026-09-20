@@ -2,6 +2,8 @@
 
 ![Erbgut](marketing/social/social-preview.png)
 
+**[Live site](https://timarnoldev.github.io/hackmit2026/)** · [pitch deck](https://timarnoldev.github.io/hackmit2026/deck/)
+
 **HackMIT 2026.** We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
 
 DNA storage pipelines follow hand-written rules such as "never more than 3 identical letters in a row" and "keep GC content between 40 and 60%", plus a fixed amount of redundancy. These rules are chosen once, copied between papers, and applied to every sequencing channel. Nobody measures whether they pay off.
