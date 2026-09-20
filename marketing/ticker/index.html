@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erbgut live decode</title>
+<meta name="description" content="A live ticker of a real DNA decode: noisy reads in, corrected strands out.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23E6ECEA'/%3E%3Crect x='5' y='10' width='4' height='12' fill='%233A3FC2'/%3E%3Crect x='11' y='10' width='4' height='12' fill='%23B02A63'/%3E%3Crect x='17' y='10' width='4' height='12' fill='%230B7465'/%3E%3Crect x='23' y='10' width='4' height='12' fill='%230B7465'/%3E%3Crect x='4' y='22' width='24' height='2' fill='%23131B20'/%3E%3C/svg%3E">
+<style>
+/* Erbgut live decode ticker. Self contained, dark, built for a projector.
+   Fonts come from the deck when this page is served by scripts/ticker_server.py
+   (/fonts/...) or opened straight from marketing/ticker/ (../deck/fonts/...). */
+
+@font-face {
+  font-family: "SA Sans";
+  src: url("fonts/InstrumentSans-latin.woff2") format("woff2"),
+       url("../deck/fonts/InstrumentSans-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SA Mono";
+  src: url("fonts/JetBrainsMono-latin.woff2") format("woff2"),
+       url("../deck/fonts/JetBrainsMono-latin.woff2") format("woff2");
+  font-weight: 400 600;
+  font-display: swap;
+}
+
+:root {
+  --sa-paper: #0F1417;
+  --sa-surface: #172026;
+  --sa-surface-2: #1E2930;
+  --sa-ink: #E6ECEA;
+  --sa-muted: #9AA9AE;
+  --sa-rule: #2C353B;
+  --sa-audit: #A3A6FF;
+  --sa-cost: #FF86B0;
+  --sa-gain: #4FD6B5;
+  --sa-tbd: #F4C45A;
+  --on-accent: #0F1417;
+  --tint-audit: rgba(163, 166, 255, 0.14);
+  --tint-cost: rgba(255, 134, 176, 0.15);
+  --tint-gain: rgba(79, 214, 181, 0.13);
+  --sans: "SA Sans", "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --mono: "SA Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --gutter: 118px;
+  --verdict: 300px;  /* room for the verdict beside the strand */
+  --cell: clamp(9px, calc((100vw - var(--gutter) - var(--verdict) - 56px) / 38), 40px);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--sa-paper);
+  color: var(--sa-ink);
+  font-family: var(--sans);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------------------------------------------------------- header */
+
+header {
+  flex: none;
+  border-bottom: 1px solid var(--sa-rule);
+  background: linear-gradient(180deg, var(--sa-surface), var(--sa-paper));
+  padding: 14px 24px 0;
+}
+.brow { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.wordmark { font-size: clamp(18px, 1.9vw, 30px); font-weight: 700; letter-spacing: -0.02em; }
+.wordmark .dot { color: var(--sa-gain); }
+.kicker { font-size: clamp(12px, 1.05vw, 18px); color: var(--sa-muted); letter-spacing: -0.01em; }
+.badges { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.badge {
+  font-family: var(--mono); font-size: clamp(10px, 0.78vw, 13px);
+  border: 1px solid var(--sa-rule); border-radius: 999px;
+  padding: 3px 11px; color: var(--sa-muted); white-space: nowrap;
+}
+.badge.live { border-color: var(--sa-gain); color: var(--sa-gain); }
+.badge.live::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--sa-gain); margin-right: 7px; vertical-align: middle;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.badge.down { border-color: var(--sa-cost); color: var(--sa-cost); }
+.badge.model { border-color: var(--sa-audit); color: var(--sa-audit); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+.stats {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: clamp(8px, 1.2vw, 28px); padding: 12px 0 14px;
+}
+.stat { min-width: 0; }
+.stat .v {
+  font-family: var(--mono); font-weight: 600; letter-spacing: -0.02em;
+  font-size: clamp(22px, 3.3vw, 58px); line-height: 1; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: clip;
+}
+.stat .v .u { font-size: 0.45em; color: var(--sa-muted); margin-left: 4px; font-weight: 400; }
+.stat .k {
+  font-size: clamp(10px, 0.82vw, 15px); color: var(--sa-muted); margin-top: 6px;
+  letter-spacing: -0.005em;
+}
+.stat.ok .v { color: var(--sa-gain); }
+.stat.err .v { color: var(--sa-cost); }
+.stat.fix .v { color: var(--sa-gain); }
+.stat.reads .v { color: var(--sa-audit); }
+
+.progress { height: 4px; background: var(--sa-rule); border-radius: 2px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--sa-audit); transition: width 0.25s linear; }
+.progress.done i { background: var(--sa-gain); }
+
+/* ---------------------------------------------------------------- ticker */
+
+main {
+  flex: 1 1 auto; min-height: 0; position: relative;
+  padding: 14px 24px 0; overflow: hidden;
+}
+main::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 26%;
+  background: linear-gradient(180deg, transparent, var(--sa-paper) 88%); pointer-events: none;
+}
+#feed { display: flex; flex-direction: column; gap: clamp(6px, 0.9vh, 16px); }
+
+.strand {
+  border-left: 3px solid var(--sa-rule);
+  padding: clamp(4px, 0.7vh, 10px) 0 clamp(4px, 0.7vh, 10px) 14px;
+  animation: enter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.strand.ok { border-left-color: var(--sa-gain); }
+.strand.bad { border-left-color: var(--sa-cost); }
+.strand.drop { border-left-color: var(--sa-tbd); }
+@keyframes enter {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: none; }
+}
+
+.line { display: flex; align-items: center; gap: 10px; height: calc(var(--cell) * 1.3); }
+.rl {
+  width: var(--gutter); flex: none; text-align: right;
+  font-family: var(--mono); font-size: clamp(9px, 0.76vw, 14px); color: var(--sa-muted);
+  white-space: nowrap; overflow: hidden;
+}
+.seq { display: flex; font-family: var(--mono); font-weight: 400; }
+.nt {
+  width: var(--cell); height: calc(var(--cell) * 1.3);
+  line-height: calc(var(--cell) * 1.3);
+  font-size: calc(var(--cell) * 0.95);
+  text-align: center; border-radius: calc(var(--cell) * 0.16);
+  position: relative; color: var(--sa-muted);
+}
+.cons .nt { color: var(--sa-ink); font-weight: 600; }
+
+/* a wrong letter in a read: the deck's cost magenta */
+.nt.x { background: var(--sa-cost); color: var(--on-accent); font-weight: 600; animation: flash 0.5s ease-out both; }
+/* an extra letter the strand does not have: the deck's audit indigo */
+.nt.e { background: var(--sa-audit); color: var(--on-accent); font-weight: 600; animation: flash 0.5s ease-out both; }
+/* a letter the read is missing: a dashed gap in front of this position */
+.nt.m::before {
+  content: ""; position: absolute; left: -2px; top: 12%; bottom: 12%;
+  border-left: 2px dashed var(--sa-cost); animation: flash 0.5s ease-out both;
+}
+/* corrections the decoder applied, in gain teal */
+.nt.s, .nt.i { background: var(--sa-gain); color: var(--on-accent); font-weight: 600; animation: flash 0.5s 0.12s ease-out both; }
+.nt.d::before {
+  content: ""; position: absolute; left: -2px; top: 12%; bottom: 12%;
+  border-left: 2px solid var(--sa-gain);
+}
+@keyframes flash {
+  from { transform: scale(0.55); filter: brightness(2.2); }
+  to { transform: none; filter: none; }
+}
+
+.verdict {
+  font-family: var(--mono); font-size: clamp(10px, 0.86vw, 16px);
+  margin-left: 14px; white-space: nowrap; font-weight: 600;
+}
+.verdict.y { color: var(--sa-gain); }
+.verdict.n { color: var(--sa-cost); }
+.verdict.t { color: var(--sa-tbd); }
+
+.gap { color: var(--sa-muted); font-family: var(--mono); font-size: clamp(9px, 0.7vw, 13px);
+  margin-left: 10px; white-space: nowrap; }
+
+/* ---------------------------------------------------------------- footer */
+
+footer {
+  flex: none; border-top: 1px solid var(--sa-rule); background: var(--sa-surface);
+  padding: 9px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  font-size: clamp(10px, 0.78vw, 14px); color: var(--sa-muted);
+}
+.legend { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.swatch { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+.note { margin-left: auto; text-align: right; max-width: 52ch; line-height: 1.4; }
+.controls { display: flex; gap: 6px; opacity: 0.25; transition: opacity 0.2s; }
+body.hover .controls { opacity: 1; }
+.controls button {
+  font-family: var(--mono); font-size: 12px; background: var(--sa-surface-2);
+  color: var(--sa-ink); border: 1px solid var(--sa-rule); border-radius: 6px;
+  padding: 4px 10px; cursor: pointer;
+}
+.controls button:hover { border-color: var(--sa-audit); color: var(--sa-audit); }
+
+#banner {
+  position: fixed; inset: auto 0 0 0; background: var(--sa-cost); color: var(--on-accent);
+  font-family: var(--mono); font-size: 14px; padding: 10px 24px; display: none; z-index: 20;
+}
+#banner.show { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brow">
+    <div class="wordmark">Erbgut<span class="dot">.</span></div>
+    <div class="kicker">Live decode. Noisy reads in, the strand back out.</div>
+    <div class="badges">
+      <span class="badge" id="b-file">no file yet</span>
+      <span class="badge" id="b-channel">channel</span>
+      <span class="badge" id="b-files">0 files back</span>
+      <span class="badge model" id="b-decoder">decoder</span>
+      <span class="badge down" id="b-link">connecting</span>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v" id="s-done">0</div><div class="k">strands decoded</div></div>
+    <div class="stat ok"><div class="v" id="s-acc">0<span class="u">%</span></div><div class="k">exactly right</div></div>
+    <div class="stat err"><div class="v" id="s-err">0</div><div class="k">errors in the reads shown</div></div>
+    <div class="stat fix"><div class="v" id="s-fix">0</div><div class="k" id="k-fix">fixes the model applied</div></div>
+    <div class="stat reads"><div class="v" id="s-reads">0</div><div class="k">reads per strand</div></div>
+  </div>
+  <div class="progress" id="prog"><i></i></div>
+</header>
+
+<main><div id="feed"></div></main>
+
+<footer>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--sa-cost)"></i> wrong letter in a read</span>
+    <span><i class="swatch" style="background:var(--sa-audit)"></i> extra letter</span>
+    <span><i class="swatch" style="border-left:3px dashed var(--sa-cost);width:7px;border-radius:0"></i> missing letter</span>
+    <span><i class="swatch" style="background:var(--sa-gain)"></i> correction applied</span>
+  </div>
+  <div class="controls">
+    <button data-a="toggle">pause</button>
+    <button data-a="slower">slower</button>
+    <button data-a="faster">faster</button>
+  </div>
+  <div class="note" id="note">Connecting to the ticker server.</div>
+</footer>
+
+<div id="banner"></div>
+
+<script>
+"use strict";
+/* The page draws exactly what the server sends. It never invents a letter, an error or a
+   correction. The server paces the stream so the decode is readable and trims each strand to
+   the first letters that fit a 320 x 240 screen, which is what the footer note says. */
+
+const VISIBLE = 38;      // letters per line, the same window the box shows
+const MAX_BLOCKS = 8;    // strands kept in the DOM; older ones are removed
+const params = new URLSearchParams(location.search);
+const BASE = params.get("server") || "";
+
+const feed = document.getElementById("feed");
+const el = (id) => document.getElementById(id);
+let layer = "vote";
+let state = { paused: false, rate: 4 };
+
+/* ------------------------------------------------------------------ marks */
+
+/* "3x11e25m" -> {3:"x", 11:"e", 25:"m"}. Mirrors pack_marks in scripts/ticker_server.py. */
+function unpackMarks(packed) {
+  const out = {};
+  if (!packed) return out;
+  let digits = "";
+  for (const ch of packed) {
+    if (ch >= "0" && ch <= "9") digits += ch;
+    else if (digits) { out[parseInt(digits, 10)] = ch; digits = ""; }
+  }
+  return out;
+}
+
+function seqHtml(seq, packed) {
+  const marks = unpackMarks(packed);
+  let html = "";
+  for (let i = 0; i < seq.length && i < VISIBLE; i++) {
+    const k = marks[i];
+    html += k ? `<span class="nt ${k}">${seq[i]}</span>` : `<span class="nt">${seq[i]}</span>`;
+  }
+  return html;
+}
+
+/* ------------------------------------------------------------------ feed */
+
+function addStrand(e) {
+  const block = document.createElement("div");
+  const cls = e.drop ? "drop" : (e.ok ? "ok" : "bad");
+  block.className = "strand " + cls;
+  const no = String(e.i + 1).padStart(String(e.n).length, "0");
+
+  if (e.drop) {
+    block.innerHTML =
+      `<div class="line"><div class="rl">strand ${no}</div>` +
+      `<div class="verdict t">no reads came back, the fountain code covers this strand</div></div>`;
+  } else {
+    let html = "";
+    e.reads.forEach((r, j) => {
+      html += `<div class="line"><div class="rl">read ${j + 1}</div>` +
+              `<div class="seq">${seqHtml(r.s, r.m)}</div></div>`;
+    });
+    const extra = e.nr > e.reads.length ? `<span class="gap">+${e.nr - e.reads.length} reads</span>` : "";
+    const verdict = e.ok
+      ? `<span class="verdict y">exact</span>`
+      : `<span class="verdict n">wrong, caught</span>`;
+    const fixes = e.nfix > 0 ? `<span class="gap">${e.nfix} fix${e.nfix === 1 ? "" : "es"}</span>` : "";
+    html += `<div class="line cons"><div class="rl">strand ${no}</div>` +
+            `<div class="seq">${seqHtml(e.cons, e.fix)}</div>${verdict}${fixes}${extra}</div>`;
+    block.innerHTML = html;
+  }
+
+  feed.prepend(block);
+  while (feed.children.length > MAX_BLOCKS) feed.lastElementChild.remove();
+}
+
+/* ------------------------------------------------------------------ stats */
+
+const fmt = (n) => (n || 0).toLocaleString("en-US");
+
+function setStats(st) {
+  if (!st) return;
+  el("s-done").textContent = fmt(st.done);
+  el("s-acc").innerHTML = Math.round((st.acc || 0) * 100) + '<span class="u">%</span>';
+  el("s-err").textContent = fmt(st.rfix);
+  el("s-fix").textContent = fmt(st.mfix);
+  el("s-reads").textContent = (st.rps || 0).toFixed(1);
+  el("b-files").textContent = fmt(st.rec) + (st.rec === 1 ? " file back exactly" : " files back exactly");
+  el("b-files").className = "badge" + (st.rec > 0 ? " live" : "");
+  const bar = el("prog");
+  bar.firstElementChild.style.width = Math.round((st.prog || 0) * 100) + "%";
+  bar.classList.toggle("done", (st.prog || 0) >= 0.999);
+}
+
+/* ------------------------------------------------------------------ events */
+
+function onEvent(e) {
+  switch (e.t) {
+    case "hello": {
+      layer = e.fix_layer || "vote";
+      el("b-decoder").textContent = "decoder: " + (e.decoder || "?");
+      el("b-channel").textContent = (e.channel || "") + " · " + (e.reads_per_strand || 0) + " reads per strand";
+      el("k-fix").textContent = layer === "model"
+        ? "fixes the model applied"
+        : "model fixes, no checkpoint loaded";
+      el("note").textContent = [e.paced, e.trimmed, e.note].filter(Boolean).join(" ");
+      el("b-link").title = e.replay ? "replaying " + e.replay : "live";
+      state.rate = e.rate || state.rate;
+      break;
+    }
+    case "pass":
+      el("b-file").textContent = `${e.file} · ${fmt(e.bytes)} bytes · ${fmt(e.n)} strands · pass ${e.pass}`;
+      el("b-channel").textContent = `${e.channel} · ${e.reads_per_strand} reads per strand`;
+      break;
+    case "s":
+      addStrand(e);
+      setStats(e.st);
+      break;
+    case "file": {
+      const block = document.createElement("div");
+      block.className = "strand " + (e.ok ? "ok" : "bad");
+      block.innerHTML = `<div class="line"><div class="rl">file</div>` +
+        `<span class="verdict ${e.ok ? "y" : "n"}">` +
+        (e.ok
+          ? `${e.file} came back exactly, ${fmt(e.bytes)} bytes, from ${fmt(e.n)} strands`
+          : `${e.file} could not be rebuilt on this pass, too many strands were lost`) +
+        `</span></div>`;
+      feed.prepend(block);
+      while (feed.children.length > MAX_BLOCKS) feed.lastElementChild.remove();
+      break;
+    }
+    case "state":
+      state.paused = e.paused;
+      state.rate = e.rate;
+      document.querySelector('[data-a="toggle"]').textContent = e.paused ? "resume" : "pause";
+      break;
+    case "error":
+      banner("server: " + e.msg);
+      break;
+  }
+}
+
+function banner(text) {
+  const b = el("banner");
+  b.textContent = text;
+  b.classList.add("show");
+  clearTimeout(banner.t);
+  banner.t = setTimeout(() => b.classList.remove("show"), 6000);
+}
+
+/* ------------------------------------------------------------------ stream */
+
+let source = null;
+function connect() {
+  if (source) source.close();
+  source = new EventSource(BASE + "/events");
+  source.onopen = () => {
+    el("b-link").textContent = "live";
+    el("b-link").className = "badge live";
+  };
+  source.onmessage = (m) => {
+    try { onEvent(JSON.parse(m.data)); } catch (err) { /* a malformed line is skipped */ }
+  };
+  source.onerror = () => {
+    el("b-link").textContent = "reconnecting";
+    el("b-link").className = "badge down";
+  };
+}
+
+/* ------------------------------------------------------------------ control */
+
+function send(body) {
+  fetch(BASE + "/api/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => banner("the server did not answer that control"));
+}
+
+document.querySelectorAll(".controls button").forEach((b) => {
+  b.addEventListener("click", () => {
+    const a = b.dataset.a;
+    if (a === "toggle") send({ action: "toggle" });
+    if (a === "faster") send({ action: "speed", rate: state.rate * 1.5 });
+    if (a === "slower") send({ action: "speed", rate: state.rate / 1.5 });
+  });
+});
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === " ") { ev.preventDefault(); send({ action: "toggle" }); }
+  if (ev.key === "+" || ev.key === "=") send({ action: "speed", rate: state.rate * 1.5 });
+  if (ev.key === "-") send({ action: "speed", rate: state.rate / 1.5 });
+  if (ev.key === "f") document.documentElement.requestFullscreen?.();
+});
+
+let hoverTimer = null;
+document.addEventListener("mousemove", () => {
+  document.body.classList.add("hover");
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => document.body.classList.remove("hover"), 2500);
+});
+
+connect();
+</script>
+</body>
+</html>
