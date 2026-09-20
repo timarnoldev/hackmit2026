@@ -588,88 +588,7 @@
    * Values live in results.js under tier2 (300 held-out trials per point).
    */
 
-  function buildTier2Curve(R) {
-    const T = (R && R.tier2) || {};
-    const reads = Array.isArray(T.reads) ? T.reads : [];
-    const rules = Array.isArray(T.rules) ? T.rules : [];
-    const learned = Array.isArray(T.learned) ? T.learned : [];
-    const ok = reads.length > 1 && rules.length === reads.length && learned.length === reads.length;
-
-    const chips = document.getElementById('t2chips');
-    if (chips) {
-      const held = Array.isArray(T.held) && T.held.length ? T.held : ['same codec', 'same decoder', 'same seeds'];
-      chips.innerHTML =
-        `<span class="hlab frag fade" data-f="1">Held fixed</span>` +
-        held.map((h, i) => `<span class="hchip frag fade" data-f="1" style="transition-delay:${i * 50}ms">${esc(h)}</span>`).join('') +
-        `<span class="hchip change frag fade" data-f="1" style="transition-delay:${held.length * 50}ms">only the scorer changes</span>`;
-    }
-
-    const host = document.getElementById('t2plot');
-    if (!host) return;
-    if (!ok) {
-      host.innerHTML = `<div class="pending-box" style="left:0;right:0;top:40px">${ph('tier 2 recovery curve, hand rules against the learned model')}</div>`;
-      return;
-    }
-    const W = 1680;
-    const H = 430;
-    const m = { l: 130, r: 130, t: 26, b: 70 };
-    const pw = W - m.l - m.r;
-    const phh = H - m.t - m.b;
-    const lo = reads[0];
-    const hi = reads[reads.length - 1];
-    const X = (v) => m.l + ((v - lo) / (hi - lo)) * pw;
-    const Y = (v) => m.t + phh - v * phh;
-    let g = '';
-    [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
-      g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${Y(t)}" y2="${Y(t)}"/>` +
-        `<text class="tick" x="${m.l - 16}" y="${Y(t) + 7}" text-anchor="end">${Math.round(t * 100)}%</text>`;
-    });
-    reads.forEach((r) => {
-      g += `<text class="tick" x="${X(r)}" y="${m.t + phh + 34}" text-anchor="middle">${r.toFixed(1)}</text>`;
-    });
-    g += `<path class="axis" d="M${m.l} ${m.t}V${m.t + phh}H${m.l + pw}"/>` +
-      `<text class="alabel" x="${m.l + pw / 2}" y="${H - 12}" text-anchor="middle">Reads per strand</text>` +
-      `<text class="alabel" transform="translate(30 ${m.t + phh / 2}) rotate(-90)" text-anchor="middle">Files recovered</text>`;
-    const line = (vals, cls, f, label, row) => {
-      const d = vals.map((v, i) => `${i ? 'L' : 'M'}${X(reads[i]).toFixed(1)} ${Y(v).toFixed(1)}`).join('');
-      const ly = m.t + phh - 40 - row * 44;
-      const lx = m.l + pw - 30;
-      return `<g class="t2line ${cls} frag fade" data-f="${f}"><path d="${d}"/>` +
-        vals.map((v, i) => `<circle cx="${X(reads[i])}" cy="${Y(v)}" r="9"/>`).join('') +
-        `<path class="key" d="M${lx - 300} ${ly} H${lx - 250}"/>` +
-        `<circle cx="${lx - 275}" cy="${ly}" r="9"/>` +
-        `<text class="t2lab" x="${lx - 236}" y="${ly + 9}">${label}</text></g>`;
-    };
-    g += line(rules, 'rules', 2, 'ranked by the hand rules', 0);
-    g += line(learned, 'learned', 3, 'ranked by the learned model', 1);
-
-    // the gap at the read count where the two differ most
-    let k = 0;
-    reads.forEach((_, i) => { if (learned[i] - rules[i] > learned[k] - rules[k]) k = i; });
-    const gap = Math.round((learned[k] - rules[k]) * 1000) / 10;
-    const gx = X(reads[k]);
-    const tx = gx + (pw / (reads.length - 1)) * 1.25;
-    const ty = m.t + phh * 0.46;
-    g += `<g class="t2gap frag fade" data-f="3">` +
-      `<path d="M${gx} ${Y(rules[k]) - 12} V${Y(learned[k]) + 12}M${gx - 13} ${Y(rules[k]) - 12}H${gx + 13}M${gx - 13} ${Y(learned[k]) + 12}H${gx + 13}" fill="none" stroke="var(--sa-gain)" stroke-width="4" stroke-linecap="round"/>` +
-      `<path d="M${gx + 16} ${(Y(rules[k]) + Y(learned[k])) / 2} H${tx - 16}" fill="none" stroke="var(--sa-gain)" stroke-width="2.5" opacity="0.5"/>` +
-      `<text class="t2big" x="${tx}" y="${ty}">+${gap.toFixed(1)} points</text>` +
-      `<text class="t2sub" x="${tx}" y="${ty + 34}">${Math.round(rules[k] * 100)}% of files come back, against ${(learned[k] * 100).toFixed(1)}%</text>` +
-      `<text class="t2sub" x="${tx}" y="${ty + 62}">at ${reads[k].toFixed(1)} reads per strand</text></g>`;
-
-    host.innerHTML = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Share of files recovered against reads per strand, candidates ranked by the hand rules or by the learned model">${g}</svg>`;
-
-    const foot = document.getElementById('t2foot');
-    if (foot) {
-      const trials = isNum(T.trials) ? `${T.trials} held-out trials per point` : '';
-      foot.innerHTML =
-        `<span class="pill2 gain frag fade" data-f="3">${icon('check')}Choosing among candidates costs no density</span>` +
-        (isText(T.reproduced) ? `<span class="pill2 audit frag fade" data-f="4">${esc(T.reproduced)}</span>` : '') +
-        (trials ? `<span class="pill2 frag fade" data-f="2">${trials}</span>` : '');
-    }
-  }
-
-  /* ------------------------------------------------------------ slide 12: against published decoders
+/* ------------------------------------------------------------ slide 12: against published decoders
    * docs/COMPARISON.md: TReconLM (TMLR 2025) Table 7, and our held-out split.
    */
 
@@ -764,59 +683,7 @@
 
   // The A and B rungs describe which decoder the run used, so they come from the data. A run made
   // with the classic decoder on every rung must not be labelled as if it used the polisher.
-  function buildCrossover(R) {
-    const host = document.getElementById('xm');
-    if (!host) return;
-    const X = (R && R.crossover) || {};
-    const rows = [
-      ['default', 'Default (B)'],
-      ['nanopore', 'Tuned for Nanopore'],
-      ['illumina', 'Tuned for Illumina'],
-    ];
-    const cols = ['nanopore', 'illumina'];
-    let html = '<div></div>' + cols.map((c) => `<div class="h">${CH[c]} channel</div>`).join('');
-    let n = 0;
-    rows.forEach(([key, label]) => {
-      html += `<div class="rh">${label}</div>`;
-      cols.forEach((c) => {
-        const v = get(X, `${key}.${c}`);
-        const d = get(X, `default.${c}`);
-        let cls = '';
-        let cmp = '';
-        if (v === 'not reached') {
-          // A measured failure, not a missing number: this codec never recovered the file.
-          html += `<div class="xc miss" style="--i:${n++}"><span class="val">not reached</span>` +
-            `<span class="cmp">${icon('cross')}never recovers</span></div>`;
-          return;
-        }
-        if (!isNum(v)) {
-          html += `<div class="xc" style="--i:${n++}">${ph('reads')}</div>`;
-          return;
-        }
-        if (key === 'default') {
-          cls = 'base';
-          cmp = 'baseline';
-        } else if (isNum(d)) {
-          if (v < d) {
-            cls = 'better';
-            cmp = icon('down') + 'fewer than default';
-          } else if (v > d) {
-            cls = 'worse';
-            cmp = icon('up') + 'more than default';
-          } else {
-            cls = 'same';
-            cmp = icon('equal') + 'same as default';
-          }
-        }
-        const home = key === c ? ' home' : '';
-        html += `<div class="xc ${cls}${home}" style="--i:${n++}"><span class="n">${fmt.reads(v)}</span><span class="cmp">${cmp}</span></div>`;
-      });
-    });
-    html += `<div></div><div class="h" style="grid-column:span 2;font-weight:500;font-size:20px">Outlined: each codec on its own channel</div>`;
-    host.innerHTML = html;
-  }
-
-  /* ------------------------------------------------------------ slide 9: calibration and firewall */
+/* ------------------------------------------------------------ slide 9: calibration and firewall */
 
   // Held-out calibration, docs/ERRORS.md. Measured, not results.js: these are final.
   const CAL = {
@@ -1024,9 +891,7 @@
       buildArchitecture();
       buildLearned();
       buildTwoModels();
-      buildTier2Curve(R);
       buildFieldChart();
-      buildCrossover(R);
       buildFirewall(R);
       buildVerdicts(R);
       buildResults(R);

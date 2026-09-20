@@ -375,43 +375,6 @@
   </aside>
 </section>
 
-<!-- ================================================================ 9. Tier 2, isolated -->
-<section class="slide" id="s-tier2" data-title="Tier 2, isolated" data-plan="145-168" data-steps="4"
-  data-labels="The setup|Ranked by the hand rules|Ranked by the learned model|Reproduced with the learned decoder">
-  <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
-  <h2 class="title sm">Same codec. Same reads. Only the scorer changes.</h2>
-  <div class="t2plot" id="t2plot"></div>
-  <div class="footline" id="t2foot"></div>
-  <aside class="notes">
-    <p>This is the cleanest evidence in the project, so take it slowly.</p>
-    <p><i class="cue"></i> Everything is held fixed: same codec, same redundancy of 1.6, same strand length of 140, the same hard rules, the same 32 candidates per slot, the same decoder, the same held-out seeds and the same 20 KB file. One thing changes, and it is which model ranks those candidates.</p>
-    <p><i class="cue"></i> Rank them with the hand rules, and at four and a half reads per strand the file comes back in 27% of 300 trials.</p>
-    <p><i class="cue"></i> Rank them with the model that learned from decoder failures, and it comes back 98.3% of the time. Seventy-one points, at a standard error of 2.7. And choosing among candidates is free: no extra strands, no extra reads, no density.</p>
-    <p><i class="cue"></i> We then repeated the whole thing with the learned decoder, which is the harder test because a better decoder repairs more of what the model steers around. Strand failures still fall by 2.8 points, on our simulator and on the firewall simulator.</p>
-    <p class="aside">If asked where this comes from: 300 held-out trials per point, run 2 strict, raw curve in the repo. The ablation ladder's C to D rung is a worse measurement of the same thing, because the settings search can move redundancy between rungs; we quote this paired experiment instead. One blemish we keep visible: at five reads the learned codec sits at 0.997, one failed trial in 300, where the hand rules reach 1.000.</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 10. Tuned, not just better -->
-<section class="slide" id="s-cross" data-title="Tuned for a channel" data-plan="168-182" data-steps="3"
-  data-labels="Each codec at home|Each codec away|What that proves">
-  <p class="kicker">Evidence</p>
-  <h2 class="title sm">Tuned for a channel, not just better</h2>
-  <div class="xwrap">
-    <div class="xm" id="xm"></div>
-  </div>
-  <div class="footline">
-    <span class="pill2 gain frag fade" data-f="3">Each tuned codec wins at home</span>
-    <span class="pill2 cost frag fade" data-f="3">and loses away, one of them completely</span>
-  </div>
-  <aside class="notes">
-    <p>If a tuned codec were simply better, it would be better everywhere. So we swap them.</p>
-    <p><i class="cue"></i> Down the left, the three codecs. Across the top, the two channels. Each number is the reads per strand needed to recover the file every time.</p>
-    <p><i class="cue"></i> Each tuned codec is cheapest on the channel it was tuned for, and pays for it on the other.</p>
-    <p><i class="cue"></i> <span class="res" data-say="crossover"></span>. That is the difference between a tuned codec and a better codec, and it is why the audit has to be run per channel rather than once.</p>
-  </aside>
-</section>
-
 <!-- ================================================================ 12. Against published work -->
 <section class="slide" id="s-field" data-title="Against published decoders" data-plan="182-204" data-steps="4"
   data-labels="Their model on our clusters|The two points we are behind|Ahead of their pretrained model|What that costs them">
