@@ -823,66 +823,123 @@ html.results-broken .load-error { display: block; }
 #s-pipeline.s3 .fa1, #s-pipeline.s4 .fa2 { opacity: 0.8; }
 
 /* ---------------------------------------------------------------- slide 7: rules vs model
-   the rules against the model: one real slot, two ways of judging it.
-   Left is the hand rules, a verdict. Right is our model, a number. Magenta is what the rules
-   hand over, green is what we keep, and the rows line up so the same candidate sits at the
-   same height in both panels. */
+   One real slot, judged twice: the hand rules on the left, our model on the right, the same
+   six rows at the same height on both sides. The motion is the original candidate reveal:
+   rows slide in staggered, the strike sweeps across a rejected strand while a box marks the
+   run that broke the rule, then the scores arrive one at a time. */
 .rvm {
   position: absolute; left: 120px; right: 120px; top: 268px;
-  display: grid; grid-template-columns: 830px 1fr; gap: 46px; align-items: start;
+  display: grid; grid-template-columns: 890px 1fr; gap: 50px; align-items: start;
 }
 .rvm .pan h3 {
-  margin: 0 0 18px; font-size: 30px; font-weight: 600; letter-spacing: -0.01em;
+  margin: 0 0 16px; font-size: 30px; font-weight: 600; letter-spacing: -0.01em;
   display: flex; align-items: baseline; gap: 14px;
 }
 .rvm .pan h3 em { font-style: normal; font-size: 22px; color: var(--sa-muted); font-weight: 400; }
 .rvm .pan.mod h3 { color: var(--sa-audit); }
-.rvm .rows { display: grid; gap: 10px; position: relative; }
-.rvm .pfoot { margin: 56px 0 0; font-size: 21px; color: var(--sa-muted); }
+/* the model panel waits its turn: the rules get to give their verdict first */
+#s-rules .pan.mod { opacity: 0; transition: opacity 0.5s var(--ease-out); }
+#s-rules.s3 .pan.mod { opacity: 1; }
+.rvm .rows { display: grid; gap: 8px; position: relative; }
+.rvm .pfoot { margin: 34px 0 0; font-size: 21px; color: var(--sa-muted); }
+.rvm .pan.mod .pfoot { margin-top: 64px; }
 .rvm .pfoot em { font-style: normal; font-size: 18px; opacity: 0.8; margin-left: 14px; }
+.rvm .no { font-family: var(--mono); font-size: 22px; color: var(--sa-muted); }
 #s-rules .pill2 b { font-weight: 700; }
-.rvm .no {
-  font-family: var(--mono); font-size: 20px; color: var(--sa-muted); width: 26px; flex: none;
+
+/* the rules, left */
+#s-rules .cand {
+  display: grid; grid-template-columns: 34px 610px 1fr; align-items: center; gap: 16px;
+  height: 56px; padding: 0 14px; border-radius: 14px; border: 2px solid transparent;
+  opacity: 0; transform: translateX(-30px);
+  transition: opacity 0.45s var(--ease-out), transform 0.6s var(--ease-out), background-color 0.4s, border-color 0.4s;
+  transition-delay: calc(var(--i) * 70ms);
+  position: relative;
 }
-.rvm .rrow, .rvm .mrow { display: flex; align-items: center; gap: 16px; height: 54px; }
-.rvm .rrow .seqwrap { position: relative; display: inline-block; }
-.rvm .rrow .seq { font-family: var(--mono); font-size: 21px; letter-spacing: 0.055em; color: var(--sa-ink); }
-.rvm .rrow .seq b { font-weight: 700; color: var(--sa-cost); }
-.rvm .rrow .strike {
-  position: absolute; left: -4px; right: -4px; top: 50%; height: 3px; background: var(--sa-cost);
-  transform: scaleX(0); transform-origin: left; border-radius: 2px;
+#s-rules.s1 .cand { opacity: 1; transform: none; }
+#s-rules .cand .seq { font-size: 21px; position: relative; }
+#s-rules .cand .seq .nt { width: 15px; }
+#s-rules .cand .seqwrap { position: relative; display: inline-block; }
+#s-rules .cand .why { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 14px; opacity: 0; transition: opacity 0.4s; }
+#s-rules .cand .why-txt { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+#s-rules .cand .why-txt svg { width: 26px; height: 26px; flex: none; }
+#s-rules .cand .why.bad .why-txt { color: var(--sa-cost); }
+#s-rules .cand .strike {
+  position: absolute; left: -6px; right: -6px; top: 50%; height: 4px; border-radius: 2px; background: var(--sa-cost);
+  transform: scaleX(0); transform-origin: 0 50%; transition: transform 0.5s var(--ease-out);
 }
-.rvm .rrow .why { font-size: 21px; color: var(--sa-cost); font-weight: 600; opacity: 0; transition: opacity 0.35s; }
-.rvm .rrow .handed {
-  font-size: 19px; font-weight: 600; padding: 3px 12px; border-radius: 999px;
-  border: 2px solid var(--sa-rule); color: var(--sa-muted); opacity: 0; transition: opacity 0.35s;
+#s-rules .cand .runmark {
+  position: absolute; top: -3px; bottom: -3px; border: 3px solid var(--sa-cost); border-radius: 9px; background: var(--tint-cost);
+  opacity: 0; transition: opacity 0.3s;
 }
-#s-rules.s2 .rrow.cut .strike { transform: scaleX(1); transition: transform 0.45s var(--ease-out) calc(var(--i) * 80ms); }
-#s-rules.s2 .rrow.cut .seq { opacity: 0.4; transition: opacity 0.4s calc(var(--i) * 80ms); }
-#s-rules.s2 .rrow .why, #s-rules.s2 .rrow .handed { opacity: 1; transition-delay: calc(0.15s + var(--i) * 80ms); }
-.rvm .mrow .track {
-  position: relative; flex: 1; height: 26px; border-radius: 999px; background: var(--sa-surface);
+#s-rules.s2 .cand .why { opacity: 1; transition-delay: calc(0.2s + var(--i) * 90ms); }
+#s-rules.s2 .cand.fail .strike { transform: scaleX(1); transition-delay: calc(0.25s + var(--i) * 90ms); }
+#s-rules.s2 .cand.fail .runmark { opacity: 1; transition-delay: calc(0.1s + var(--i) * 90ms); }
+#s-rules.s2 .cand.fail .seq { opacity: 0.4; transition: opacity 0.5s calc(0.3s + var(--i) * 90ms); }
+#s-rules .cand .keep {
+  font-size: 20px; font-weight: 600; color: var(--sa-muted); border: 2px solid var(--sa-rule);
+  border-radius: 999px; padding: 2px 14px; position: absolute; right: 14px;
+  opacity: 0; transition: opacity 0.4s; transition-delay: 1.1s;
+}
+#s-rules.s2 .cand.picked .keep { opacity: 1; }
+#s-rules.s3 .cand.fail { opacity: 0.72; }
+
+/* the model, right: same rows, same stagger, a number on every one of them */
+#s-rules .mrow {
+  display: grid; grid-template-columns: 34px 1fr 62px 230px; align-items: center; gap: 16px;
+  height: 56px; padding: 0 14px; border-radius: 14px; border: 2px solid transparent;
+  transition: background-color 0.4s, border-color 0.4s, opacity 0.4s;
+}
+#s-rules .mrow .track {
+  position: relative; height: 24px; border-radius: 999px; background: var(--sa-surface);
   border: 2px solid var(--sa-rule); overflow: hidden;
 }
-.rvm .mrow .track i {
+#s-rules .mrow .track i {
   position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--sa-audit);
-  transform: scaleX(0); transform-origin: left; transition: transform 0.6s var(--ease-out);
+  transform: scaleX(0); transform-origin: left; transition: transform 0.55s var(--ease-out);
 }
-#s-rules.s3 .mrow .track i { transform: none; transition-delay: calc(0.1s + var(--i) * 70ms); }
-.rvm .mrow.cut .track i { background: var(--sa-rule); }
-.rvm .mrow.cost .track i { background: var(--sa-cost); }
-.rvm .mrow.gain .track i { background: var(--sa-gain); }
-.rvm .mrow .val { font-family: var(--mono); font-size: 23px; font-weight: 600; width: 62px; text-align: right; }
-.rvm .mrow.cost .val { color: var(--sa-cost); }
-.rvm .mrow.gain .val { color: var(--sa-gain); }
-.rvm .mrow .mtag { font-size: 19px; color: var(--sa-muted); width: 238px; line-height: 1.2; }
-.rvm .mrow.cost .mtag, .rvm .mrow.gain .mtag { font-weight: 600; color: var(--sa-ink); }
-.rvm .meanline { position: absolute; top: -6px; bottom: -40px; margin-left: 42px; width: 0; }
-.rvm .meanline i { position: absolute; top: 0; bottom: 28px; border-left: 2px dashed var(--sa-muted); }
-.rvm .meanline em {
-  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+#s-rules .mrow .risk {
+  font-family: var(--mono); font-weight: 600; font-size: 23px; color: var(--sa-ink); text-align: right;
+  opacity: 0; transform: translateX(-6px);
+  transition: opacity 0.4s, transform 0.4s var(--ease-out), color 0.5s;
+}
+#s-rules .mrow .mflag {
+  font-size: 19px; color: var(--sa-muted); line-height: 1.2;
+  opacity: 0; transform: translateX(8px);
+  transition: opacity 0.4s, transform 0.4s var(--ease-back);
+}
+#s-rules .mrow.fail .track i { background: var(--sa-rule); }
+#s-rules.s3 .mrow .track i { transform: none; transition-delay: calc(0.1s + var(--i) * 110ms); }
+#s-rules.s3 .mrow .risk { opacity: 1; transform: none; transition-delay: calc(0.35s + var(--i) * 110ms); }
+#s-rules.s3 .mrow.fail { opacity: 0.55; }
+#s-rules.s3 .mrow.pass:not(.kept) { opacity: 0.7; }
+/* the one the rules handed over, flagged the way the old slide flagged a risky survivor */
+#s-rules.s3 .mrow.airisk {
+  border-color: var(--sa-cost); border-style: dashed; background: var(--tint-cost);
+  transition-delay: 1.3s, 1.3s;
+}
+#s-rules.s3 .mrow.airisk .track i { background: var(--sa-cost); }
+#s-rules.s3 .mrow.airisk .risk { color: var(--sa-cost); transition-delay: calc(0.35s + var(--i) * 110ms), calc(0.35s + var(--i) * 110ms), 1.3s; }
+/* and the one we keep */
+#s-rules.s3 .mrow.kept { border-color: var(--sa-gain); background: var(--tint-gain); transition-delay: 1.9s, 1.9s; }
+#s-rules.s3 .mrow.kept .track i { background: var(--sa-gain); }
+#s-rules.s3 .mrow.kept .risk { color: var(--sa-gain); }
+#s-rules.s3 .mrow .mflag { transition-delay: calc(0.6s + var(--i) * 110ms); }
+#s-rules.s3 .mrow.airisk .mflag { opacity: 1; transform: none; color: var(--sa-cost); font-weight: 600; transition-delay: 1.5s; }
+#s-rules.s3 .mrow.kept .mflag { opacity: 1; transform: none; color: var(--sa-gain); font-weight: 600; transition-delay: 2.1s; }
+#s-rules.s3 .mrow.fail .mflag { opacity: 1; transform: none; color: var(--sa-ink); font-weight: 600; }
+#s-rules .meanline {
+  position: absolute; inset: -6px 0 -40px 0; pointer-events: none;
+  display: grid; grid-template-columns: 34px 1fr 62px 230px; gap: 16px; padding: 0 14px;
+}
+#s-rules .meanline .col { grid-column: 2; position: relative; }
+#s-rules .meanline i { position: absolute; left: var(--x); top: 0; bottom: 30px; border-left: 2px dashed var(--sa-muted); }
+#s-rules .meanline em {
+  position: absolute; left: var(--x); bottom: 0; transform: translateX(-50%);
   font-style: normal; font-size: 18px; color: var(--sa-muted); white-space: nowrap;
+  opacity: 0; transition: opacity 0.4s;
 }
+#s-rules.s3 .meanline em { opacity: 1; transition-delay: 0.9s; }
 
 /* ---------------------------------------------------------------- slide 5: rule audit */
 
