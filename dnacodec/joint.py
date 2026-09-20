@@ -336,6 +336,34 @@ def label_with_polisher(
     )
 
 
+def cluster_sizes(
+    strands: Sequence[Strand],
+    profile: SituationProfile,
+    k: int,
+    seed: int,
+    sim: str = "A",
+    heldout: bool = False,
+) -> np.ndarray:
+    """(n, k) number of reads in every cluster `label_with_polisher` saw, re-simulated.
+
+    Same chunking and the same derived seeds, so cluster (i, j) here is cluster (i, j) there.
+    Simulating is cheap (about 10% of a labeling run); this exists so a saved LabelBatch can
+    be stratified by coverage after the fact, because "the decoder knows it is wrong" is
+    mostly worthless if all it knows is that the cluster was thin.
+    """
+    _check_seed(seed, heldout)
+    simulate = get_simulate(sim)
+    strands = list(strands)
+    out = np.zeros((len(strands), k), dtype=np.int16)
+    for a in range(0, len(strands), LABEL_CHUNK_STRANDS):
+        block = list(range(a, min(a + LABEL_CHUNK_STRANDS, len(strands))))
+        chunk_seed = _derived_seed(seed, 2, a // LABEL_CHUNK_STRANDS)
+        repeated = [strands[i] for i in block for _ in range(k)]
+        for j, cluster in enumerate(simulate(repeated, profile, chunk_seed)):
+            out[block[j // k], j % k] = len([r for r in cluster if r])
+    return out
+
+
 # ------------------------------------------------------------------ dense risk model
 
 
