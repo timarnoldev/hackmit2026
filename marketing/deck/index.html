@@ -39,10 +39,7 @@
       <span data-mark></span>
       <h1 class="wordmark">Erbgut</h1>
     </div>
-    <p class="gloss enter" style="--d:0.1">German for the genetic material you inherit</p>
     <p class="tagline enter" style="--d:0.15"><span>Measure the rule.</span> Keep what pays.</p>
-    <p class="oneliner enter" style="--d:0.3">We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.</p>
-    <div class="event enter" style="--d:0.45"><b>HackMIT 2026</b><span class="res" data-key="meta.team" data-fmt="text" data-ph="TEAM: names"></span></div>
   </div>
   <div class="ribbon" aria-hidden="true"><div class="ribbon-track"></div></div>
   <aside class="notes">
@@ -51,8 +48,256 @@
   </aside>
 </section>
 
-<!-- ================================================================ 2. Problem -->
-<section class="slide" id="s-problem" data-title="The problem" data-plan="8-28"
+<!-- ================================================================ 2. System overview -->
+<section class="slide" id="s-overview" data-title="How Erbgut works" data-plan="8-34" data-steps="8"
+  data-labels="Image becomes bits|Bits pulled into a line|Two bits, one DNA letter|Many strands, in the middle|Frozen into storage|Read out with light|Repuzzled back into bits|Bits become the file again">
+  <p class="kicker">In one picture</p>
+  <h2 class="title sm">Any file becomes DNA</h2>
+  <div class="ov-anim" aria-hidden="true">
+    <svg class="ov-image" viewBox="0 0 48 48"><rect x="4" y="8" width="40" height="32" rx="5" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="16" cy="19" r="4" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M6 33 L18 22 L26 30 L34 20 L43 29" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="ov-bits">
+      <span class="bit" style="left:195px;top:429px;--dx:-25px;--dy:41px">0</span>
+      <span class="bit" style="left:245px;top:429px;--dx:-45px;--dy:41px">1</span>
+      <span class="bit" style="left:295px;top:429px;--dx:-65px;--dy:41px">0</span>
+      <span class="bit" style="left:345px;top:429px;--dx:-85px;--dy:41px">0</span>
+      <span class="bit" style="left:395px;top:429px;--dx:-105px;--dy:41px">1</span>
+      <span class="bit" style="left:445px;top:429px;--dx:-125px;--dy:41px">0</span>
+      <span class="bit" style="left:195px;top:487px;--dx:155px;--dy:-17px">0</span>
+      <span class="bit" style="left:245px;top:487px;--dx:135px;--dy:-17px">0</span>
+      <span class="bit" style="left:295px;top:487px;--dx:115px;--dy:-17px">0</span>
+      <span class="bit" style="left:345px;top:487px;--dx:95px;--dy:-17px">1</span>
+      <span class="bit" style="left:395px;top:487px;--dx:75px;--dy:-17px">1</span>
+      <span class="bit" style="left:445px;top:487px;--dx:55px;--dy:-17px">0</span>
+      <span class="bit" style="left:195px;top:545px;--dx:335px;--dy:-75px">1</span>
+      <span class="bit" style="left:245px;top:545px;--dx:315px;--dy:-75px">0</span>
+      <span class="bit" style="left:295px;top:545px;--dx:295px;--dy:-75px">0</span>
+      <span class="bit" style="left:345px;top:545px;--dx:275px;--dy:-75px">1</span>
+      <span class="bit" style="left:395px;top:545px;--dx:255px;--dy:-75px">0</span>
+      <span class="bit" style="left:445px;top:545px;--dx:235px;--dy:-75px">0</span>
+      <span class="bit" style="left:195px;top:603px;--dx:515px;--dy:-133px">1</span>
+      <span class="bit" style="left:245px;top:603px;--dx:495px;--dy:-133px">0</span>
+      <span class="bit" style="left:295px;top:603px;--dx:475px;--dy:-133px">0</span>
+      <span class="bit" style="left:345px;top:603px;--dx:455px;--dy:-133px">0</span>
+      <span class="bit" style="left:395px;top:603px;--dx:435px;--dy:-133px">0</span>
+      <span class="bit" style="left:445px;top:603px;--dx:415px;--dy:-133px">1</span>
+    </div>
+    <div class="ov-divider"></div>
+    <div class="ov-shift">
+      <div class="ov-lettertext"><span class="seq" data-seq="CAGACGGCAGAC"></span></div>
+      <div class="ov-vault"></div>
+      <div class="ov-structs">
+        <svg class="struct" style="left:260px;top:-50px;transform:rotate(-8deg)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+        <svg class="struct" style="left:330px;top:20px;transform:rotate(5deg) scale(1.15)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+        <svg class="struct" style="left:400px;top:-30px;transform:rotate(10deg) scale(0.9)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+        <svg class="struct" style="left:290px;top:80px;transform:rotate(-12deg) scale(0.95)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+        <svg class="struct" style="left:370px;top:90px;transform:rotate(6deg) scale(1.05)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+      </div>
+      <div class="ov-glow"></div>
+      <div class="ov-scan">
+        <div class="flash flash-1"><div class="fbeam"></div><span class="fbit nt-G">G</span><span class="fbit nt-C">C</span></div>
+        <div class="flash flash-2"><div class="fbeam"></div><span class="fbit nt-T">T</span><span class="fbit nt-A">A</span></div>
+        <div class="flash flash-3"><div class="fbeam"></div><span class="fbit nt-A">A</span><span class="fbit nt-G">G</span></div>
+        <div class="flash flash-4"><div class="fbeam"></div><span class="fbit nt-C">C</span><span class="fbit nt-T">T</span></div>
+        <div class="flash flash-5"><div class="fbeam"></div><span class="fbit nt-G">G</span><span class="fbit nt-A">A</span></div>
+      </div>
+    </div>
+    <div class="ov-right">
+      <svg class="ov-image-r" viewBox="0 0 48 48"><rect x="4" y="8" width="40" height="32" rx="5" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="16" cy="19" r="4" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M6 33 L18 22 L26 30 L34 20 L43 29" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="rbit" style="left:1400px;top:433px;--sx:-60px;--sy:-112px;--srot:21deg">0</span>
+      <span class="rbit" style="left:1450px;top:433px;--sx:-145px;--sy:11px;--srot:-19deg">1</span>
+      <span class="rbit" style="left:1500px;top:433px;--sx:-150px;--sy:2px;--srot:-65deg">0</span>
+      <span class="rbit" style="left:1550px;top:433px;--sx:-23px;--sy:-138px;--srot:-57deg">0</span>
+      <span class="rbit" style="left:1600px;top:433px;--sx:-26px;--sy:105px;--srot:-53deg">1</span>
+      <span class="rbit" style="left:1650px;top:433px;--sx:-94px;--sy:41px;--srot:63deg">0</span>
+      <span class="rbit" style="left:1400px;top:491px;--sx:26px;--sy:-33px;--srot:67deg">0</span>
+      <span class="rbit" style="left:1450px;top:491px;--sx:-154px;--sy:115px;--srot:-29deg">0</span>
+      <span class="rbit" style="left:1500px;top:491px;--sx:-121px;--sy:-122px;--srot:-27deg">0</span>
+      <span class="rbit" style="left:1550px;top:491px;--sx:107px;--sy:-102px;--srot:11deg">1</span>
+      <span class="rbit" style="left:1600px;top:491px;--sx:47px;--sy:-41px;--srot:7deg">1</span>
+      <span class="rbit" style="left:1650px;top:491px;--sx:-149px;--sy:-141px;--srot:-41deg">0</span>
+      <span class="rbit" style="left:1400px;top:549px;--sx:61px;--sy:-23px;--srot:-26deg">1</span>
+      <span class="rbit" style="left:1450px;top:549px;--sx:29px;--sy:-15px;--srot:-28deg">0</span>
+      <span class="rbit" style="left:1500px;top:549px;--sx:100px;--sy:64px;--srot:-36deg">0</span>
+      <span class="rbit" style="left:1550px;top:549px;--sx:25px;--sy:8px;--srot:53deg">1</span>
+      <span class="rbit" style="left:1600px;top:549px;--sx:78px;--sy:-68px;--srot:67deg">0</span>
+      <span class="rbit" style="left:1650px;top:549px;--sx:-130px;--sy:-26px;--srot:36deg">0</span>
+      <span class="rbit" style="left:1400px;top:607px;--sx:-118px;--sy:-4px;--srot:-65deg">1</span>
+      <span class="rbit" style="left:1450px;top:607px;--sx:57px;--sy:85px;--srot:10deg">0</span>
+      <span class="rbit" style="left:1500px;top:607px;--sx:128px;--sy:-60px;--srot:27deg">0</span>
+      <span class="rbit" style="left:1550px;top:607px;--sx:32px;--sy:26px;--srot:-6deg">0</span>
+      <span class="rbit" style="left:1600px;top:607px;--sx:116px;--sy:142px;--srot:-4deg">0</span>
+      <span class="rbit" style="left:1650px;top:607px;--sx:56px;--sy:-141px;--srot:28deg">1</span>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>Before the details, roughly, what did we build? Any file, a photo, a document, anything, is already just bits underneath.</p>
+    <p><i class="cue"></i> Pull those bits into one line.</p>
+    <p><i class="cue"></i> Two bits become one DNA letter: A, C, G or T.</p>
+    <p><i class="cue"></i> And the whole file doesn't become one strand. It becomes many, spread across the tube.</p>
+    <p><i class="cue"></i> That's what gets stored. Frozen, effectively: it just sits there until you need it.</p>
+    <p><i class="cue"></i> Reading it back out means shining light on it and sequencing it.</p>
+    <p><i class="cue"></i> And it comes back together as bits again, on the other side.</p>
+    <p><i class="cue"></i> Back to exactly the file you started with.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 3. Why DNA -->
+<section class="slide" id="s-benefits" data-title="Why DNA" data-plan="34-50">
+  <p class="kicker">Why DNA</p>
+  <h2 class="title sm">Denser than anything else, durable for centuries</h2>
+  <div class="ben-stats">
+    <div class="ben-stat card enter" style="--d:0.1">
+      <div class="n">~215<small>PB per gram</small></div>
+      <div class="d">The often-cited theoretical density of DNA as a storage medium: millions of times denser than flash or tape.</div>
+      <div class="ben-compare">
+        <div class="ben-cmp-item">
+          <svg class="ben-cmp-dna" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="5" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="5" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="4" stroke-linecap="round"/></svg>
+          <span>1 gram of DNA</span>
+        </div>
+        <span class="ben-cmp-eq">&asymp;</span>
+        <div class="ben-cmp-item ben-cmp-drives">
+          <div class="ben-cmp-grid">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="6" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          <span>~10,000 20&thinsp;TB hard drives</span>
+        </div>
+      </div>
+    </div>
+    <div class="ben-stat card enter" style="--d:0.2">
+      <div class="n">500+<small>years</small></div>
+      <div class="d">Cold, dry, dark storage and DNA's own decay rate point to centuries of stability, no power or refresh cycle needed. Hard drives and tape need refreshing every 5 to 10 years.</div>
+      <div class="ben-bars">
+        <div class="ben-bar-row"><span class="ben-bar-lbl">SSD</span><div class="ben-bar" style="width:67px"></div><span class="ben-bar-val">~5 yr</span></div>
+        <div class="ben-bar-row"><span class="ben-bar-lbl">HDD</span><div class="ben-bar" style="width:87px"></div><span class="ben-bar-val">~8 yr</span></div>
+        <div class="ben-bar-row"><span class="ben-bar-lbl">Tape</span><div class="ben-bar" style="width:125px"></div><span class="ben-bar-val">~20 yr</span></div>
+        <div class="ben-bar-row"><span class="ben-bar-lbl">DNA</span><div class="ben-bar ben-bar-dna" style="width:260px"></div><span class="ben-bar-val">500+ yr</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="ben-sub enter" style="--d:0.3">Where that matters</p>
+  <div class="ben-cases">
+    <div class="ben-case card enter" style="--d:0.35">
+      <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 7l2-3h14l2 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <h4>Cold archives</h4>
+      <p>Data you must keep, but rarely touch</p>
+    </div>
+    <div class="ben-case card enter" style="--d:0.4">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><line x1="8" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="1.8"/></svg>
+      <h4>Scientific &amp; genomic records</h4>
+      <p>Long-horizon research data, kept as long as it's needed</p>
+    </div>
+    <div class="ben-case card enter" style="--d:0.45">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h4>Compliance records</h4>
+      <p>Multi-decade retention, without a refresh cycle</p>
+    </div>
+    <div class="ben-case card enter" style="--d:0.5">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M12 21s7-7.2 7-12a7 7 0 0 0-14 0c0 4.8 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      <h4>Disaster-resilient backups</h4>
+      <p>A tiny physical footprint, easy to keep off-site</p>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>So why DNA at all, before we get to the problems with it?</p>
+    <p><i class="cue"></i> Density: the often-cited figure is around 215 petabytes per gram, theoretically. Nothing else comes close.</p>
+    <p><i class="cue"></i> Durability: stored cold, dry and dark, DNA's decay rate points to centuries of stability, no power needed. Compare that to hard drives and tape, which need refreshing every 5 to 10 years or you risk losing the data.</p>
+    <p><i class="cue"></i> That combination matters for cold archives, long-horizon scientific and genomic records, compliance data with decade-plus retention requirements, and disaster-resilient backups where a tiny physical footprint is worth a lot.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 4. Problem: errors today -->
+<section class="slide" id="s-errors" data-title="The problem, today" data-plan="50-62" data-steps="4"
+  data-labels="One strand degrades|Read out, one letter comes back wrong|Repuzzled with a flipped bit|The file comes back corrupted">
+  <p class="kicker">The problem, today</p>
+  <h2 class="title sm">One bad strand is enough</h2>
+  <div class="crp-anim" aria-hidden="true">
+    <div class="crp-vault"></div>
+    <div class="crp-glow"></div>
+    <svg class="crp-struct crp-struct-1" style="left:890px;top:492px;transform:rotate(-8deg)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+    <svg class="crp-struct crp-struct-bad" style="left:960px;top:562px;transform:rotate(5deg) scale(1.15)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+    <svg class="crp-struct crp-struct-3" style="left:1030px;top:512px;transform:rotate(10deg) scale(0.9)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+    <svg class="crp-struct crp-struct-4" style="left:920px;top:622px;transform:rotate(-12deg) scale(0.95)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+    <svg class="crp-struct crp-struct-5" style="left:1000px;top:632px;transform:rotate(6deg) scale(1.05)" viewBox="0 0 46 64"><path class="s1" d="M14 4 C 34 4 34 20 22 24 C 10 28 10 44 30 48" fill="none" stroke-width="4" stroke-linecap="round"/><path class="s2" d="M32 4 C 12 4 12 20 22 24 C 34 28 34 44 16 48" fill="none" stroke-width="4" stroke-linecap="round"/><line class="rg" x1="16" y1="10" x2="30" y2="10" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="18" y1="24" x2="26" y2="24" stroke-width="3.4" stroke-linecap="round"/><line class="rg" x1="16" y1="42" x2="30" y2="42" stroke-width="3.4" stroke-linecap="round"/></svg>
+
+    <div class="crp-scan">
+      <div class="flash flash-1"><div class="fbeam"></div><span class="fbit nt-G">G</span><span class="fbit nt-C">C</span></div>
+      <div class="flash flash-2"><div class="fbeam"></div><span class="fbit nt-T">T</span><span class="fbit nt-A">A</span></div>
+      <div class="flash flash-3"><div class="fbeam"></div><span class="fbit bad">A</span><span class="fbit nt-G">G</span></div>
+      <div class="flash flash-4"><div class="fbeam"></div><span class="fbit nt-C">C</span><span class="fbit nt-T">T</span></div>
+      <div class="flash flash-5"><div class="fbeam"></div><span class="fbit nt-G">G</span><span class="fbit nt-A">A</span></div>
+    </div>
+
+    <div class="crp-right">
+      <div class="crp-image-r">
+        <svg class="gl gl-a" viewBox="0 0 48 48"><rect x="4" y="8" width="40" height="32" rx="5" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="16" cy="19" r="4" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M6 33 L18 22 L26 30 L34 20 L43 29" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="gl gl-b" viewBox="0 0 48 48"><rect x="4" y="8" width="40" height="32" rx="5" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="16" cy="19" r="4" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M6 33 L18 22 L26 30 L34 20 L43 29" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="gl gl-main" viewBox="0 0 48 48"><rect x="4" y="8" width="40" height="32" rx="5" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="16" cy="19" r="4" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M6 33 L18 22 L26 30 L34 20 L43 29" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="rbit" style="left:1400px;top:433px;--sx:-60px;--sy:-112px;--srot:21deg">0</span>
+      <span class="rbit" style="left:1450px;top:433px;--sx:-145px;--sy:11px;--srot:-19deg">1</span>
+      <span class="rbit" style="left:1500px;top:433px;--sx:-150px;--sy:2px;--srot:-65deg">0</span>
+      <span class="rbit" style="left:1550px;top:433px;--sx:-23px;--sy:-138px;--srot:-57deg">0</span>
+      <span class="rbit" style="left:1600px;top:433px;--sx:-26px;--sy:105px;--srot:-53deg">1</span>
+      <span class="rbit" style="left:1650px;top:433px;--sx:-94px;--sy:41px;--srot:63deg">0</span>
+      <span class="rbit" style="left:1400px;top:491px;--sx:26px;--sy:-33px;--srot:67deg">0</span>
+      <span class="rbit" style="left:1450px;top:491px;--sx:-154px;--sy:115px;--srot:-29deg">0</span>
+      <span class="rbit" style="left:1500px;top:491px;--sx:-121px;--sy:-122px;--srot:-27deg">0</span>
+      <span class="rbit rbit-bad" style="left:1550px;top:491px;--sx:107px;--sy:-102px;--srot:11deg">0</span>
+      <span class="rbit" style="left:1600px;top:491px;--sx:47px;--sy:-41px;--srot:7deg">1</span>
+      <span class="rbit" style="left:1650px;top:491px;--sx:-149px;--sy:-141px;--srot:-41deg">0</span>
+      <span class="rbit" style="left:1400px;top:549px;--sx:61px;--sy:-23px;--srot:-26deg">1</span>
+      <span class="rbit" style="left:1450px;top:549px;--sx:29px;--sy:-15px;--srot:-28deg">0</span>
+      <span class="rbit" style="left:1500px;top:549px;--sx:100px;--sy:64px;--srot:-36deg">0</span>
+      <span class="rbit" style="left:1550px;top:549px;--sx:25px;--sy:8px;--srot:53deg">1</span>
+      <span class="rbit" style="left:1600px;top:549px;--sx:78px;--sy:-68px;--srot:67deg">0</span>
+      <span class="rbit" style="left:1650px;top:549px;--sx:-130px;--sy:-26px;--srot:36deg">0</span>
+      <span class="rbit" style="left:1400px;top:607px;--sx:-118px;--sy:-4px;--srot:-65deg">1</span>
+      <span class="rbit" style="left:1450px;top:607px;--sx:57px;--sy:85px;--srot:10deg">0</span>
+      <span class="rbit" style="left:1500px;top:607px;--sx:128px;--sy:-60px;--srot:27deg">0</span>
+      <span class="rbit" style="left:1550px;top:607px;--sx:32px;--sy:26px;--srot:-6deg">0</span>
+      <span class="rbit" style="left:1600px;top:607px;--sx:116px;--sy:142px;--srot:-4deg">0</span>
+      <span class="rbit" style="left:1650px;top:607px;--sx:56px;--sy:-141px;--srot:28deg">1</span>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>Picture the strands we just stored, frozen in the tube.</p>
+    <p><i class="cue"></i> One of them degrades. Breaks, damage, doesn't matter how, it happens to some share of strands, always.</p>
+    <p><i class="cue"></i> Read it back out anyway, and one letter comes back wrong. Not missing, just wrong. Confidently wrong.</p>
+    <p><i class="cue"></i> That one wrong letter is two wrong bits once it's decoded back.</p>
+    <p><i class="cue"></i> And without correction, that's a corrupted file. One bad strand was enough.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 5. Problem -->
+<section class="slide" id="s-problem" data-title="The problem" data-plan="62-82"
   data-labels="Two channels that fail differently|Rulebook stamped onto Nanopore|Rulebook stamped onto Illumina|Bottom line">
   <p class="kicker">The problem</p>
   <h2 class="title">Rules chosen once, applied to every channel</h2>
@@ -88,8 +333,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 3. Pipeline -->
-<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="28-52"
+<!-- ================================================================ 6. Pipeline -->
+<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="82-106"
   data-labels="Bits become letters|Synthesis writes copies|Sequencing returns noisy reads|Decoder votes a consensus|Checksum marks a wrong strand missing|Fountain code rebuilds the file">
   <p class="kicker">How DNA storage works</p>
   <h2 class="title sm">From bits to strands, and back</h2>
@@ -162,8 +407,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 4. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="52-65"
+<!-- ================================================================ 7. Where rules come in -->
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="106-119"
   data-labels="Several candidates per slot|Rules reject some|A scorer keeps one|The knobs we measure">
   <p class="kicker">Where the rules come in</p>
   <h2 class="title sm">The encoder picks one of several candidate strands</h2>
@@ -193,8 +438,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 5. Tier 1 -->
-<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="65-92"
+<!-- ================================================================ 8. Tier 1 -->
+<section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="119-146"
   data-labels="Switch each rule off and measure|Nanopore verdicts|Illumina verdicts|Same rule, different verdict">
   <p class="kicker">Tier 1 <span class="tag">rule audit</span></p>
   <h2 class="title">Does this rule pay off on this channel?</h2>
@@ -211,8 +456,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 6. Tier 2 -->
-<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="92-112"
+<!-- ================================================================ 9. Tier 2 -->
+<section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="146-166"
   data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
   <h2 class="title sm">Learn where the decoder fails, then steer around it</h2>
@@ -239,8 +484,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 7. Loop -->
-<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="112-134" data-steps="4"
+<!-- ================================================================ 10. Loop -->
+<section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="166-188" data-steps="4"
   data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
   <p class="kicker">The loop</p>
   <h2 class="title sm">Alternate and freeze, then judge on the Pareto plot</h2>
@@ -257,8 +502,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 8. Evidence: ablation and crossover -->
-<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="134-152"
+<!-- ================================================================ 11. Evidence: ablation and crossover -->
+<section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="188-206"
   data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">Where the gain comes from, and where it holds</h2>
@@ -284,8 +529,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 9. Evidence: simulator -->
-<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="152-166"
+<!-- ================================================================ 12. Evidence: simulator -->
+<section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="206-220"
   data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">No wet lab, so the simulator is checked against real reads</h2>
@@ -314,8 +559,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 10. Results and close -->
-<section class="slide" id="s-results" data-title="Results and close" data-plan="166-180" data-steps="2"
+<!-- ================================================================ 13. Results and close -->
+<section class="slide" id="s-results" data-title="Results and close" data-plan="220-234" data-steps="2"
   data-labels="Headline results|Close: tagline, team, repo">
   <p class="kicker">Results</p>
   <h2 class="title sm">What the audit measured</h2>
