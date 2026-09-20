@@ -1,5 +1,5 @@
 """Why the risk model scores AUC ~0.5 on real reads, and what it does once coverage is
-held fixed. Owner: Agent F. Firewall test 3, the honest version.
+held fixed. Firewall test 3: does the risk model's ranking transfer to real reads?
 
     uv run python scripts/risk_real_analysis.py \
         --dataset dnaformer:BinnedNanoporeSecondFlowcell_Random \

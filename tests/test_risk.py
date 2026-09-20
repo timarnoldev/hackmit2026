@@ -1,4 +1,4 @@
-"""Tests for the risk model (Agent F). Small and CPU-only so they stay fast."""
+"""Tests for the risk model. Small and CPU-only so they stay fast."""
 
 from __future__ import annotations
 

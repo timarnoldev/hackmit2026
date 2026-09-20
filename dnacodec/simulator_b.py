@@ -1,4 +1,4 @@
-"""Simulator B: a deliberately different channel for the sim-to-real firewall. Owner: Agent A.
+"""Simulator B: a deliberately different channel for the sim-to-real firewall.
 
 Used ONLY to test whether a gain found against Simulator A (dnacodec.simulator) survives a
 differently built channel. Never optimize, tune or train against it.

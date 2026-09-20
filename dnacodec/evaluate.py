@@ -1,4 +1,4 @@
-"""Evaluation harness. Owner: Agent C, reviewed by the ML verifier.
+"""Evaluation harness.
 
 The only place Metrics are computed. Everything reported comes from here.
 """
@@ -136,7 +136,7 @@ def recovery_trials(
     encoded: EncodedFile | None = None,
     per_trial: bool = False,
 ) -> Metrics:
-    """File recovery over independent channel trials. Owner: Agent C.
+    """File recovery over independent channel trials.
 
     Encode data once with settings and scorer (encoding is deterministic). Then for each seed:
     simulate(strands, profile, seed), decoder.decode, encoder.recover, compare to data exactly.
@@ -195,7 +195,7 @@ def min_reads_at_target(
     simulator: Simulator | None = None,
     encoded: EncodedFile | None = None,
 ) -> float | None:
-    """Fewest mean reads per strand at which recovery_rate >= target. Owner: Agent C.
+    """Fewest mean reads per strand at which recovery_rate >= target.
 
     Evaluates recovery_trials with dataclasses.replace(profile, coverage_mean=c) for c in
     ascending coverages and returns the first c meeting the target (may stop early, and may

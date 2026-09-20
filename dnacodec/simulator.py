@@ -1,4 +1,4 @@
-"""Channel simulator. Owner: Agent A.
+"""Channel simulator.
 
 Turns encoded strands into clusters of noisy reads for a given situation profile.
 

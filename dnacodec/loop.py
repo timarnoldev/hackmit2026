@@ -1,4 +1,4 @@
-"""The alternating loop. Owner: Agent G.
+"""The alternating loop.
 
 For one situation profile at its read budget B = profile.coverage_mean (PROJECT.md,
 "The loop alternates, it doesn't co-train"):

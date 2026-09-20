@@ -33,7 +33,7 @@ and says so.
 | risk model | 63k | float32, BatchNorm folded in | 1.2e-07 largest difference, rank correlation 1.000 |
 
 All three figures come from `tools/verify_polish.py --clusters 300` and
-`tools/verify_risk.py --strands 400` on this branch, which are deterministic, so they can be
+`tools/verify_risk.py --strands 400`, which are deterministic, so they can be
 reproduced exactly. The polisher's 229 against 230 is the point: on 300 real clusters int8
 costs one strand, inside the noise of a single cluster draw, against 211 for the classic
 majority vote.

@@ -1,98 +1,128 @@
 # Devpost submission: Erbgut
 
+One section per Devpost form field. Every number comes from
+[`docs/NUMBERS.md`](../docs/NUMBERS.md), which carries its conditions and provenance.
+
 **Project name:** Erbgut (German for the genetic material you inherit)
 
-**Tagline (Devpost "elevator pitch", max 200 characters):**
-We built a tool that measures whether a DNA coding rule actually pays off on your channel, and tunes the codec accordingly.
+**Elevator pitch (max 200 characters):** We built a tool that measures whether a DNA coding rule
+actually pays off on your channel, and tunes the codec accordingly.
 
-**Thumbnail:** `logo-mark.svg` exported to PNG at 512 px, or a dashboard screenshot of the rule audit view.
-
-> Before submitting: replace every `[RESULT: ...]` with a number from held-out trials, or delete the sentence. Search for `[RESULT` and `[TEAM` before you press submit.
-
----
+**Thumbnail:** `logo-mark.svg` exported to PNG at 512 px, or a dashboard screenshot of the rule
+audit view.
 
 ## Inspiration
 
-DNA can hold data at a density no hard drive comes close to, and it lasts for centuries. But it's a noisy medium. Writing it (synthesis) and reading it (sequencing) swap, add and drop letters, and entire strands go missing.
-
-Reading the DNA storage literature, we kept seeing the same few rules: never more than three of the same letter in a row, keep GC content between 40 and 60%, add a fixed amount of redundancy. Every rule costs storage density or sequencing reads. Yet they are chosen once, copied from paper to paper, and applied to every sequencing channel, even though Nanopore and Illumina fail in completely different ways. Nanopore struggles with runs of identical letters. Illumina barely cares.
-
-We wanted to answer a simple engineering question that no tool answers today: *given my sequencing technology and my read budget, which of these rules are actually worth paying for?*
+DNA can store data for centuries at extreme density, and the field has a set of rules everyone
+follows when encoding: never more than three identical letters in a row, keep GC content between
+40 and 60 percent, add 30 percent redundancy. We went looking for the paper that shows those
+rules pay off on a given sequencer, and we could not find it. They are folklore, copied between
+projects, applied to every channel. Every rule costs storage space. So we built the tool that
+measures them.
 
 ## What it does
 
-Erbgut tunes a DNA storage codec for one channel (sequencing technology, read budget, recovery target), in two tiers.
+Erbgut tunes a DNA storage codec for one specific channel. You tell it your sequencing
+technology, how many reads per strand you can afford, and how reliably the file must come back.
+It then switches each coding rule on and off, measures what each one costs and what it buys, and
+keeps only what pays off. On top of that it learns from where the decoder actually fails, so the
+encoder can avoid patterns the hand written rules do not cover. The result is a codec tuned to
+your channel, plus a verdict per rule.
 
-**Tier 1, rule audit.** It switches each hand rule off, one at a time, and measures what it costs and what it buys. It tunes the redundancy the same way. Every verdict comes from recovery trials on held-out seeds: a fixed 20 KB file has to come back exactly in all 300 trials, and we count the reads per strand and bits per base it took. The encoder and decoder stay the same throughout.
-
-**Tier 2, learned selection.** A Fountain encoder can write the same data as many different candidate strands at no cost in density. A small CNN risk model learns, from where our decoder actually fails on this channel, which candidates are risky, and the encoder keeps the safest one. This lets the codec avoid patterns the hand rules don't cover.
-
-The result is shown in a Streamlit dashboard: the rule audit (a verdict per rule and channel), a Pareto plot of bits per base against reads per strand with the default codec and each tuning round, a crossover matrix, and an ablation ladder. The demo ends with an image encoded into DNA, read back through the Nanopore channel at 6 reads per strand, and decoded with both the default and the tuned codec.
-
-What we found: [RESULT: one or two sentences on the rule audit verdicts per channel, and the reads per strand or bits per base the tuned codec needs vs the default at matched density]. If the audit shows the hand rules are already near optimal on a channel, we report that. It's a useful answer, and now it's a measured one.
+Our measurements: each of the two standard rules pays off on exactly one of the two channels and
+does nothing on the other. On Nanopore the run length rule is worth 5 reads per strand, 19.5 with
+it against 24.5 without, while the GC rule buys nothing measurable. On Illumina it is the other
+way round: the GC rule is worth a read per strand, 3.0 against 4.0, and the run length rule buys
+nothing. Tuning the redundancy per channel takes Nanopore from 19.5 reads down to 5.5, and stores
+25 percent more data per DNA letter on Illumina at the same recovery target, 1.50 bits per base
+against 1.20.
 
 ## How we built it
 
-**Channel simulator.** We can't run a wet lab at a hackathon, so the simulator plays the lab. It models substitutions, insertions, deletions, run-length effects, a position ramp, per-read quality, shared per-position errors, dropouts and uneven coverage. We calibrated it on real reads: the Microsoft clustered Nanopore reads dataset and the DNAformer Nanopore and Illumina reads from Technion. The acceptance test was that our baseline decoder must score about the same on simulated reads as on real ones. On the Microsoft held-out split, which no calibration step touched, it lands within about 3 points at every read count from 2 to 16, and where it's off it's slightly harder.
+A Fountain code encoder that generates several candidate strands per slot, a channel simulator
+calibrated on two public real sequencing datasets, a decoder, a learned risk model, and a search
+loop that measures everything on held out trials.
 
-**Context errors from real reads.** We found that on real Nanopore reads, errors shared by all reads of a strand (the ones more reads can't average away) are 45 to 66% predictable from the local 5-letter context, on held-apart data, with the same context families leading in two independent datasets and hot-spot AUC 0.80 to 0.90. We fit a per 5-letter context error table and put it into the simulator, so the risk model has something real to learn.
+The decoder is the part we are happiest with. A from scratch transformer with 9.6 million
+parameters failed: it had to learn how to align reads that shift against each other, and after
+hours of training it was still far behind the classic method. So we inverted it. The classic
+algorithm does the alignment, which it is good at, and a small CNN with 0.8 million parameters
+corrects what is left. It trained in 13 minutes and beats the classic method by 21 points on real
+held out data.
 
-**Encoder.** A DNA Fountain style LT code with a robust soliton distribution, several candidate seeds per strand, configurable hard rules and a pluggable scorer. A CRC-16 in every strand turns a wrongly decoded strand into a missing one, so a confident mistake can't corrupt the file.
+Everything runs on an ASUS Ascent GX10. The live demo runs on an ESP32-S3-BOX-3 that decodes on
+the chip itself, so it works unplugged from any laptop.
 
-**Decoders.** A majority vote baseline with iterative alignment (90.6% exact strands at 16 reads on real held-out Nanopore data), always reported next to any model result. A transformer decoder that reconstructs a strand from up to 16 noisy reads: each read is encoded separately, then one learned query per output position cross-attends to all read tokens.
+## Individual Contributions
 
-**Risk model.** A 1D CNN over one-hot bases. Labels are failure rates, not single failures: each training strand is simulated 32 times and decoded, and the label is the fraction decoded wrongly. The training strands are generated by us, with controlled runs, GC skew and motifs.
-
-**The loop.** It alternates and freezes: adapt the decoder, label strands, train the risk model, grid search the settings, re-adapt the decoder. At most three rounds. The settings search is a plain grid on purpose.
-
-**Evidence design, fixed before any run.** A rule audit table. An ablation ladder A to E where the default is always system B (same decoder), so B to C isolates tier 1 and C to D isolates tier 2. A crossover matrix running each tuned codec on its own and the other channel. A sim-to-real firewall: a structurally different Simulator B (bursty errors, a different position curve, a context table from the other dataset), never used for optimization, plus the risk model's ranking checked on real held-out reads.
-
-**Compute.** All GPU training and the CPU heavy recovery trials run on an ASUS Ascent GX10 with an NVIDIA GB10 and 128 GB of unified memory.
-
-**Process.** Much of the code was written by coding agents working in parallel on separate branches. We owned the shared interfaces, the held-out data rules, the verification of every number and the story. The result is about 11,000 lines of Python, about 2,500 of them tests.
+[TEAM: who did what] Much of the implementation was written by coding agents working in parallel
+on separate branches, while we owned the interfaces, the evaluation discipline and every number
+we report.
 
 ## Challenges we ran into
 
-- **Our first simulator was far too easy.** It matched the average error rates of real reads, yet the baseline decoder scored far higher on simulated reads than on real ones from 4 reads per strand up (see the calibration tables in `docs/ERRORS.md`). Matching averages isn't enough; the structure of the errors matters. Adding per-read quality spread, shared per-position errors and the context table closed the gap to within about 3 points.
-- **Noisy labels.** A strand can fail once by bad luck, and training on single outcomes would teach the risk model noise. So every label is a failure rate over 32 simulations.
-- **Moving targets.** Training the decoder and the risk model at the same time gives the risk model stale labels. We alternate and freeze instead.
-- **Not fooling ourselves.** The loop could learn a quirk of our own simulator. That's why Simulator B and the real-read check exist, and why a gain that doesn't survive them gets reported as such.
-- **Biased data.** The Microsoft dataset's references are known not to be uniformly random, so we never learn risky motifs from them.
-- **ARM64.** The GX10 is aarch64, not x86, so every dependency had to work on linux-aarch64 and GPU support in PyTorch had to be checked before anything else. [RESULT: say what actually happened here, or cut this bullet.]
+Our own optimizer cheated, and we caught it. The loop tests hundreds of settings and keeps the
+best, so the winner is partly lucky. On fresh seeds the chosen codec then failed 3 of 300 trials
+and missed the target. We added a margin check on unseen seeds, three independent evaluation
+blocks and selection on training data only.
+
+Our best result was nearly an artifact. The GC rule looked worthwhile on Illumina, until we
+noticed the dropout parameter behind it had never been calibrated and was 10 to 35 times higher
+than anything in the real data. We measured it, fixed it, and the finding disappeared.
+
+The risk model looked dead on real reads at AUC 0.516. It turned out that read count alone
+predicts failure at 0.78, so a sequence only score cannot show up unless you hold coverage fixed.
+Once we did, it reached 0.69.
 
 ## Accomplishments that we're proud of
 
-- A simulator that matches real Nanopore reads within about 3 points at every read count on held-out data, checked on data no fit touched.
-- Finding that shared Nanopore errors are 45 to 66% predictable from the 5-letter context in two independent datasets, patterns the standard rules don't cover.
-- An evidence design written down before the first run, with a fixed objective, so no one could pick a metric after seeing results.
-- A clean separation of claims: the ablation ladder shows exactly where any gain comes from.
-- [RESULT: the headline result we're proudest of, once it holds under the firewall].
+Our simulator is within 3 points of real sequencing data at every read count, on data it never
+saw. Our decoder reconstructs 88 percent of strands exactly at 6 reads per strand against 67
+percent for the classic method, on real Nanopore reads. The learned candidate selection cuts
+strand failures by 4 percentage points, and the gain survives a second simulator we built from
+different mechanisms specifically to try to break it. Isolated at file level, with every setting
+held fixed and only the candidate scorer swapped, it is the difference between recovering 27
+percent of files and 98 percent at 4.5 reads per strand. And the whole thing runs on a
+microcontroller on the table.
+
+Mostly we are proud of what we did not claim. Every number has a held out measurement behind it,
+and the documentation says where we are weaker than published work: our decoder is clearly behind
+TReconLM at low coverage, and we have not shown that selecting candidates by the risk model
+reduces failures on real DNA, because that needs a wet lab.
 
 ## What we learned
 
-- A rule that is right on one channel can be dead weight on another, and the only way to know is to measure at a fixed target. [RESULT: which rules turned out channel dependent, if any].
-- Calibrating a simulator to averages gives false confidence. Calibrate to the thing you care about, here decoder accuracy against coverage.
-- Being narrow about claims makes a project stronger. "Same encoder, same decoder, fixed target" is a sentence judges and researchers both trust.
-- With coding agents, writing code gets fast. The bottlenecks move to GPU time, integration and checking every number.
+Put the model where the knowledge is missing, not where the problem is hardest. The classic
+algorithm already solves alignment. What it lacks is knowledge about the channel, and that is
+exactly what a small model can supply.
 
-## What's next for Erbgut
+Also: measure the measurement. Three of our results changed once we looked at how they were
+measured, twice against us and once in our favour.
 
-- Run the audit on more channels and read budgets, including long-term archival storage, where most loss is whole strands.
-- A conditional risk model that takes the channel description as input, so it can handle operating points it never trained on.
-- Let users calibrate a channel profile from a sample of their own reads.
-- Real cost figures in place of our placeholder prices.
-- Validating a tuned codec with a wet lab partner, synthesizing and sequencing strands it chose.
+## What's next for our project
+
+The obvious next step is a wet lab. Everything we do is simulated, calibrated on real reads and
+checked against them, but we have never had our own strands synthesized and sequenced. That is
+the one test our firewall cannot replace.
+
+Beyond that: a risk model that knows about coverage as well as sequence, a reference set whose
+strands actually vary so the effect can be measured on real DNA, and per channel decoders instead
+of one.
 
 ## Built with
 
-python, pytorch, numpy, rapidfuzz, streamlit, plotly, pandas, pytest, uv, nvidia-gb10, asus-ascent-gx10, cuda
+python, pytorch, numpy, streamlit, plotly, rapidfuzz, uv, esp-idf/platformio, lovyangfx, c++,
+nvidia gb10 (asus ascent gx10), esp32-s3
 
-**Data:** Microsoft clustered Nanopore reads dataset (MIT license), DNAformer binned reads from Technion (CC BY 4.0).
+**Data:** Microsoft clustered Nanopore reads dataset (MIT licence), DNAformer binned reads from
+Technion (CC BY 4.0). No wet lab.
 
 ## Try it out
 
 - Code: https://github.com/timarnoldev/hackmit2026
-- Landing page: `marketing/index.html` in the repo
+- Live site and pitch deck: https://timarnoldev.github.io/hackmit2026/
+- Every number with its provenance: `docs/NUMBERS.md`
+- Where we stand against published work, written to be unflattering: `docs/COMPARISON.md`
 
 ## Team
 

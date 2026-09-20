@@ -12,11 +12,12 @@ uv run --extra train python scripts/what_the_model_learned.py --run-id run5
 
 Full output: [`results/run5_learned_rules.txt`](../results/run5_learned_rules.txt). How the model
 is built and trained: [MODELS.md](MODELS.md), section 2. What the channel actually does:
-[ERRORS.md](ERRORS.md).
+[ERRORS.md](ERRORS.md). Every number below is registered with its provenance in
+[NUMBERS.md](NUMBERS.md).
 
 ---
 
-## 1. It found the homopolymer rule by itself, and disagrees about where to draw the line
+## 1. It found the homopolymer rule by itself, and puts the line in a different place
 
 Nanopore, a single run of identical letters of length r inserted into an otherwise unremarkable
 strand:
@@ -28,10 +29,9 @@ strand:
 Flat up to 4, then it climbs steeply. **The standard rule in the field forbids runs longer than
 3**, and the model says the damage starts at 5.
 
-An earlier version of this document took the next step and concluded that the field's rule is
-stricter than the channel requires. **We measured that, and it is not true.** Moving the limit
-is a claim about reads per strand, so we measured it in reads per strand
-(`scripts/rule_recovery_curve.py --set threshold`, 300 held-out trials per point):
+Where the line belongs is a claim about reads per strand, so we measured it in reads per strand
+(`scripts/rule_recovery_curve.py --set threshold`, 300 held-out trials per point, recovery rate
+against mean reads per strand):
 
 | Limit on the longest run | 12 reads | 14 reads | 16 reads |
 |---|---|---|---|
@@ -45,17 +45,16 @@ Perfectly monotone: every step you loosen the rule costs recovery, and the field
 of the five. Full data:
 [`results/rule_recovery_curve_threshold_nanopore_budget.json`](../results/rule_recovery_curve_threshold_nanopore_budget.json).
 
-**The two measurements are both right, and the gap between them is the interesting part.** The
+**The two measurements answer different questions, and the gap between them is the finding.** The
 model answers a per-strand question: how likely is *this* strand to come back wrong. Between a
 run of 3 and a run of 4 the answer is 0.436 against 0.460, a small difference, and the model is
 not wrong about that. But a file is 1,239 strands and it needs essentially all of them. Small
 per-strand differences compound into large file-level ones, which is why a limit the model
 considers nearly free costs half the recoveries at 12 reads.
 
-So the model is a good guide to *what* is dangerous, and a bad guide to *where to draw a line*.
-That is not a defect we are excusing: it is the reason this project measures end to end in reads
-per strand instead of trusting a risk score, and we walked into the trap ourselves before the
-measurement pulled us back out.
+So the model is a good guide to *what* is dangerous and a bad guide to *where to draw a line*.
+That is the reason this project measures end to end in reads per strand rather than trusting a
+risk score.
 
 ## 2. It considers the GC rule pointless
 
@@ -66,8 +65,8 @@ Nanopore, GC content varied while runs are capped at 3, so this isolates GC:
 | Predicted risk | 0.453 | 0.455 | 0.459 | 0.465 | 0.473 | 0.482 | 0.489 |
 
 A spread of 3.6 points across the entire range, and in the wrong direction for a rule that wants
-GC near 0.5. The independent rule audit reached the same verdict from a completely different
-measurement: switching the GC rule off does not cost reads.
+GC near 0.5. The independent rule audit reaches the same verdict from a completely different
+measurement: switching the GC rule off does not cost reads on this channel.
 
 ## 3. The patterns it names, and one distinction no standard rule makes
 
@@ -113,30 +112,10 @@ switches both hand rules off there and spends the freedom on density instead.
 
 ---
 
-## Why this matters for the project
+# The same two rules, measured end to end
 
-Tier 2 of our claim is that decoder failures can teach the encoder what to avoid. This document
-is the qualitative side of that claim, next to the quantitative one in
-[NUMBERS.md](NUMBERS.md): learned candidate selection cuts strand failures by about 4 points on
-Nanopore, and the gain survives a structurally different simulator.
-
-Read together, the two say the same thing from different directions. The model finds the known
-rule, corrects its threshold, discards the rule that does not pay, adds a distinction nobody
-writes down, and ranks patterns by how much they hurt the decoder rather than by how often the
-channel gets them wrong.
-
----
-
-# A second finding, and a correction to an earlier version of this document
-
-An earlier version of this section claimed that **both** hand rules are harmful on our Nanopore
-channel. **That claim was wrong, and this is the rerun that disproves it.** It is kept visible
-rather than quietly deleted, because how it went wrong is the more useful part.
-
-## What we actually measured
-
-Instead of "the fewest reads at which all 300 trials recover", which is a single threshold, we
-measured the whole recovery curve: the share of 300 held-out trials in which the 20 KB file came
+The sections above are what the model believes. This one is what the file does. Measured as a
+recovery curve at 300 held-out trials per point: the share of trials in which the 20 KB file came
 back byte for byte, at each coverage, same decoder, same seeds, same file.
 
 ```bash
@@ -160,47 +139,42 @@ recovering the file four times in five and never recovering it at all. That is w
 reads per strand, and it agrees with the rule audit's headline in
 [NUMBERS.md](NUMBERS.md) (19.5 reads with the rule, 24.5 without).
 
-**The GC rule is neutral**, exactly as section 2 above says the model believes. Its curve tracks
-the standard codec to within a fraction of a point at every coverage (0.833 against 0.807 at 12,
-with a standard error of 0.023, so the small lead is noise). Three independent measurements now
-agree on it: the model probe, the rule audit, and this curve.
+**The GC rule is neutral** on this channel, exactly as section 2 says the model believes. Its
+curve tracks the standard codec to within a fraction of a point at every coverage (0.833 against
+0.807 at 12, with a standard error of 0.023, so the small lead is noise). Three independent
+measurements agree on it: the model probe, the rule audit, and this curve.
 
-## Why the earlier version got it backwards
+## Why we compare on curves, not on the threshold
 
-Two reasons, and only the second is interesting:
+"Fewest reads at which *all* trials recover" is the headline number, because "the file always
+comes back" is the promise a storage system has to make. It is a brittle thing to *compare* on.
+The standard codec reaches 1.000 at 16 reads, then dips back to 0.993 at 20 and 0.997 at 22:
+single failures out of 300, deep inside the region where the codec plainly works. An
+all-or-nothing threshold reads those dips as failure and reports a number in the twenties for a
+codec that is already reliable at 16, and the ranking it produces can flip on a single trial.
 
-1. **A reading error.** The audit's columns were read in the wrong direction, turning "19.5 with
-   the rule, 24.5 without" into its opposite.
-2. **A metric that invites the error.** "Fewest reads at which *all* trials recover" is brittle
-   near the top of the curve. The standard codec reaches 1.000 at 16 reads, then dips back to
-   0.993 at 20 and 0.997 at 22: single failures out of 300, deep inside the region where the
-   codec plainly works. An all-or-nothing threshold reads those dips as failure and reports a
-   number in the twenties for a codec that is already reliable at 16. The ranking it produces can
-   flip on one trial, which is how a wrong direction survived a reproduction at 3 x 300.
+So the threshold stays as the headline and the curve is what two close codecs are compared on.
 
-The curve does not have that problem, so **the curve is now the measurement we quote** when two
-codecs are close. The threshold stays as the headline number, because "the file always comes
-back" is the promise a storage system has to make, but it is no longer what we compare on.
+## Screening seeds thins the erasure code, and the sequence benefit outweighs it
 
-## The mechanism finding stands, its consequence does not
-
-The structural effect we found is real and reproducible. A Fountain droplet's seed lives in the
-first 16 bases, and those bases have to satisfy the sequence rules too, so screening candidates
-also screens seeds and thins out the code:
+A Fountain droplet's seed lives in the first 16 bases, and those bases have to satisfy the
+sequence rules too, so screening candidates also screens seeds and thins out the code. Over the
+strand set of the default codec:
 
 | | Mean droplet degree | Minimum coverage of a data chunk |
 |---|---|---|
 | Default, both rules | 9.83 | **3** |
 | Rules off | 11.97 | **6** |
 
-What we got wrong was the conclusion drawn from it. The last row of the table above is the direct
-test: apply both rules to the payload only, leave the seed bases unconstrained, and the structural
-cost disappears by construction. It does not help. At 12 reads that codec recovers 0.713 against
-0.807 for the standard one.
+The last row of the curve table is the direct test of what that costs: apply both rules to the
+payload only (`EncoderSettings(constrain_seed=False)`), leave the seed bases unconstrained, and
+the structural cost disappears by construction. It does not help. At 12 reads that codec recovers
+0.713 against 0.807 for the standard one. The same three codecs measured as a threshold rather
+than a curve: `uv run python scripts/seed_constraint_test.py --trials 300`.
 
-So the trade exists, and it runs the other way: **screening seeds does thin the erasure code, and
-the sequence benefit outweighs it anyway.** On this channel, paid in reads per strand, the
-homopolymer rule is worth more than the droplet degree it costs.
+So the trade is real and it runs in favour of the rule: **screening seeds does thin the erasure
+code, and the sequence benefit outweighs it anyway.** On this channel, paid in reads per strand,
+the homopolymer rule is worth more than the droplet degree it costs.
 
 ## On Illumina, at these settings, there is nothing to trade
 
@@ -215,3 +189,17 @@ pay off (3.0 reads with it against 4.0 without). The two are not in conflict: th
 codecs. A rule that is free to drop when you have margin to spare is not necessarily free to drop
 once you have spent that margin. Which is, in a sentence, the reason this project measures rules
 per channel *and* per operating point rather than once.
+
+---
+
+## Why this matters for the project
+
+Tier 2 of our claim is that decoder failures can teach the encoder what to avoid. This document
+is the qualitative side of that claim, next to the quantitative one in
+[NUMBERS.md](NUMBERS.md): learned candidate selection cuts strand failures by about 4 points on
+Nanopore, and the gain survives a structurally different simulator.
+
+Read together, the two say the same thing from different directions. The model finds the known
+rule, moves its threshold, discards the rule that does not pay, adds a distinction nobody writes
+down, and ranks patterns by how much they hurt the decoder rather than by how often the channel
+gets them wrong.

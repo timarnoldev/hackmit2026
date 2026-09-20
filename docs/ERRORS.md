@@ -109,16 +109,18 @@ fresh, so they contain no storage decay, and the count cannot separate "never sy
 from "lost in handling" or "discarded by the authors' clustering". Long-term loss is modeled
 separately by `decay_per_year`, which stays an extrapolation.
 
-`gc_dropout_factor` is set to 0.002 per 0.1 of GC deviation, essentially zero, down from the
-0.05 we assumed before. Microsoft is the only dataset with a real GC range (0.33 to 0.67), and
-there neither coverage nor dropout depends on GC: strands more than 0.08 from balanced get
-26.3 reads against 26.7 for balanced ones, with dropout 0.12% against 0.24%. The steeper slope
-in the DNAformer data comes from GC-constrained designs (0.43 to 0.56), where a "per 0.1"
-figure is an extrapolation by a factor of three, and the Illumina trend there is monotone in GC
-rather than symmetric around 0.5, which looks like amplification bias, not a penalty at the
-extremes. This matters for honesty: with the old value, a GC-extreme strand lost up to 5
-percentage points of extra dropout, which was enough to make the GC rule look worthwhile on
-Illumina by assumption rather than by measurement.
+`gc_dropout_factor` is measured at 0.002 per 0.1 of GC deviation, essentially zero. Microsoft is
+the only dataset with a real GC range (0.33 to 0.67), and there neither coverage nor dropout
+depends on GC: strands more than 0.08 from balanced get 26.3 reads against 26.7 for balanced ones,
+with dropout 0.12% against 0.24%. The steeper slope in the DNAformer data comes from
+GC-constrained designs (0.43 to 0.56), where a "per 0.1" figure is an extrapolation by a factor of
+three, and the Illumina trend there is monotone in GC rather than symmetric around 0.5, which
+looks like amplification bias, not a penalty at the extremes.
+
+**This parameter decides a rule verdict, so it is worth stating what it is sensitive to.** A
+plausible-looking uncalibrated value of 0.05 costs a GC-extreme strand up to 5 percentage points
+of extra dropout, which is enough to make the GC rule pay off on Illumina by assumption rather
+than by measurement. The verdicts in [NUMBERS.md](NUMBERS.md) use the measured value.
 
 **Homopolymer yield, measured and deliberately not modeled.** Coverage falls by about 4.5% per
 extra base of the longest run in all three datasets (Microsoft -4.7%, DNAformer Nanopore -4.5%,
@@ -142,7 +144,11 @@ benefit of the run-length rule is at least what we report.
 |---|---|---|---|---|---|
 | Real Nanopore (Microsoft) | 4.5% | 39.9% | 65.3% | 83.5% | 89.1% |
 | Simulator A (calibrated) | 4.5% | 40.8% | 63.0% | 83.5% | 90.5% |
-| First simulator (rates only) | 0.4% | 50.0% | 83.7% | 96.4% | 97.5% |
+| Rates-only ablation (averages matched, no structure) | 0.4% | 50.0% | 83.7% | 96.4% | 97.5% |
+
+The third row is the control that shows why the structure matters: a channel fit to the *average*
+error rates alone is far too easy from 4 reads per strand up, because independent errors average
+out across reads and correlated ones do not.
 
 **Independent check on the held-out split.** The table above uses train clusters held apart from the fit. As a stricter test, we repeated it on the Microsoft **held-out** split (1,996 clusters), which no calibration step ever touched, giving the baseline the same number of reads per strand on real and simulated clusters:
 
@@ -152,7 +158,7 @@ benefit of the run-length rule is at least what we report.
 | Simulator A | 3.6% | 40.3% | 63.7% | 83.0% | 90.3% |
 | Difference (points) | −1.3 | +0.5 | −2.8 | −1.5 | +0.3 |
 
-Simulator A is within about 3 points of reality at every read count, and where it deviates it's slightly harder, the conservative direction. This probe uses the baseline decoder; the transformer has to be checked the same way once trained. The first version, which only matched average error rates, was far too easy. Matching averages isn't enough; the structure of the errors matters.
+Simulator A is within about 3 points of reality at every read count, and where it deviates it's slightly harder, the conservative direction. This probe uses the baseline decoder, so what it measures is the channel and not the decoder. It has not been repeated with the polisher, so the agreement is established for the classic decoder only.
 
 Current `nanopore_budget` values (fit on Microsoft train): substitution 1.52%, insertion 1.89%, deletion 2.20% per base; run multipliers for runs of 1 to 7 of 1.0, 1.0, 1.0, 1.05, 2.28, 5.02, 6.66 (deletions); end ramp 1.2; read quality spread 0.5; shared spread 0.8; no malformed reads.
 
@@ -188,7 +194,7 @@ A file only comes back if every layer does its job. Each layer turns one kind of
 ```
 noisy reads of each strand
   │
-  │  1. DECODER (transformer or majority vote baseline)
+  │  1. DECODER (majority vote baseline, plus the learned polisher)
   │     cluster of noisy reads → one best-guess strand
   │     fixes: random substitutions, insertions, deletions that differ between reads
   │     can't fix: errors all reads share; lost strands
@@ -234,11 +240,8 @@ The loop tunes which rules are on, the redundancy, and the risk threshold per ch
 
 ### Why the numbers work the way they do
 
-With the 20 KB test file (1,239 strands at default settings), the file comes back when the share of correctly decoded, non-lost strands stays comfortably above 1/(1 + redundancy), which is 77% at redundancy 0.3. With the baseline decoder and default settings:
+With the 20 KB test file (1,239 strands at default settings), the file comes back when the share of correctly decoded, non-lost strands stays comfortably above 1/(1 + redundancy), which is 77% at redundancy 0.3.
 
-| Channel | Reads per strand needed for 300 of 300 trials |
-|---|---|
-| Illumina | 8 |
-| Nanopore | 16 (measured with the earlier, easier simulator; higher with the calibrated one) |
-
-Lowering these numbers at the same bits per base, or raising bits per base at the same number of reads, is what the project measures.
+Lowering the reads per strand needed at the same bits per base, or raising bits per base at the
+same number of reads, is what the project measures. The measured values for the default and tuned
+codecs on both channels are in [NUMBERS.md](NUMBERS.md) section 5.

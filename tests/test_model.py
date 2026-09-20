@@ -47,7 +47,7 @@ def noisy_copy(ref: str, rng: np.random.Generator, p: float) -> str:
 
 
 class MockSimulate:
-    """Stands in for dnacodec.simulator.simulate until Agent A's lands. Records seeds."""
+    """Stand-in for dnacodec.simulator.simulate that records the seeds it is handed."""
 
     def __init__(self):
         self.seeds: list[int] = []

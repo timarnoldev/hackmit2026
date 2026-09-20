@@ -212,7 +212,7 @@ class SimSource:
         profile_fn: Callable[[np.random.Generator], SituationProfile] = random_profile,
     ):
         if simulate_fn is None:
-            from ..simulator import simulate as simulate_fn  # Agent A
+            from ..simulator import simulate as simulate_fn
         self.simulate = simulate_fn
         self.min_length, self.max_length = min_length, max_length
         self.profile_fn = profile_fn

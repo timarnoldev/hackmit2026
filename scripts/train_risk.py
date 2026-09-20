@@ -1,4 +1,4 @@
-"""Train and evaluate the risk model for one situation. Owner: Agent F.
+"""Train and evaluate the risk model for one situation.
 
     uv run python scripts/train_risk.py --profile nanopore_budget --n-strands 12000 --k 16 \
         --out checkpoints/risk_nanopore_budget.pt

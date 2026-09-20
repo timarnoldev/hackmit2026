@@ -15,15 +15,13 @@ For a given channel (sequencing technology, read budget, recovery target), our t
 
 The result is a codec tuned to that channel that reaches the same recovery target with fewer reads per strand or less redundancy than the hand-tuned default, with the **same** encoder and the **same** decoder.
 
-> **Status: in progress.** Simulator, encoder, baseline decoder, evaluation, risk model and dashboard are merged. Transformer training and the loop are in progress. See [Status](#status).
-
 ---
 
 ## Contents
 
 **Where we stand against published work:** [docs/COMPARISON.md](docs/COMPARISON.md), written to be unflattering where the numbers are.
 
-**Reproduce the headline numbers in one command:** `scripts/reproduce.sh` (decoder against the classic baseline on real held-out reads, plus the end to end demo). Every number we quote with its provenance: [docs/NUMBERS.md](docs/NUMBERS.md).
+**Reproduce the headline numbers in one command:** `scripts/reproduce.sh` (decoder against the classic baseline on real held-out reads, plus the end to end demo). Every number we quote, with its provenance: [docs/NUMBERS.md](docs/NUMBERS.md), which is the registry the rest of the documentation points at.
 
 **What the model learned, in its own words:** [docs/LEARNED_RULES.md](docs/LEARNED_RULES.md). It finds the homopolymer rule by itself, moves its threshold, discards the GC rule, and ranks patterns by how much they hurt the decoder rather than by how often they go wrong.
 
@@ -136,25 +134,25 @@ The claim has two tiers:
 
 **Objective, fixed before any run:** a fixed 20 KB test file must be recovered exactly in all 300 held-out trials. At that target we measure the fewest reads per strand needed and the most bits per base achievable, and judge codecs on the Pareto front of the two. The default we compare against always uses the same decoder.
 
-**Evidence:** a rule audit table (each rule, each channel: pays off or not), an ablation ladder (fixed codec with baseline decoder, fixed codec with transformer, audited rules and tuned redundancy, plus the learned scorer, full loop), a crossover matrix (each tailored codec on its own and the other channel), and a sim-to-real firewall (a structurally different Simulator B, plus the risk model's ranking on real reads). See [PROJECT.md](PROJECT.md).
+**Evidence:** a rule audit table (each rule, each channel: pays off or not), an ablation ladder (fixed codec with the baseline decoder, fixed codec with the learned decoder, audited rules and tuned redundancy, plus the learned scorer, full loop), a crossover matrix (each tailored codec on its own and the other channel), and a sim-to-real firewall (a structurally different Simulator B, plus the risk model's ranking on real reads). See [PROJECT.md](PROJECT.md).
 
 ## Status
 
 | Part | State |
 |---|---|
-| Shared types, profiles, seeds, result format | ✅ Done |
-| Real data loaders (Microsoft, DNAformer) with fixed held-out split | ✅ Done |
-| Mock results for dashboard development | ✅ Done |
-| Channel simulator | ✅ Calibrated on real Nanopore and Illumina reads, incl. 5-mer context errors; Simulator B for the firewall |
-| Fountain encoder (LT, CRC-16 per strand, risk threshold) | ✅ Done |
-| Baseline decoder and evaluation | ✅ Done |
-| Decoder: learned polisher (CNN correcting the classic draft) | ✅ Trained, beats the baseline on real held-out data (82.5% vs 67.0% exact strands at 6 reads) |
-| From-scratch transformer decoder | ❌ Built, did not beat the baseline in the time budget; documented in docs/MODELS.md |
-| Dashboard (rule audit, Pareto, crossover, ablation A to E, learned patterns) | ✅ Done on mock data |
-| Risk model (controlled strands, failure-rate labels, CNN) | ✅ Done |
-| Alternating loop and evidence experiments | ✅ Done; first full run (baseline decoder) on the GX10 |
+| Shared types, profiles, seeds, result format | Done |
+| Real data loaders (Microsoft, DNAformer) with fixed held-out split | Done |
+| Channel simulator | Calibrated on real Nanopore and Illumina reads, including 5-mer context errors; Simulator B for the firewall |
+| Fountain encoder (LT, CRC-16 per strand, risk threshold) | Done |
+| Baseline decoder and evaluation | Done |
+| Decoder: learned polisher (CNN correcting the classic draft) | Trained; 82.3% against 67.2% exact strands at 6 reads on real held-out data |
+| From-scratch transformer decoder | Built, lost to the baseline, not used. The measurement is in [docs/MODELS.md](docs/MODELS.md) section 3 |
+| Risk model (controlled strands, failure-rate labels, CNN) | Done |
+| Alternating loop and evidence experiments | Done; five runs on the GX10, listed in [docs/NUMBERS.md](docs/NUMBERS.md) section 9 |
+| Dashboard (rule audit, Pareto, crossover, ablation A to E, learned patterns) | Done |
 
-Anything under `results/mock/` is fake data for building the dashboard and is flagged as such.
+`results/mock/` holds generated fixtures for dashboard development. They are written with
+`is_mock=True` and the dashboard shows a MOCK banner for them.
 
 ### Baseline on real data
 
@@ -168,9 +166,9 @@ Majority vote baseline on the real Microsoft Nanopore **held-out** split (2,000 
 | 10 | 9.7 | 85.3% | 0.32 |
 | 16 | 14.4 | 90.6% | 0.21 |
 
-This is the bar every model result is compared against. The baseline is already strong at high coverage, so the main room for the transformer is at **low coverage (2 to 6 reads)**, which is exactly where reading gets cheap.
+This is the bar every model result is compared against. The baseline is already strong at high coverage, so the room for a learned decoder is at **low coverage (2 to 6 reads)**, which is exactly where reading gets cheap.
 
-Reproduce with `uv run python scripts/eval_real.py`.
+Reproduce with `uv run python scripts/eval_real.py`. This table is one subsample draw; the reconciled version, averaged over 20 draws with standard deviations and with the polisher next to it, is [docs/NUMBERS.md](docs/NUMBERS.md) section 1.
 
 ## Getting started
 
@@ -187,7 +185,8 @@ uv sync --extra dashboard      # + Streamlit, Plotly, pandas, for the dashboard
 scripts/download_data.sh       # Microsoft set + small DNAformer subset (~90 MB)
 scripts/download_data.sh --full   # all datasets (~1.2 GB), use on the GPU machine
 
-uv run pytest -q               # run the tests
+uv run pytest -q               # 185 tests without the extras
+uv run --extra train --extra dashboard pytest -q   # the full 260
 ```
 
 Generate mock results for the dashboard:
@@ -202,15 +201,12 @@ Evaluate the baseline decoder on the real held-out split:
 uv run python scripts/eval_real.py
 ```
 
-Launch the dashboard (shows mock data until real runs exist, with a MOCK banner):
+Launch the dashboard (falls back to mock data with a MOCK banner if no run is present):
 
 ```bash
 uv sync --extra dashboard
-uv run python -m scripts.make_mock_results
 uv run streamlit run dashboard/app.py
 ```
-
-Commands for training and running the loop will be added here as those components land.
 
 ## Running on the GX10
 
@@ -230,24 +226,21 @@ uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_
 uv run pytest -q
 uv run python -m dnacodec.model.train --smoke
 
-# 3. Pretrain the transformer on simulated data (add a line to GPU_JOBS.md first)
-nohup uv run python -m dnacodec.model.train --source sim --model base --steps 100000 \
-  --batch-size 128 --workers 8 --run-name sim_base > sim_base.out 2>&1 &
+# 3. Train the polisher, the decoder used in every result (about 13 minutes)
+uv run --extra train python scripts/train_polish.py
 
-# 4. Fine-tune on real and simulated clusters
-nohup uv run python -m dnacodec.model.train --source mixed --p-real 0.7 \
-  --init checkpoints/sim_base/best.pt --lr 1e-4 --warmup 500 --steps 20000 \
-  --batch-size 128 --workers 8 --run-name mixed_ft > mixed_ft.out 2>&1 &
-
-# 5. Compare against the baseline on the real held-out split
+# 4. Compare it against the baseline on the real held-out split
 uv run python scripts/eval_real.py
-uv run python -m dnacodec.model.benchmark checkpoints/mixed_ft/best.pt
+uv run --extra train python -m dnacodec.model.benchmark checkpoints/polish/polish.pt --polish
 ```
+
+`dnacodec/model/train.py` trains the from-scratch transformer instead. It is kept for the record
+and is not used by any result; see [docs/MODELS.md](docs/MODELS.md) section 3.
 
 ### Loop and experiments
 
 ```bash
-# One alternating loop per core situation (baseline decoder unless --decoder transformer)
+# One alternating loop per core situation (--decoder baseline | polish | transformer)
 uv run python scripts/run_loop.py --profile nanopore_budget --run-id run1 --workers 7
 uv run python scripts/run_loop.py --profile illumina_standard --run-id run1 --workers 7
 
@@ -258,21 +251,22 @@ uv run python scripts/run_experiments.py --run-id run1 --workers 14
 uv run python scripts/run_loop.py --profile illumina_standard --run-id quick --quick
 ```
 
-Results land in `results/<run_id>/` and show up in the dashboard. `scripts/gx10_pipeline.sh` runs the next steps on the GX10 by itself inside `tmux` (experiments after the loops, the transformer benchmark after training), independent of any SSH session. Long jobs are listed in `GPU_JOBS.md`.
+Results land in `results/<run_id>/` and show up in the dashboard. Which run backs which number is listed in [docs/NUMBERS.md](docs/NUMBERS.md) section 9.
 
 ## Pitch and marketing
 
 - `marketing/deck/`: the animated web pitch deck with presenter mode (serve it, press `P`)
-- `marketing/`: brand identity (Erbgut), logo, one-pager, pitch script, deck outline, Devpost text, social posts, landing page
+- `site/`: the landing page GitHub Pages publishes
+- `marketing/`: brand identity (Erbgut), logo, one-pager, pitch script, Devpost text, social card
 
-Result placeholders are marked `[RESULT: ...]` until the final runs are in.
+`[TEAM: ...]` marks the places still waiting on real names.
 
 ## Repository layout
 
 ```
 .
-├── PROJECT.md              Full project brief: idea, plan, risks
-├── AGENTS.md               Rules and task specs for coding agents (CLAUDE.md points here)
+├── PROJECT.md              Project brief: idea, claims, objective, evidence design, risks
+├── AGENTS.md               Contributing rules: interfaces, held-out discipline, conventions
 ├── dnacodec/
 │   ├── types.py            Shared types: Strand, Cluster, EncoderSettings, Metrics, Decoder
 │   ├── profiles.py         SituationProfile: load, validate, save
@@ -285,11 +279,11 @@ Result placeholders are marked `[RESULT: ...]` until the final runs are in.
 │   ├── encoder.py          Fountain encoder, rule scorer, recovery
 │   ├── baseline.py         Majority vote baseline decoder
 │   ├── evaluate.py         Metrics, recovery trials, fewest reads at the target
-│   ├── model/              Transformer decoder: data, network, training, inference
+│   ├── model/              Learned decoders: polisher, data, training, benchmark
 │   ├── risk.py             Risk model
 │   └── loop.py             The alternating loop
 ├── profiles/               Situation profiles as JSON, context/ holds the 5-mer error tables
-├── docs/                   MODELS.md and ERRORS.md deep dives
+├── docs/                   NUMBERS.md registry, COMPARISON.md, and the deep dives
 ├── dashboard/              Streamlit dashboard
 ├── scripts/                Data download, calibration, risk training, loop, experiments, evaluation, mock results
 ├── tests/                  pytest suite
@@ -377,10 +371,10 @@ On top of that, `recovery_trials` runs repeated independent passes of the fixed 
 
 The code is written largely by AI coding agents working in parallel, with humans owning interfaces, verification, and the story.
 
-- `AGENTS.md` defines ownership per file, hard rules, and a "done when" check for each component.
-- Each agent works on its own branch in its own git worktree. Shared interfaces (`types.py`, `seeds.py`, `results.py`) don't change without the architect.
-- One person merges into `main` and runs `uv run pytest -q` after every merge. The full pipeline must run end to end after each merge.
-- An ML verifier checks every reported number before it's used.
+- `AGENTS.md` defines ownership per file, the hard rules, and the conventions.
+- Work happens on branches in separate git worktrees. Shared interfaces (`types.py`, `seeds.py`, `results.py`) don't change without agreement.
+- One person merges into `main` and runs the tests after every merge. The full pipeline must run end to end after each merge.
+- Every reported number is re-checked independently before it is used, and lands in `docs/NUMBERS.md` with its provenance.
 
 ## DNA storage in 60 seconds
 

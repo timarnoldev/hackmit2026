@@ -1,4 +1,4 @@
-"""Tests for the fountain encoder, scorer and recovery (Agent B)."""
+"""Tests for the fountain encoder, scorer and recovery."""
 
 from __future__ import annotations
 

@@ -1,8 +1,9 @@
 # Every number we quote, and where it comes from
 
-One page for the pitch and for judge questions. If a number is not in here, don't say it on stage.
+The single registry of every number this project quotes, with the measurement behind it. A number
+that is not in here has no provenance and is not quoted.
 
-Status legend: ✅ measured and independently re-checked · ☑️ measured once · ⏳ pending (run in progress) · ⚠️ superseded or unreliable
+Status legend: ✅ measured and independently re-checked · ☑️ measured once · ⚠️ superseded or unreliable
 
 ---
 
@@ -10,7 +11,7 @@ Status legend: ✅ measured and independently re-checked · ☑️ measured once
 
 **Setup:** Microsoft clustered Nanopore reads, **held-out split** (1,996 clusters; every 5th cluster, never used for training, tuning or calibration). Each cluster subsampled to at most N reads with fixed seeds from `heldout_seeds()`. Metric: **share of strands reconstructed exactly**, all 110 letters correct. Protocol: `scripts/eval_real.py`, numbers from `dnacodec.evaluate.evaluate`.
 
-Averaged over **20 independent read draws per point** (a single draw moves the number by up to a point, which is why earlier tables in this repo disagreed slightly). Mean ± standard deviation:
+Averaged over **20 independent read draws per point**. A single draw moves the number by up to a point, which is the resolution limit on the mid-coverage columns anywhere in this repository. Mean ± standard deviation:
 
 | Reads per strand | 2 | 4 | 6 | 10 | 16 | Status |
 |---|---|---|---|---|---|---|
@@ -20,8 +21,8 @@ Averaged over **20 independent read draws per point** (a single draw moves the n
 
 Reproduce: `uv run --extra train python scripts/stable_decoder_numbers.py --draws 20`, raw numbers in `results/decoder_real_heldout.json`. Note that "16 reads" is also our highest-coverage number: both decoders cap at 16 reads per cluster, so we have no all-reads figure.
 
-- **Independently re-checked** by the architect with separate counting code and different seeds; every value sits inside the spread above.
-- **Headline sentence:** at 6 reads per strand the learned decoder reconstructs 88.1% of strands exactly, against 67.2% for the classic method, on real Nanopore data it never saw. That is 21 points, and it more than halves the failures, from 32.8% to 11.9%.
+- **Independently re-checked** with separate counting code and different seeds; every value sits inside the spread above.
+- At 6 reads per strand the learned decoder reconstructs 88.1% of strands exactly, against 67.2% for the classic method, on real Nanopore data it never saw. That is 21 points, and it more than halves the failures, from 32.8% to 11.9%.
 - **Speed:** baseline about 7,600 clusters/s, polisher default about 3,800, best variant about 860 (single process, GX10).
 
 **Ceiling, measured:** with *all* reads the polisher still fails on **4.7%** of strands, so those are unrecoverable in principle (errors shared by every read, plus malformed clusters). At 6 reads it fails on 18.6%, of which 19.6% are in that hopeless group. ✅
@@ -82,9 +83,9 @@ Run 2's codecs re-measured with **3 blocks × 300 held-out trials** (`results/ru
 | **GC between 40 and 60%** | no measurable benefit (19.5 vs 20.0) | **pays off: 3.0 reads with it, 4.0 without** |
 | Redundancy, default vs tuned | tuned better: 19.5 → 5.5 reads | tuned better: 3.0 reads → 1.50 bits per base |
 
-**The quotable sentence:** each of the two standard rules pays off on exactly one of the two channels and does nothing on the other. Nobody measures that today.
+Each of the two standard rules pays off on exactly one of the two channels and does nothing on the other. Nobody measures that today.
 
-This also settles an earlier wobble: at 100 trials per block the Nanopore homopolymer verdict came out as "no measurable benefit", at 300 trials it is a clear 5 reads, matching run 1. Fewer trials made the test too weak, not the rule less real.
+**Trial count matters at this resolution.** At 100 trials per block the Nanopore homopolymer verdict comes out as "no measurable benefit"; at 300 trials it is a clear 5 reads, matching run 1. The 300-trial measurement is the one quoted, here and everywhere.
 
 ### The same audit as a curve, not a threshold ✅
 
@@ -99,7 +100,7 @@ This also settles an earlier wobble: at 100 trials per block the Nanopore homopo
 
 This independently confirms both verdicts above: the homopolymer rule is the difference between recovering four files in five and none at 12 reads, and the GC rule tracks the standard codec to within noise everywhere.
 
-**Why we now quote curves when two codecs are close.** The threshold metric ("fewest reads at which all 300 trials recover") is brittle near the top: the standard codec reaches 1.000 at 16 and then dips to 0.993 at 20, a single failure out of 300 well inside the region where it plainly works. An all-or-nothing rule reads that dip as failure. The threshold stays the headline, because "the file always comes back" is the promise, but comparisons ride on the curve. See [LEARNED_RULES.md](LEARNED_RULES.md) for the correction this forced.
+**Why close codecs are compared on curves.** The threshold metric ("fewest reads at which all 300 trials recover") is brittle near the top: the standard codec reaches 1.000 at 16 and then dips to 0.993 at 20, a single failure out of 300 well inside the region where it plainly works. An all-or-nothing rule reads that dip as failure, and the ranking it produces can flip on one trial. The threshold stays the headline, because "the file always comes back" is the promise, but comparisons ride on the curve. See [LEARNED_RULES.md](LEARNED_RULES.md).
 
 ### Where the homopolymer line belongs ✅
 
@@ -113,7 +114,7 @@ This independently confirms both verdicts above: the homopolymer rule is the dif
 | 6 | 0.003 | 0.587 | 0.997 | 1.000 |
 | no limit | 0.000 | 0.287 | 0.990 | 1.000 |
 
-Monotone: the field's rule of 3 is the best of the five, and each step looser costs recovery. **This contradicts the risk model's own probe**, which calls risk flat up to a run of 4. Both are right about different questions: the model scores one strand, the file needs 1,239 of them, and a per-strand difference of 0.024 compounds. Quotable as the honest version of "we trust measurements over our own model". See [LEARNED_RULES.md](LEARNED_RULES.md) section 1.
+Monotone: the field's rule of 3 is the best of the five, and each step looser costs recovery. **The risk model's own per-strand probe disagrees**, calling risk flat up to a run of 4. Both measurements are right about different questions: the model scores one strand, the file needs 1,239 of them, and a per-strand difference of 0.024 compounds into a file-level one. See [LEARNED_RULES.md](LEARNED_RULES.md) section 1.
 
 **Tier 2, measured directly** (same settings, same decoder, paired held-out trials, rule scorer vs learned risk model): ☑️
 
@@ -126,7 +127,7 @@ Monotone: the field's rule of 3 is the best of the five, and each step looser co
 
 The gain survives a structurally different simulator. In the coarse target metric it is worth about half a read.
 
-**Reproduced with the learned decoder (run 6)** ✅ — the table above was measured with the classic decoder. Run 6 repeats the whole experiment with the polisher in place, which is the harder test: a better decoder repairs more of what the risk model was steering around, so the gain had room to vanish. It did not.
+**Reproduced with the learned decoder (run 6)** ✅ — the table above was measured with the classic decoder. Run 6 repeats the whole experiment with the polisher in place, which is the harder test: a better decoder repairs more of what the risk model steers around, so there is less room for a gain.
 
 | Channel | Simulator | Candidates | Strand failures, rules | with learned selection | Difference (95% CI) |
 |---|---|---|---|---|---|
@@ -139,7 +140,7 @@ Smaller than with the classic decoder, which is what you would expect, and still
 
 ### Tier 2 at file level, isolated properly ✅ — the strongest version of our own claim
 
-The ablation ladder's C→D rung was never a clean isolation: the settings search is free to move redundancy between the rungs, and in run 6 it did (1.6 against 1.3). So we held **every** setting fixed and changed **only which scorer ranks the 32 candidates**, then measured the whole recovery curve at 300 held-out trials per point (`scripts/tier2_recovery_curve.py`, raw in `results/tier2_recovery_curve_run2_strict_nanopore_budget.json`):
+The ablation ladder's C→D rung is not a clean isolation of tier 2: the settings search is free to move redundancy between the rungs, and in run 6 it does (1.6 against 1.3). This measurement holds **every** setting fixed and changes **only which scorer ranks the 32 candidates**, over the whole recovery curve at 300 held-out trials per point (`scripts/tier2_recovery_curve.py`, raw in `results/tier2_recovery_curve_run2_strict_nanopore_budget.json`):
 
 | Reads per strand | 4.0 | **4.5** | 5.0 | 5.5 | 6.0 |
 |---|---|---|---|---|---|
@@ -150,17 +151,31 @@ Same redundancy (1.6), same strand length (140), same hard rules, same 32 candid
 
 **At 4.5 reads per strand that is 27% of files recovered against 98.3%**, a difference of 71 points at a standard error of 2.7 points, so about 27 sigma. In reads it is worth roughly half a read per strand, which matches what the coarse threshold metric suggested but now with an error bar and a clean isolation.
 
-**This is the quotable form of tier 2.** It is the claim the project exists to test, it costs no density (choosing among candidates is free), and it is measured where the codec is actually under stress rather than at a comfortable operating point. The one blemish, reported rather than smoothed: at 5.0 reads the learned codec sits at 0.997, one failed trial in 300, while the hand rules reach 1.000.
+**This is the form of tier 2 we quote.** It is the claim the project exists to test, it costs no density (choosing among candidates is free), and it is measured where the codec is actually under stress rather than at a comfortable operating point. The one blemish, reported rather than smoothed: at 5.0 reads the learned codec sits at 0.997, one failed trial in 300, while the hand rules reach 1.000.
 
-⚠️ **What did not reproduce in run 6: the tier-2 rung of the ablation ladder.** With the polisher, C (audited rules, tuned redundancy) comes out at 4.5 reads and D (C plus the risk model) at 5.5, so the ladder says the risk model *hurt*, while the direct paired measurement above says it helped with a tight confidence interval. Run 6 used 100 evaluation trials per point rather than 300, and the all-or-nothing threshold is knife-edge near the top of the curve, exactly as [LEARNED_RULES.md](LEARNED_RULES.md) documents. **We quote the paired measurement, not the ladder rung**, because it is the one with an error bar. The honest statement on stage: *at file level the effect is inside the noise of our coarse metric; per strand it is measurable and survives the firewall.*
+⚠️ **What did not reproduce in run 6: the tier-2 rung of the ablation ladder.** With the polisher, C (audited rules, tuned redundancy) comes out at 4.5 reads and D (C plus the risk model) at 5.5, so the ladder says the risk model *hurt*, while the direct paired measurement above says it helped with a tight confidence interval. Run 6 used 100 evaluation trials per point rather than 300, and the all-or-nothing threshold is knife-edge near the top of the curve, exactly as [LEARNED_RULES.md](LEARNED_RULES.md) documents. **We quote the paired measurement, not the ladder rung**, because it is the one with an error bar. Stated in full: at file level the effect is inside the noise of the coarse threshold metric; per strand it is measurable and survives the firewall.
 
-**Why the deck quotes run 2, not run 6.** Run 2's codecs were re-measured at 3 blocks × 300 held-out trials; run 6 ran 100. Run 6 is the cross-check, run 2 strict is the record. The two must never be mixed in one table, because the decoder differs and every reads-per-strand number shifts with it (the default codec needs 19.5 reads with the classic decoder and 15.5 with the polisher).
+**Why run 2 is the record and run 6 the cross-check.** Run 2's codecs were re-measured at 3 blocks × 300 held-out trials; run 6 ran 100. The two are never mixed in one table, because the decoder differs and every reads-per-strand number shifts with it: the default codec needs 19.5 reads with the classic decoder and 15.5 with the polisher. Section 9 lists every run.
 
-⚠️ **Run 1 numbers are superseded.** Run 1 suggested 6 vs 8 reads on Nanopore; that was a winner's curse (best of hundreds of settings on the same trials). The final round of run 1 then missed the target on held-out data (297 of 300). Run 2 adds a margin check, three seed blocks and train-only selection. Say this openly; it is a strength, not a weakness.
+### The crossover matrix ☑️
 
-## 6. Does the risk model transfer to real reads? Yes, once the measurement is done right ✅
+Each final codec run on its own channel and on the other, `results/run2_strict`, baseline decoder, 3 blocks × 300 held-out trials. Reads per strand needed to hit the target, with each codec's density in brackets:
 
-The first number we had was **AUC 0.516**, essentially chance, and it was a measurement artifact. On real reads, failure is dominated by how many reads a strand happens to get: **read count alone ranks failures at AUC 0.78**. A score that only looks at the sequence cannot show up in an unstratified measurement, by construction.
+| codec ↓ / channel → | Nanopore | Illumina |
+|---|---|---|
+| Default (1.202 bits/base) | 19.5 | 3.0 |
+| Nanopore-tailored (0.719 bits/base) | **5.5** | 1.5 |
+| Illumina-tailored (1.504 bits/base) | **target never met** on the coverage grid | **5.0** |
+
+**What this does and does not show.** The Illumina-tailored codec cannot recover the file on Nanopore at any coverage we tested: that is channel specificity, unambiguously. The other direction is not a like-for-like comparison and must not be quoted as one. The Nanopore-tailored codec beats the default on Illumina (1.5 reads against 3.0) because it carries two and a half times the redundancy, at 0.719 bits per base against 1.202. Reads per strand across codecs at different densities is exactly the comparison the Pareto front exists to prevent.
+
+For the same reason the Illumina-tailored codec needs *more* reads than the default on its own channel (5.0 against 3.0): it spends the clean channel's margin on density, 1.504 bits per base against 1.202. It moves the front to the right rather than down.
+
+⚠️ **Run 1 numbers are superseded.** Run 1 suggested 6 vs 8 reads on Nanopore; that was a winner's curse (best of hundreds of settings on the same trials). The final round of run 1 then missed the target on held-out data (297 of 300). Run 2 adds a margin check, three seed blocks and train-only selection.
+
+## 6. Does the risk model transfer to real reads? Yes, measured at fixed coverage ✅
+
+**The measurement has to stratify by coverage.** On real reads, failure is dominated by how many reads a strand happens to get: **read count alone ranks failures at AUC 0.78**. A sequence-only score cannot show up in an unstratified measurement, by construction: unstratified it comes out at **AUC 0.516**, essentially chance.
 
 Holding coverage fixed (every cluster decoded at the same number of reads, 4 subsamples each, Microsoft held-out split, 1,996 clusters):
 
@@ -174,6 +189,8 @@ Holding coverage fixed (every cluster decoded at the same number of reads, 4 sub
 **The decisive test:** holding coverage *and* longest run fixed, so the hand rule's own feature is neutralised, the model still reaches **0.61** while the rule itself drops to **0.50**. On real DNA the model knows something the hand rule does not. The same picture appears with the classic baseline decoder (0.71 pooled), so it is not an artifact of the polisher.
 
 **Why the DNAformer set shows nothing:** 98.1% of its references have a longest run of 3 or 4 and its GC standard deviation is 0.014, so the features barely vary. Every sequence-based score, including the hand rule, sits at 0.51 to 0.53 there. A risk model trained directly on real failures reaches 0.558 on that set, reproduced at 0.550 on a second flowcell.
+
+**On held-out simulated strands**, where the model is measured against the channel it was trained on: AUC 0.91 and Spearman 0.76 on the mixed controlled set, AUC 0.65 on uniform random strands alone. On Illumina the predicted risk is flat at about 1%, correctly. ☑️
 
 **Remaining honest limitation:** we show the ranking transfers to real reads. We have not shown that *selecting* candidates by it reduces failures on real DNA, because that would need new strands synthesized and sequenced.
 
@@ -230,19 +247,26 @@ Nanopore channel, 6 reads per strand, 5 seeds fixed in advance (the first five t
 | File recovered | 0 of 5 | 4 of 5 |
 | Density | 1.19 bits per letter | 0.63 bits per letter |
 
-The tuned codec wins here by writing more spare strands, not by better rules. Say that; the page says it too.
+The tuned codec wins here by writing more spare strands, not by better rules: 0.63 bits per letter against 1.19. The demo page states that alongside the result.
 
 ## 8. The project
 
-- About 11,000 lines of Python, about 2,500 of them tests; 226 tests green. ✅
+- About 11,000 lines of Python, about 2,500 of them tests; 260 tests green (185 without the torch and dashboard extras). ✅
 - Two learned models: the polisher (0.8M parameters, 13 minutes of training) and the risk model (small CNN). The from-scratch transformer (9.6M parameters) failed and is documented. ✅
 - Hardware: one ASUS Ascent GX10 (NVIDIA GB10, 20 ARM cores, 128 GB unified memory). ✅
 - Data: two public datasets, Microsoft (MIT licence) and DNAformer/Technion (CC BY 4.0). No wet lab. ✅
 
-## Pending, will be filled tonight
+## 9. The runs behind these numbers
 
-| Run | What it adds | Status |
-|---|---|---|
-| `run3` | Loops and experiments with the polisher as decoder: all read counts drop, ablation A vs B becomes meaningful | ⏳ |
-| `run4` | Baseline decoder, full grid, **3 × 300 trials**: the statistically strict version of run 2 | ⏳ |
-| `run2_strict` | Run 2's experiments re-measured at 3 × 300 trials: settles whether the rule verdicts are real | ⏳ |
+Each committed run's output is in `results/<run id>/`; `run5` itself is not committed, only the learned-rules probe it produced.
+
+| Run | Decoder | What it is | Quoted in |
+|---|---|---|---|
+| `run1` | baseline | First full loop on both channels. Superseded by run 2, see section 5 | Nowhere; kept as the record |
+| `run2` | baseline | Loop and experiments, 3 blocks × 100 held-out trials | Section 5, run 2 table |
+| `run2_strict` | baseline | Run 2's codecs re-measured at 3 blocks × 300 held-out trials | Section 5 rule audit, tier-2 curve, the deck |
+| `run5` / `run5_strict` | baseline | Wider settings grid; its trained risk model is the one probed for the learned rules | Sections 6c, [LEARNED_RULES.md](LEARNED_RULES.md) |
+| `run6` | polisher | The whole experiment repeated with the learned decoder, 100 trials per point | Section 5, the run 6 tables |
+
+Run 2 strict is the record, run 6 is the cross-check. Numbers from the two are never mixed in one
+table, because the decoder differs and every reads-per-strand figure shifts with it.

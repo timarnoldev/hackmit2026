@@ -1,4 +1,4 @@
-"""Risk model. Owner: Agent F.
+"""Risk model.
 
 Learns which strands the decoder fails on in a given situation, and scores candidates
 for the encoder. Fits the Scorer type in dnacodec.types.

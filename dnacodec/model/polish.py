@@ -1,4 +1,4 @@
-"""Learned polisher on top of the majority vote baseline (Agent D).
+"""Learned polisher on top of the majority vote baseline.
 
 The baseline already aligns every read to a draft and forces the draft to strand_length.
 It is strong at high coverage and weak at low coverage, where the votes are thin. Instead of
@@ -15,7 +15,7 @@ deletions as insertions. apply_edits() uses that: it keeps the k most confident 
 which makes the output exactly strand_length by construction.
 
 Only reads and strand_length are used, never the reference (Decoder protocol).
-This module imports helpers from dnacodec.baseline (owned by Agent C) and does not change it.
+This module imports helpers from dnacodec.baseline and does not modify it.
 """
 
 from __future__ import annotations

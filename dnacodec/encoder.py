@@ -1,4 +1,4 @@
-"""Fountain-style encoder with pluggable scorer. Owner: Agent B.
+"""Fountain-style encoder with pluggable scorer.
 
 Layout of each strand: seed (settings.seed_bases) + payload, total settings.strand_length.
 The seed drives a pseudo-random choice of source chunks that are XORed into the payload

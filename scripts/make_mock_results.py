@@ -1,8 +1,9 @@
-"""Writes fake results to results/mock/ so the dashboard can be built before the loop exists.
+"""Writes synthetic results to results/mock/ for dashboard development and tests.
 
-Everything is marked is_mock=True. The dashboard must show a visible MOCK banner for these.
-The shapes follow PROJECT.md: Pareto points per alternation, ablation ladder A to D,
-crossover matrix, firewall tests, and candidate examples.
+Everything is marked is_mock=True, and the dashboard shows a visible MOCK banner for it.
+The shapes follow the evidence design in PROJECT.md: Pareto points per alternation, ablation
+ladder A to D, crossover matrix, firewall tests, and candidate examples. Nothing here is a
+measurement, and no number from results/mock/ is ever quoted.
 """
 
 from __future__ import annotations

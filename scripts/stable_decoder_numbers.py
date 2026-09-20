@@ -1,7 +1,8 @@
 """Decoder accuracy on real held-out reads, averaged over many independent read draws.
 
-A single subsample of reads moves the number by up to two points, which is why four tables
-in this repo disagreed slightly. This averages over draws so the number can be quoted plainly.
+A single subsample of reads moves the number by up to two points, so any single-draw table is
+only good to that resolution. This averages over draws and reports a standard deviation, which
+is the version quoted in docs/NUMBERS.md.
 
     uv run --extra train python scripts/stable_decoder_numbers.py [--draws 20] [--workers 10]
 """

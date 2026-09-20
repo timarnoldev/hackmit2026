@@ -41,30 +41,32 @@ Same encoder, same decoder throughout. Only the rules, the redundancy and the ch
 
 ## Results
 
-Tuning runs are starting now. Placeholders are marked and will be filled from held-out trials only.
+All from held-out trials. Provenance for every figure: `docs/NUMBERS.md`.
 
 | Question | Answer |
 |---|---|
-| Which hand rules pay off on Nanopore and on Illumina? | [RESULT: rule audit verdicts per channel] |
-| Reads per strand to hit the target on Nanopore, default vs tuned, at matched density | [RESULT: default N, tuned M] |
-| Bits per base at the Illumina read budget, default vs tuned | [RESULT: default vs tuned bits per base] |
-| Does learned selection add anything on top of the audit? (C to D) | [RESULT: reads per strand, C vs D] |
-| Does it survive Simulator B and real reads? | [RESULT: Simulator B outcome, real-read risk AUC] |
+| Does the "max 3 identical letters" rule pay off? | **Nanopore: yes.** 19.5 reads per strand with it, 24.5 without. **Illumina: no measurable benefit** (3.0 against 2.5) |
+| Does the "GC 40 to 60%" rule pay off? | **Nanopore: no measurable benefit** (19.5 against 20.0). **Illumina: yes**, 3.0 reads with it against 4.0 without |
+| What does tuning the redundancy buy? | Nanopore 19.5 reads down to 5.5. Illumina 1.20 up to 1.50 bits per base at the same target |
+| Does learned selection add anything on top of the audit? | Yes. Holding every setting fixed and changing only which scorer ranks the 32 candidates: at 4.5 reads per strand, 27.0% of files recovered against 98.3%, a 71 point difference at a standard error of 2.7 |
+| Does it survive Simulator B and real reads? | Yes. Per-strand failures drop 3.95 points on Simulator A and 4.16 on the firewall simulator. On real Nanopore reads at fixed coverage the risk model ranks failures at AUC 0.69, against 0.66 for the homopolymer rule alone |
 
-If the audit finds that the hand rules are already near optimal on a channel, that is the answer, and now it's measured instead of assumed.
+Each of the two standard rules pays off on exactly one of the two channels and does nothing on the other. Nobody measures that today.
+
+**What we have not shown:** that *selecting* candidates by the risk model reduces failures on real DNA. That needs strands synthesized and sequenced, and we have no wet lab.
 
 ## What's under the hood
 
 - **Channel simulator** calibrated on real Nanopore and Illumina reads, including a per 5-letter context error table
 - **Fountain (LT) encoder** with a CRC-16 per strand, so a wrong strand becomes a missing one
-- **Transformer decoder** reconstructing a strand from up to 16 noisy reads, with a majority vote baseline always reported next to it (baseline: 90.6% exact strands at 16 reads on real held-out data)
+- **Learned decoder**: the classic decoder aligns and votes, a 0.8M-parameter CNN polishes the result. 88.1% exact strands at 6 reads on real held-out Nanopore data, against 67.2% for the classic method. The baseline is reported next to every model result
 - **1D CNN risk model** trained on failure rates over 32 simulations per strand
 - **Streamlit dashboard:** rule audit, Pareto plot, crossover matrix, ablation ladder
-- About 11,000 lines of Python, about 2,500 of them tests, running on an ASUS Ascent GX10 (NVIDIA GB10)
+- About 11,000 lines of Python, about 2,500 of them tests, 260 tests green, running on an ASUS Ascent GX10 (NVIDIA GB10)
 
 ## What we don't claim
 
-A new encoder (ours is a standard Fountain code on purpose), a decoder that beats DNAformer, or any wet lab work. Our opponent is the hand-tuned default, with the same decoder.
+A new encoder (ours is a standard Fountain code on purpose), a state-of-the-art decoder, or any wet lab work. On raw accuracy we are level with a fine-tuned DNAformer and clearly behind TReconLM at low coverage; `docs/COMPARISON.md` has the full table. Our opponent is the hand-tuned default, with the same decoder on both sides.
 
 ---
 

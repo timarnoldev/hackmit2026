@@ -7,6 +7,10 @@ An honest comparison of our decoder chain against published trace reconstruction
 ([github.com/microsoft/clustered-nanopore-reads-dataset](https://github.com/microsoft/clustered-nanopore-reads-dataset),
 10,000 references of length 110, 269,709 reads, mean cluster size 26.97).
 
+Every number on our side of these tables is registered with its provenance in
+[NUMBERS.md](NUMBERS.md); the arithmetic and the sourcing for the published numbers is in
+[COMPARISON_NOTES.md](COMPARISON_NOTES.md).
+
 **What our decoder is.** A classic consensus decoder (pick a medoid draft, align every read to
 it, vote per position, rebuild, repeat three times) followed by a 0.8M-parameter dilated 1D CNN
 that predicts an edit script over the draft. Details in [MODELS.md](MODELS.md).
@@ -68,11 +72,11 @@ Protocol, read off the code:
 
 Two internal caveats a judge is entitled to:
 
-1. **Seed noise.** Four tables in this repo report the same baseline measurement with different
-   subsample seeds: the canonical table above, `README.md`, `docs/MODELS.md` §1, and the
-   calibration check in `docs/ERRORS.md`. They disagree by up to 2 points at 4 to 6 reads (68.0 /
-   68.1 / 67.0 / 66.5 at 6 reads). That bounds how finely the mid-coverage columns can be read.
-   The "16" and "full" columns do not subsample and do not carry this noise.
+1. **Seed noise.** The table above is a single subsample draw. One draw moves the mid-coverage
+   columns by up to 2 points, which bounds how finely they can be read; the "16" and "full"
+   columns do not subsample and do not carry this noise. The 20-draw version with standard
+   deviations is in [NUMBERS.md](NUMBERS.md) section 1, and every value above sits inside its
+   spread.
 2. **Variant selection.** `scripts/polish_experiments.py` defines about 22 decoder variants
    (the best is `polish_gain_d3r2`). The gain-mode margins were tuned on a validation carve of
    the *train* split, which is correct. Picking the best of 22 is a second selection step, and
