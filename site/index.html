@@ -175,6 +175,7 @@
         <h3>Learned selection</h3>
         <p>A Fountain encoder can write the same data as many different strands at no cost in density. A small CNN, trained only on where the decoder actually failed on this channel, scores the candidates, and the encoder keeps the safest one.</p>
         <p>On Nanopore at six reads per strand this cuts strand failures from <b>51.96% to 48.01%</b>, a difference of <b>3.95 points</b> (95% confidence interval 4.18 to 3.72 points), measured on paired held-out trials with the same decoder on both sides. On Illumina the difference is about zero, which is the correct answer: that channel does not fail on sequence grounds.</p>
+        <p><b>It found the hand rule by itself, then corrected it.</b> Probed afterwards, the model's risk barely moves for runs of up to four identical letters and then climbs steeply, so it puts the danger line at five where the standard rule puts it at three. It rates G and C runs as more dangerous than A and T runs, which no standard rule distinguishes. And it is alarmed by the contexts where the channel <em>deletes</em> a letter and relaxed about the ones where it merely <em>substitutes</em> one, because voting across reads repairs a substitution and a deletion shifts everything after it. It did not learn where errors happen. It learned where errors are fatal.</p>
       </article>
     </div>
 
@@ -244,6 +245,12 @@
         <h3>The ablation isolates the claim</h3>
         <p>Five systems on the same channel and the same held-out seeds. The default we compare against always uses the <b>same decoder</b> as the tuned codec, so no gain can leak in from the decoder. Step B to C is the rule audit. Step C to D is learned selection.</p>
         <p>Run 1's numbers were thrown out and are marked superseded in our own notes: they were a winner's curse from picking the best of hundreds of settings on the same trials, and the final codec then missed the target on held-out data, 297 of 300. Run 2 added a margin check, three seed blocks and train-only selection. We say this openly because it is the reason the later numbers can be trusted.</p>
+      </div>
+
+      <div>
+        <h3>We publish our own corrections</h3>
+        <p>An earlier version of our write-up claimed both hand rules were actively harmful on Nanopore. It was wrong, and the record of how it went wrong is kept in the repository rather than quietly deleted.</p>
+        <p>The fix was a better metric. "Fewest reads at which all 300 trials recover" is brittle near the top of the curve, where a single failure out of 300 can flip a ranking. So we now measure the whole recovery curve. At <b>12 reads per strand the homopolymer rule is the difference between recovering the file in 80.7% of 300 held-out trials and never recovering it at all</b>, while the GC rule tracks the standard codec to within noise at every coverage. Three independent measurements now agree: the rule audit, the curve, and what the risk model says when you probe it.</p>
       </div>
 
       <div>

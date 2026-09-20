@@ -278,7 +278,11 @@ tr.highlight td, tr.highlight th { background: var(--tint-gain); }
 .evidence { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; }
 .evidence > div { background: var(--surface); padding: 22px; }
 .alt .evidence > div { background: var(--paper); }
-@media (min-width: 820px) { .evidence { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 820px) {
+  .evidence { grid-template-columns: repeat(2, 1fr); }
+  /* an odd last item spans the row rather than leaving a gap */
+  .evidence > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
 .evidence h3 { margin-bottom: 8px; }
 .evidence p { font-size: 16.5px; color: var(--muted); margin-bottom: 0; }
 .evidence p + p { margin-top: 10px; }
