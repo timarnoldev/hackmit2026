@@ -292,7 +292,7 @@
 
 <!-- ================================================================ 5. Problem -->
 <section class="slide" id="s-problem" data-title="The problem" data-plan="62-82"
-  data-labels="Two channels that fail differently|Rulebook stamped onto Nanopore|Rulebook stamped onto Illumina|Bottom line">
+  data-labels="Two channels that fail differently|Rulebook stamped onto Nanopore|Rulebook stamped onto Illumina">
   <p class="kicker">The problem</p>
   <h2 class="title">Rules chosen once, applied to every channel</h2>
   <div class="cols">
@@ -317,7 +317,6 @@
       </div>
     </div>
   </div>
-  <p class="bottom frag" data-f="4">Each rule costs storage or reads. <span class="muted">Nobody measures whether it pays off.</span></p>
   <aside class="notes">
     <p>So every DNA storage pipeline follows a few hand-written rules. Never more than three of the same letter in a row. Keep GC content between 40 and 60%. Add 30% extra strands, just in case.</p>
     <p><i class="cue"></i> They were chosen once, copied from paper to paper. And they go onto every machine. Nanopore adds and drops letters, especially in runs. Illumina mostly swaps single letters.</p>
@@ -333,12 +332,9 @@
   <h2 class="title">Nanopore is error-prone.</h2>
   <div class="hotlist">
     <div class="hitem"><span class="seq" data-seq="CGGG"></span><span class="htag">substitutions</span></div>
-    <div class="hitem"><span class="seq" data-seq="CCCG"></span><span class="htag">substitutions</span></div>
     <div class="hitem"><span class="seq" data-seq="CCCT"></span><span class="htag">deletions</span></div>
-    <div class="hitem"><span class="seq" data-seq="GGGA"></span><span class="htag">deletions</span></div>
     <div class="hitem"><span class="seq" data-seq="CGAA"></span><span class="htag">insertions</span></div>
   </div>
-  <p class="bridge">So something has to catch this that isn't a fixed rule.</p>
   <aside class="notes">
     <p>This is where the previous slide's complaint stops being abstract.</p>
     <p><i class="cue"></i> Nanopore is error-prone, and not evenly. These specific short patterns are measured hot spots on real reads.</p>
