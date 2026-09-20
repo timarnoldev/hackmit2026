@@ -129,6 +129,39 @@ def label_efficiency(batch: joint.LabelBatch, k_full: int, budgets=(1, 2, 4)) ->
     return out
 
 
+def self_knowledge(batch: joint.LabelBatch, bins: int = 10) -> dict:
+    """Does the polisher know, on a single cluster, that it just got it wrong?
+
+    Per simulated cluster, `surr_post` is the polisher's own probability that its answer
+    still needs an edit, and `fail` is whether it actually did. This is the same signal the
+    distilled labels are built from, scored one cluster at a time instead of averaged, and it
+    is the thing the recovery step could act on: a strand the decoder flags is a strand the
+    fountain code can treat as an erasure instead of trusting.
+    """
+    fail = batch.fail.reshape(-1)
+    out: dict = {}
+    for key in ("surr_post", "surr_pre"):
+        score = getattr(batch, key).reshape(-1)
+        ok = ~np.isnan(fail) & ~np.isnan(score)
+        f, sc = fail[ok], score[ok]
+        row = {
+            "n_clusters": int(len(f)),
+            "failure_rate": float(f.mean()) if len(f) else float("nan"),
+            "auc": risk.roc_auc(f > 0.5, sc),
+            "brier": float(np.mean((sc - f) ** 2)) if len(f) else float("nan"),
+            "mean_predicted": float(sc.mean()) if len(f) else float("nan"),
+        }
+        edges = np.quantile(sc, np.linspace(0, 1, bins + 1)) if len(f) else np.zeros(bins + 1)
+        cal = []
+        for a, b in zip(edges[:-1], edges[1:]):
+            sel = (sc >= a) & (sc <= b) if b == edges[-1] else (sc >= a) & (sc < b)
+            if sel.sum() >= 10:
+                cal.append({"pred": float(sc[sel].mean()), "actual": float(f[sel].mean()), "n": int(sel.sum())})
+        row["calibration"] = cal
+        out[key] = row
+    return out
+
+
 def fit_arm(name, strands, y, dense, seed, device, epochs, verbose=False):
     if dense is None:
         model = risk.RiskModel(seed=seed, device=device, epochs=epochs, verbose=verbose)
@@ -160,6 +193,7 @@ def main() -> None:
     p.add_argument("--device", default=None)
     p.add_argument("--simulators", default="A,B")
     p.add_argument("--cache", default="checkpoints/joint")
+    p.add_argument("--arms", default=None, help="comma-separated arm names; default all")
     args = p.parse_args()
 
     profile = load_profile(args.profile)
@@ -262,9 +296,21 @@ def main() -> None:
                 entry["context_table"] = {"error": str(exc)}
             report["heuristics"][f"{set_name}_sim{sim}"] = entry
             log(f"heuristics {set_name}/sim{sim}: longest_run AUC(>0.5)={entry['longest_run']['auc_gt_0.5']:.3f}")
+            sk = self_knowledge(batch)
+            report.setdefault("self_knowledge", {})[f"{set_name}_sim{sim}"] = sk
+            log(f"  decode-time self-knowledge {set_name}/sim{sim}: "
+                f"surr_post AUC={sk['surr_post']['auc']:.3f} brier={sk['surr_post']['brier']:.3f} "
+                f"(predicted {sk['surr_post']['mean_predicted']:.3f} vs actual {sk['surr_post']['failure_rate']:.3f}), "
+                f"surr_pre AUC={sk['surr_pre']['auc']:.3f}")
 
     # ---------------- arms ---------------------------------------------------------
     arms = arms_for(train_batch, args.k_cheap, args.k)
+    if args.arms:
+        wanted = [a.strip() for a in args.arms.split(",") if a.strip()]
+        arms = {k: v for k, v in arms.items() if k in wanted}
+        missing = sorted(set(wanted) - set(arms))
+        if missing:
+            raise SystemExit(f"unknown arms {missing}; available: {sorted(arms_for(train_batch, args.k_cheap, args.k))}")
     for name, (y, dense, k_used) in arms.items():
         log(f"--- arm {name} (K={k_used} simulations per strand) ---")
         per_seed: list[dict] = []
@@ -303,6 +349,10 @@ def main() -> None:
             m = agg[f"mixed_sim{sim}"]
             log(f"  sim{sim} mixed:   AUC(>0.5)={m['auc_gt_0.5']:.3f} Spearman={m['spearman']:.3f}")
 
+    if out_path.exists() and args.arms:
+        previous = json.loads(out_path.read_text())
+        previous.setdefault("arms", {}).update(report["arms"])
+        report["arms"] = previous["arms"]
     out_path.write_text(json.dumps(report, indent=2, default=str))
     log(f"wrote {out_path}")
 
