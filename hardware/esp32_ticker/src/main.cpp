@@ -130,23 +130,23 @@ static bool canvasReady = false;
 
 // ---------------------------------------------------------------- palette
 
-// Erbgut dark tokens as 0xRRGGBB, so they can be blended before going to 565.
-static const uint32_t C_PAPER = 0x0F1417;
-static const uint32_t C_SURFACE = 0x172026;
-static const uint32_t C_INK = 0xE6ECEA;
-static const uint32_t C_MUTED = 0x9AA9AE;
-static const uint32_t C_RULE = 0x2C353B;
-static const uint32_t C_AUDIT = 0xA3A6FF;
-static const uint32_t C_COST = 0xFF86B0;
-static const uint32_t C_GAIN = 0x4FD6B5;
-static const uint32_t C_TBD = 0xF4C45A;
+// Erbgut dark tokens as 0xRRGGBB, so they can be blended before going to the driver. These
+// are the deck's tokens (marketing/deck/deck.css, :root dark), so the box on the table and
+// the slides behind it are the same palette. The meaning mapping is what matters and it is
+// unchanged: cost for an error, gain for a correction, ink and muted for neutral text,
+// audit for an extra letter and the decode head, tbd for a strand that came back with no
+// reads at all.
+static const uint32_t C_PAPER = 0x060F0A;    // --sa-paper
+static const uint32_t C_SURFACE = 0x0B2116;  // --sa-surface
+static const uint32_t C_INK = 0xEAFFF3;      // --sa-ink, neutral text
+static const uint32_t C_MUTED = 0x6FCB98;    // --sa-muted, secondary text
+static const uint32_t C_RULE = 0x1B4A2E;     // --sa-rule, lines and the read icons
+static const uint32_t C_AUDIT = 0x39E6FF;    // --sa-audit, an extra letter, the decode head
+static const uint32_t C_COST = 0xFF2E9C;     // --sa-cost, an error
+static const uint32_t C_GAIN = 0x39FF6E;     // --sa-gain, a correction
+static const uint32_t C_TBD = 0xFFE13D;      // --sa-tbd, no reads came back
 static const uint32_t C_WHITE = 0xFFFFFF;
 
-// Colours go to the driver as RGB888 and it converts them itself. This matters: handing a
-// pre-packed RGB565 value to a sprite draw call made LovyanGFX read the 16 bit number as an
-// RGB888 one, so the paper colour 0x0F1417 arrived as 0x0008A2 and the whole panel came up
-// blue. The colour sweep in diag.cpp used color888 and looked correct, which is what pinned
-// it down. Pass the brand hex straight through and let the library do the packing.
 static inline uint32_t rgb(uint32_t hex) {
   return lcd.color888((hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF);
 }
@@ -549,7 +549,7 @@ static void splash() {
   canvas.fillSprite(rgb(C_PAPER));
   // the Erbgut mark: four bases on a strand, a dimension line over the run of two
   const int bx = 116, by = 74;
-  const uint32_t bars[4] = {C_AUDIT, C_COST, C_GAIN, C_GAIN};
+  const uint32_t bars[4] = {C_AUDIT, C_COST, C_GAIN, C_GAIN};  // A, C, G, G
   const float t = millis() / 600.0f;
   for (int i = 0; i < 4; ++i) {
     const float lift = 0.5f + 0.5f * sinf(t - i * 0.6f);
