@@ -4,7 +4,7 @@
  * from site/SCROLLY.md section 9, with provenance in docs/NUMBERS.md:
  *   88.1% against 67.2%  exact strands at six reads, 1,996 held-out real clusters
  *   0.8M parameters      trained in 13 minutes
- *   $50                  the whole pipeline runs on a microcontroller
+ *   229                  strands exact, decoded on the microcontroller itself
  *
  * The counters are driven by p, so scrolling back down-counts.
  *
@@ -37,10 +37,10 @@ const COLUMNS = [
     at: [0.18, 0.62], show: [-0.20, -0.10],
   },
   {
-    colour: AUDIT, from: 0, to: 50,
-    fmt: (v) => '$' + Math.round(v),
-    sub: null,
-    lines: ['the whole pipeline', 'runs on a microcontroller'],
+    colour: AUDIT, from: 0, to: 229,
+    fmt: (v) => String(Math.round(v)),
+    sub: 'of 300, against 211 classic',
+    lines: ['strands exact, decoded', 'on the microcontroller itself'],
     at: [0.34, 0.82], show: [-0.20, -0.10],
   },
 ];
@@ -155,7 +155,7 @@ export default {
     S.svg = e('svg', {
       xmlns: NS, viewBox: '0 0 1200 700', preserveAspectRatio: 'xMidYMid meet',
       role: 'img', 'aria-label':
-        '88.1 percent of strands exactly right against 67.2 percent for the classic vote, at six reads on 1,996 held-out real clusters. 0.8 million parameters, trained in 13 minutes. 50 dollars: the whole pipeline runs on a microcontroller.',
+        '88.1 percent of strands exactly right against 67.2 percent for the classic vote, at six reads on 1,996 held-out real clusters. 0.8 million parameters, trained in 13 minutes. 229 strands of 300 reconstructed exactly on the microcontroller itself, against 211 for the classic method.',
     });
     S.svg.style.width = '100%';
     S.svg.style.height = '100%';

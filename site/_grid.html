@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8">
+<style>body{margin:0;background:#EAF3ED;font:12px system-ui;display:grid;grid-template-columns:repeat(2,1fr)}
+.cell{height:430px;position:relative;border:1px solid #C3D9C9;overflow:hidden}
+.lab{position:absolute;top:4px;left:6px;z-index:9;font-weight:700;color:#08130B}
+.err{color:#C41477;font-weight:700;padding:8px}</style>
+<body></body>
+<script type="module">
+const ids=['hero','write','bill','noise','vote','polish','loop','audit','proof','close'];
+for(const id of ids){
+  const cell=document.createElement('div');cell.className='cell';
+  const lab=document.createElement('div');lab.className='lab';lab.textContent=id;cell.appendChild(lab);
+  const art=document.createElement('div');art.style.cssText='position:absolute;inset:18px 8px 8px';cell.appendChild(art);
+  document.body.appendChild(cell);
+  try{
+    const m=await import(`./scenes/${id}.js`);
+    const s=(m.create?m.create():m.default);
+    s.mount(art,{reduced:false,id,width:art.clientWidth,height:art.clientHeight});
+    if(s.resize)s.resize(art.clientWidth,art.clientHeight);
+    s.update(0.62);
+  }catch(e){const d=document.createElement('div');d.className='err';d.textContent=id+' FAILED: '+e.message;cell.appendChild(d);}
+}
+</script>
