@@ -36,6 +36,9 @@
  *                                    base. The results slide compares this with the last round.
  *
  *   ablation             reads per strand needed at the target for systems A to E, one channel
+ *   ruleCase             one real slot from the encoder's candidate search: the strands, whether
+ *                        the hand rules keep them, and the trained risk model's score for each.
+ *                        Computed by scripts/rule_vs_model_case.py, never typed in.
  *   tier2                the paired scorer experiment: reads[], rules[], learned[] as recovery
  *                        rates over 300 held-out trials, plus held[] and reproduced
  *   crossover.<codec>.<channel>      reads per strand needed; codec is "default", "nanopore"
@@ -182,6 +185,69 @@ window.RESULTS = {
         "reads": 5.5
       }
     }
+  },
+  "ruleCase": {
+    "from": 17,
+    "to": 56,
+    "length": 110,
+    "mean": 0.506,
+    "oursN": 6,
+    "candidates": [
+      {
+        "n": 1,
+        "seq": "TGTAAGTAGTGTGGTGTGCAGGCACAAGTTGAATTAGATG",
+        "risk": 0.62,
+        "passes": true,
+        "why": "",
+        "rulesPick": true,
+        "modelPick": false
+      },
+      {
+        "n": 2,
+        "seq": "AAGGGGTGTTAGACCGGGAGAATCTCAGGGAGGTGGGTTA",
+        "risk": 0.63,
+        "passes": false,
+        "why": "run of 4",
+        "rulesPick": false,
+        "modelPick": false
+      },
+      {
+        "n": 3,
+        "seq": "CATGCGTTAGGCCTAAGGATGGGGGACTTTTTACTGGAAG",
+        "risk": 0.594,
+        "passes": false,
+        "why": "run of 5",
+        "rulesPick": false,
+        "modelPick": false
+      },
+      {
+        "n": 4,
+        "seq": "GTTACGATATGATGTTTTATGCGTTTCGTTAGGTCTTCCG",
+        "risk": 0.45,
+        "passes": false,
+        "why": "run of 4",
+        "rulesPick": false,
+        "modelPick": true
+      },
+      {
+        "n": 5,
+        "seq": "ACCATTACTGTAGACGCTGCCGCGTACTCGTCCCCGGCCG",
+        "risk": 0.474,
+        "passes": false,
+        "why": "run of 4",
+        "rulesPick": false,
+        "modelPick": false
+      },
+      {
+        "n": 6,
+        "seq": "TAAATATATTCCTAGGGAAGAAACCTACTAGATTCGCCAT",
+        "risk": 0.518,
+        "passes": true,
+        "why": "",
+        "rulesPick": false,
+        "modelPick": false
+      }
+    ]
   },
   "tier2": {
     "channel": "nanopore",
