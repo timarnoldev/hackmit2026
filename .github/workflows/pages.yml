@@ -1,0 +1,71 @@
+name: Pages
+
+# Publishes the project homepage from site/ and the pitch deck from
+# marketing/deck/ under /deck/. Runs on every push to the default branch, so
+# the deck on the site follows deck commits automatically.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. Queue rather than cancel, so a push never drops a
+# teammate's deck update.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Assemble the site
+        run: |
+          set -euo pipefail
+          rm -rf _pages
+          mkdir -p _pages
+          cp -R site/. _pages/
+          # The deck is self contained: index.html, deck.css, deck.js, slides.js,
+          # results.js, results.sample.js, fonts/ and preview/. Copy it whole.
+          mkdir -p _pages/deck
+          cp -R marketing/deck/. _pages/deck/
+          # serve.sh is a local helper, not part of the published deck.
+          rm -f _pages/deck/serve.sh
+          # GitHub Pages runs Jekyll on the artifact unless told not to; the
+          # deck has no underscore paths today, but this keeps it literal.
+          touch _pages/.nojekyll
+          test -f _pages/index.html
+          test -f _pages/deck/index.html
+          test -f _pages/deck/deck.css
+          test -f _pages/deck/deck.js
+          test -f _pages/deck/slides.js
+          test -f _pages/deck/results.js
+          test -d _pages/deck/fonts
+          ls -R _pages | head -60
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

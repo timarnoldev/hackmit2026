@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Erbgut social preview, light</title>
+<!-- Source for og.png. Light-theme adaptation of marketing/social/social-preview.html,
+     same 1280x640 frame. Render with:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+       --hide-scrollbars --window-size=1280,640 \
+       --screenshot=site/assets/og.png site/assets/og.html
+     Fonts are the self-hosted woff2 next to this file, so it needs no network. -->
+<style>
+@font-face {
+  font-family: "Erbgut Sans";
+  src: url("fonts/InstrumentSans-latin.woff2") format("woff2");
+  font-weight: 400 700;
+}
+@font-face {
+  font-family: "Erbgut Mono";
+  src: url("fonts/JetBrainsMono-latin.woff2") format("woff2");
+  font-weight: 400 600;
+}
+:root {
+  --paper: #EAF3ED;
+  --ink: #08130B;
+  --muted: #3E6B52;
+  --rule: #C3D9C9;
+  --audit: #0B6E82;
+  --cost: #C41477;
+  --gain: #0A7A41;
+  --tbd: #6E6200;
+  --sans: "Erbgut Sans", "Instrument Sans", Helvetica, Arial, sans-serif;
+  --mono: "Erbgut Mono", "JetBrains Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  padding: 64px 72px 56px;
+  display: flex;
+  flex-direction: column;
+}
+.brandrow { display: flex; align-items: center; gap: 18px; }
+.brandrow svg { width: 68px; height: 68px; flex: none; }
+.wordmark { font-size: 61px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+
+h1 {
+  margin: 42px 0 0;
+  font-size: 54px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  max-width: 1130px;
+}
+h1 em { font-style: normal; color: var(--gain); }
+
+.specimen { margin-top: 52px; position: relative; padding-top: 30px; }
+.seq { font-family: var(--mono); font-weight: 600; font-size: 34px; letter-spacing: 0; white-space: nowrap; }
+.nt { display: inline-block; width: 0.78em; text-align: center; }
+.nt-A { color: var(--audit); }
+.nt-C { color: var(--cost); }
+.nt-G { color: var(--gain); }
+.nt-T { color: var(--tbd); }
+.dim { position: absolute; top: 8px; height: 13px; border: 3px solid var(--audit); border-bottom: 0; }
+.dim span {
+  position: absolute; left: 50%; bottom: calc(100% + 7px);
+  transform: translateX(-50%);
+  font-size: 16px; font-weight: 600; line-height: 1;
+  color: var(--audit); white-space: nowrap; letter-spacing: 0;
+}
+
+.stats { margin-top: auto; display: flex; align-items: flex-end; gap: 52px; }
+.stat { border-top: 3px solid var(--rule); padding-top: 12px; }
+.stat .n { font-size: 40px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; white-space: nowrap; }
+.stat .n .was { color: var(--muted); }
+.stat .n .arrow { color: var(--muted); font-weight: 400; padding: 0 10px; }
+.stat .n .now { color: var(--gain); }
+.stat .d { font-size: 16.5px; color: var(--muted); margin-top: 6px; max-width: 300px; line-height: 1.35; }
+.event { margin-left: auto; font-size: 20px; color: var(--muted); padding-bottom: 4px; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div class="brandrow">
+  <svg viewBox="0 0 64 64" aria-hidden="true">
+    <rect width="64" height="64" rx="14" fill="#08130B"/>
+    <path d="M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54" fill="none" stroke="#39E6FF" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54" fill="none" stroke="#FF2E9C" stroke-width="3.4" stroke-linecap="round"/>
+    <line x1="24" y1="16" x2="40" y2="16" stroke="#39FF6E" stroke-width="3" stroke-linecap="round"/>
+    <line x1="24" y1="48" x2="40" y2="48" stroke="#39FF6E" stroke-width="3" stroke-linecap="round"/>
+  </svg>
+  <div class="wordmark">Erbgut</div>
+</div>
+
+<h1>Does that DNA coding rule actually pay off on your channel? <em>We measure it.</em></h1>
+
+<div class="specimen">
+  <div class="seq" id="seq"></div>
+  <div class="dim" id="dim"><span>rule under audit</span></div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="n"><span class="was">67.2</span><span class="arrow">&#8594;</span><span class="now">88.1%</span></div>
+    <div class="d">strands decoded exactly at 6 reads, real held-out Nanopore data</div>
+  </div>
+  <div class="stat">
+    <div class="n">1 of 2</div>
+    <div class="d">standard rules pays off on a given channel</div>
+  </div>
+  <div class="stat">
+    <div class="n">300</div>
+    <div class="d">held-out trials behind every verdict</div>
+  </div>
+  <div class="event">HackMIT 2026</div>
+</div>
+
+<script>
+// The run of four G is what the best known hand rule polices. The bracket sits over it.
+const SEQ = "ACTGAGGGGTCAAGCTTAGCCACTGAGGGGTCAAGC";
+const RUN_START = 5, RUN_LEN = 4;
+const seq = document.getElementById("seq");
+seq.innerHTML = [...SEQ].map((c) => `<span class="nt nt-${c}">${c}</span>`).join("");
+const cells = seq.children;
+const a = cells[RUN_START].getBoundingClientRect();
+const b = cells[RUN_START + RUN_LEN - 1].getBoundingClientRect();
+const base = seq.getBoundingClientRect();
+const dim = document.getElementById("dim");
+dim.style.left = (a.left - base.left + 2) + "px";
+dim.style.width = (b.right - a.left - 4) + "px";
+</script>
+
+</body>
+</html>
