@@ -333,7 +333,7 @@
   </aside>
 </section>
 
-<!-- ================================================================ What Erbgut does -->
+<!-- ================================================================ 6. What Erbgut does -->
 <section class="slide" id="s-system" data-title="What Erbgut does" data-plan="82-102">
   <p class="kicker">What we built</p>
   <h2 class="title">Two tiers, one fixed target</h2>
@@ -363,8 +363,33 @@
   </aside>
 </section>
 
-<!-- ================================================================ What's new -->
-<section class="slide" id="s-whatsnew" data-title="What's new" data-plan="102-122">
+<!-- ================================================================ 7. Where rules come in -->
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="102-115"
+  data-labels="Several candidates per slot|Rules reject some|A scorer keeps one">
+  <p class="kicker">Where the rules come in</p>
+  <h2 class="title sm">The encoder picks one of several candidate strands</h2>
+  <div class="layout">
+    <div>
+      <div class="src">One chunk of the file <span class="chip">slot 17</span> encoded with 8 different seeds <span style="font-size:21px">(shortened to 20 letters)</span></div>
+      <div class="cands" id="cands"></div>
+    </div>
+    <div class="side">
+      <div class="box card frag" data-f="3">
+        <h4>A scorer keeps one</h4>
+        <p>By default every candidate that passes the rules is equally good. In tier 2, a risk model ranks them.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>So where do the rules come in?</p>
+    <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
+    <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
+    <p><i class="cue"></i> A scorer keeps one. By default, any candidate that passes is as good as any other. In tier two, a risk model ranks them instead.</p>
+  </aside>
+</section>
+
+<!-- ================================================================ 8. What's new -->
+<section class="slide" id="s-whatsnew" data-title="What's new" data-plan="115-135">
   <p class="kicker">What's new <span class="tag">vs existing work</span></p>
   <h2 class="title sm">Existing work tunes one piece. We close the loop.</h2>
   <p class="lede">Adaptive constrained coding, learned decoders and end-to-end learned codes all exist. Each tunes the rules, the redundancy or the decoder <b>in isolation</b>.</p>
@@ -386,8 +411,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ What we actually built -->
-<section class="slide" id="a-arch" data-title="What we actually built" data-plan="122-146"
+<!-- ================================================================ 9. What we actually built -->
+<section class="slide" id="a-arch" data-title="What we actually built" data-plan="135-159"
   data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
   <p class="kicker">In one diagram</p>
   <h2 class="title sm">What we actually built</h2>
@@ -402,8 +427,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 6. Pipeline -->
-<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="146-170"
+<!-- ================================================================ 10. Pipeline -->
+<section class="slide" id="s-pipeline" data-title="How DNA storage works" data-plan="159-183"
   data-labels="Bits become letters|Synthesis writes copies|Sequencing returns noisy reads|Decoder votes a consensus|Checksum marks a wrong strand missing|Fountain code rebuilds the file">
   <p class="kicker">How DNA storage works</p>
   <h2 class="title sm">From bits to strands, and back</h2>
@@ -476,38 +501,7 @@
   </aside>
 </section>
 
-<!-- ================================================================ 7. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="170-183"
-  data-labels="Several candidates per slot|Rules reject some|A scorer keeps one|The knobs we measure">
-  <p class="kicker">Where the rules come in</p>
-  <h2 class="title sm">The encoder picks one of several candidate strands</h2>
-  <div class="layout">
-    <div>
-      <div class="src">One chunk of the file <span class="chip">slot 17</span> encoded with 8 different seeds <span style="font-size:21px">(shortened to 20 letters)</span></div>
-      <div class="cands" id="cands"></div>
-    </div>
-    <div class="side">
-      <div class="box card frag" data-f="3">
-        <h4>A scorer keeps one</h4>
-        <p>By default every candidate that passes the rules is equally good. In tier 2, a risk model ranks them.</p>
-      </div>
-      <div class="knobs frag" data-f="4">
-        <h4>The knobs Erbgut measures</h4>
-        <ul><li>Which rules are on</li><li>How much redundancy</li><li>How candidates are scored</li></ul>
-        <div class="fix">Same encoder, same decoder. Fixed test: a 20 KB file must come back exactly in all 300 held-out trials.</div>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    <p>So where do the rules come in?</p>
-    <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
-    <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
-    <p><i class="cue"></i> A scorer keeps one. By default, any candidate that passes is as good as any other.</p>
-    <p><i class="cue"></i> We built Erbgut to measure these knobs. One fixed test: a 20 KB file has to come back exactly in all 300 held-out trials. Same encoder, same decoder. The only things that change are the rules and the redundancy.</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 8. Tier 1 -->
+<!-- ================================================================ 11. Tier 1 -->
 <section class="slide" id="s-audit" data-title="Tier 1: the rule audit" data-plan="183-210"
   data-labels="Switch each rule off and measure|Nanopore verdicts|Illumina verdicts|Same rule, different verdict">
   <p class="kicker">Tier 1 <span class="tag">rule audit</span></p>
@@ -525,7 +519,7 @@
   </aside>
 </section>
 
-<!-- ================================================================ 9. Tier 2 -->
+<!-- ================================================================ 12. Tier 2 -->
 <section class="slide" id="s-tier2" data-title="Tier 2: learning from failures" data-plan="210-230"
   data-labels="A strand that passes every hand rule|Hot spots on real Nanopore reads|The measured evidence|Encoder keeps a safer candidate">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
@@ -553,7 +547,7 @@
   </aside>
 </section>
 
-<!-- ================================================================ 10. Loop -->
+<!-- ================================================================ 13. Loop -->
 <section class="slide" id="s-loop" data-title="The loop and the Pareto plot" data-plan="230-252" data-steps="4"
   data-labels="Alternate and freeze|Default codec on the plot|Each round of tuning|Default rules at the same bits per base">
   <p class="kicker">The loop</p>
@@ -571,7 +565,7 @@
   </aside>
 </section>
 
-<!-- ================================================================ 11. Evidence: ablation and crossover -->
+<!-- ================================================================ 14. Evidence: ablation and crossover -->
 <section class="slide" id="s-evidence" data-title="Evidence: ablation and crossover" data-plan="252-270"
   data-labels="Ablation ladder A to E|Where tier 1 and tier 2 sit|Crossover matrix|Crossover outcome">
   <p class="kicker">Evidence we don't fake</p>
@@ -598,7 +592,7 @@
   </aside>
 </section>
 
-<!-- ================================================================ 12. Evidence: simulator -->
+<!-- ================================================================ 15. Evidence: simulator -->
 <section class="slide" id="s-sim" data-title="Evidence: simulator and firewall" data-plan="270-284"
   data-labels="Real vs simulated accuracy|The numbers|Sim-to-real firewall">
   <p class="kicker">Evidence we don't fake</p>
@@ -628,7 +622,7 @@
   </aside>
 </section>
 
-<!-- ================================================================ 13. Results and close -->
+<!-- ================================================================ 16. Results and close -->
 <section class="slide" id="s-results" data-title="Results and close" data-plan="284-298" data-steps="2"
   data-labels="Headline results|Close: tagline, team, repo">
   <p class="kicker">Results</p>
