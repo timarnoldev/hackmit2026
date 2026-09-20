@@ -196,6 +196,32 @@ Holding coverage fixed (every cluster decoded at the same number of reads, 4 sub
 
 Reproduce: `python scripts/risk_real_analysis.py --dataset microsoft --risk-model <run>/nanopore_budget/risk_it3.pkl --decoder polish --coverages 4 6 8 12 16 --repeats 4`
 
+## 6a. Head to head with TReconLM, same model, same protocol, same clusters ✅
+
+The table in 6b compares our numbers with a published table. This one runs **TReconLM's released fine-tuned Microsoft checkpoint** (38,533,632 parameters, 12 layers, 512 embedding) on **our** held-out clusters under **our** protocol, so nothing depends on two papers agreeing about how to measure. Raw: `results/treconlm_on_heldout.json`.
+
+**First, the thing that invalidates the naive version of this test.** Of our 2,000 held-out clusters, **1,585 (79.2%) are in TReconLM's own fine-tuning train split.** Measured on all 2,000 it scores 96.4% at six reads, but four fifths of that is training data. Only the clusters outside its training set are a fair test:
+
+**Their eval subset (415 clusters), exact strands:**
+
+| reads per cluster | 2 | 4 | 6 | 10 |
+|---|---|---|---|---|
+| TReconLM, fine-tuned (38.5M params) | **13.0** | **75.7** | **90.4** | **96.4** |
+| Ours, best variant (0.8M params) | 7.2 | 67.0 | **88.4** | 95.4 |
+| TReconLM, pretrained only | 4.3 | 58.1 | 80.0 | 89.4 |
+| Ours, majority vote baseline | 4.8 | 40.0 | 69.9 | 84.8 |
+
+**Their test subset (203 clusters):** TReconLM 13.3 / 75.4 / 90.1 / 97.5 against ours 5.9 / 69.5 / 89.2 / 95.6. Both subsets are small, so the intervals are wide; `results/treconlm_on_heldout.json` carries them.
+
+What this says, plainly:
+
+- **The fine-tuned model beats us at every coverage.** We do not claim otherwise.
+- **At six and ten reads the gap is about 1 to 2 points**, not the 2.4 the cross-paper table suggests. At two and four reads it is large (6 to 9 points) and that is where their scale genuinely tells.
+- **We beat their pretrained-only model at every coverage**, by 3 to 9 points.
+- **We are 48x smaller** (0.8M against 38.5M) and about **100x faster at inference**: at six reads over 2,000 clusters, 4.6 s for our best variant against 463 s for theirs on the same GPU.
+
+**The contamination finding stands on its own.** Anyone benchmarking a decoder on the Microsoft dataset against a released TReconLM checkpoint has to check split overlap first, or four fifths of their test set is that model's training data. Our own numbers are unaffected: our split is ours and our decoder never saw it.
+
 ## 6b. Where we stand against published decoders ☑️
 
 `docs/COMPARISON.md` has the full table. Short version, exact strands on the same Microsoft dataset:

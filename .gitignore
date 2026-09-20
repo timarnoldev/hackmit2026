@@ -19,6 +19,7 @@ results/*
 !results/run5_learned_rules.txt
 !results/rule_recovery_curve_*.json
 !results/tier2_recovery_curve_*.json
+!results/treconlm_*.json
 !results/decoder_real_heldout.json
 .DS_Store
 /.claude/worktrees
