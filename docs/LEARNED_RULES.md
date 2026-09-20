@@ -26,8 +26,36 @@ strand:
 | Predicted risk | 0.429 | 0.430 | 0.436 | 0.460 | 0.518 | 0.603 | 0.689 | 0.756 | **0.833** |
 
 Flat up to 4, then it climbs steeply. **The standard rule in the field forbids runs longer than
-3.** The model says the damage starts at 5, so the usual rule is stricter than the channel
-requires, and that strictness costs candidates for no benefit.
+3**, and the model says the damage starts at 5.
+
+An earlier version of this document took the next step and concluded that the field's rule is
+stricter than the channel requires. **We measured that, and it is not true.** Moving the limit
+is a claim about reads per strand, so we measured it in reads per strand
+(`scripts/rule_recovery_curve.py --set threshold`, 300 held-out trials per point):
+
+| Limit on the longest run | 12 reads | 14 reads | 16 reads |
+|---|---|---|---|
+| **3, the field's rule** | **0.807** | **0.993** | 1.000 |
+| 4 | 0.327 | 0.990 | 1.000 |
+| 5, where the model draws the line | 0.030 | 0.940 | 1.000 |
+| 6 | 0.003 | 0.587 | 0.997 |
+| no limit | 0.000 | 0.287 | 0.990 |
+
+Perfectly monotone: every step you loosen the rule costs recovery, and the field's 3 is the best
+of the five. Full data:
+[`results/rule_recovery_curve_threshold_nanopore_budget.json`](../results/rule_recovery_curve_threshold_nanopore_budget.json).
+
+**The two measurements are both right, and the gap between them is the interesting part.** The
+model answers a per-strand question: how likely is *this* strand to come back wrong. Between a
+run of 3 and a run of 4 the answer is 0.436 against 0.460, a small difference, and the model is
+not wrong about that. But a file is 1,239 strands and it needs essentially all of them. Small
+per-strand differences compound into large file-level ones, which is why a limit the model
+considers nearly free costs half the recoveries at 12 reads.
+
+So the model is a good guide to *what* is dangerous, and a bad guide to *where to draw a line*.
+That is not a defect we are excusing: it is the reason this project measures end to end in reads
+per strand instead of trusting a risk score, and we walked into the trap ourselves before the
+measurement pulled us back out.
 
 ## 2. It considers the GC rule pointless
 

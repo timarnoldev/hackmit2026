@@ -101,6 +101,20 @@ This independently confirms both verdicts above: the homopolymer rule is the dif
 
 **Why we now quote curves when two codecs are close.** The threshold metric ("fewest reads at which all 300 trials recover") is brittle near the top: the standard codec reaches 1.000 at 16 and then dips to 0.993 at 20, a single failure out of 300 well inside the region where it plainly works. An all-or-nothing rule reads that dip as failure. The threshold stays the headline, because "the file always comes back" is the promise, but comparisons ride on the curve. See [LEARNED_RULES.md](LEARNED_RULES.md) for the correction this forced.
 
+### Where the homopolymer line belongs ✅
+
+`scripts/rule_recovery_curve.py --set threshold`, 300 held-out trials per point, Nanopore (`results/rule_recovery_curve_threshold_nanopore_budget.json`):
+
+| Longest run allowed | 12 | 14 | 16 | 18 |
+|---|---|---|---|---|
+| **3, the field's rule** | **0.807** | **0.993** | 1.000 | 1.000 |
+| 4 | 0.327 | 0.990 | 1.000 | 0.997 |
+| 5, where the risk model draws it | 0.030 | 0.940 | 1.000 | 1.000 |
+| 6 | 0.003 | 0.587 | 0.997 | 1.000 |
+| no limit | 0.000 | 0.287 | 0.990 | 1.000 |
+
+Monotone: the field's rule of 3 is the best of the five, and each step looser costs recovery. **This contradicts the risk model's own probe**, which calls risk flat up to a run of 4. Both are right about different questions: the model scores one strand, the file needs 1,239 of them, and a per-strand difference of 0.024 compounds. Quotable as the honest version of "we trust measurements over our own model". See [LEARNED_RULES.md](LEARNED_RULES.md) section 1.
+
 **Tier 2, measured directly** (same settings, same decoder, paired held-out trials, rule scorer vs learned risk model): ☑️
 
 | Channel | Simulator | Candidates | Strand failures, rules | with learned selection | Difference (95% CI) |
