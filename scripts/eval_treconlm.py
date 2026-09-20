@@ -316,7 +316,7 @@ def main() -> None:
                           args.device, args.batch_size)
     print(f"{label}: {tre.n_params / 1e6:.1f}M parameters, device {tre.device}, "
           f"ckpt iter {tre.ckpt_meta['iter_num']}")
-    decoders.append((label, tre.decode))
+    decoders.append((label, lambda cs: tre.decode(cs, STRAND_LENGTH)))
     if not args.skip_ours:
         decoders += [
             (n, f) for n, f in our_decoders(
