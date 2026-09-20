@@ -392,7 +392,7 @@
 </section>
 
 <!-- ================================================================ 8. What we actually built -->
-<section class="slide" id="a-arch" data-title="What we actually built" data-plan="121-145"
+<section class="slide archlike" id="a-arch" data-title="What we actually built" data-plan="121-145"
   data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
   <p class="kicker">In one diagram</p>
   <h2 class="title sm">What we actually built</h2>
@@ -676,6 +676,20 @@
     <p><i class="cue"></i> The patterns it names are all runs, as expected. The interesting part is the order: G and C runs rank above A and T runs. No hand rule makes that distinction, it just counts identical letters.</p>
     <p><i class="cue"></i> And the cross-check. Our channel table, fitted on real reads, says the worst deletion contexts are GAAAG and AAAAG. The model never saw that table and rates them 0.93 and 0.97. The worst substitution context it shrugs at, 0.44, because voting across reads repairs a substitution while a deletion shifts everything after it. It did not learn where errors happen. It learned where errors are fatal. On Illumina every pattern comes back at zero, correctly, because there the decoder does not fail on sequence grounds at all.</p>
     <p class="aside">About 35 seconds. Source: docs/LEARNED_RULES.md, probed from the trained model of the final run.</p>
+  </aside>
+</section>
+
+<section class="slide appx archlike" id="a-two" data-appendix data-title="Appendix: the two models"
+  data-labels="The polisher, inside the decoder|The risk model, inside the encoder|What closes the loop">
+  <p class="kicker">Appendix <span class="tag">A7</span></p>
+  <h2 class="title sm">The two models</h2>
+  <div class="arch" id="twomodels"></div>
+  <aside class="notes">
+    <p>Two learned models in the whole system, and they sit at opposite ends of it.</p>
+    <p><i class="cue"></i> The polisher is the decoder's second half. It never sees raw letters: it gets the classic decoder's draft and its vote columns, 17 numbers per position, votes for each letter, for a deletion, for an inserted letter and which one, coverage, the draft base, agreement and where we are in the strand, all as fractions. A dilated 1D CNN, stem of kernel 5 and eight residual blocks with dilations one, two, four, eight, twice over, 128 channels, about 0.8 million parameters and a receptive field of about 65 positions. Two heads: per position keep, substitute or delete, per gap insert or nothing. We apply the edits so deletions and insertions balance, which keeps the strand length exact. It trained in 13 minutes.</p>
+    <p><i class="cue"></i> The risk model is the opposite. It sees one candidate strand as one-hot letters, nothing else, and returns one number between 0 and 1: the predicted fraction of decoding attempts that fail for that strand. The labels come from simulating each training strand 32 times and decoding it, so the target is a failure rate, not a yes or no. It plugs into the encoder as the scorer that picks among the 8 to 32 candidates for every slot.</p>
+    <p><i class="cue"></i> And this is the arrow that closes the loop: the decoder's failures become the risk model's labels, so what the decoder gets wrong decides what the encoder writes next time.</p>
+    <p class="aside">About 35 seconds. Details in docs/MODELS.md.</p>
   </aside>
 </section>
 

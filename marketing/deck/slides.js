@@ -455,6 +455,52 @@
       `<div class="note">Voting across reads repairs a substitution. A deletion shifts everything after it and destroys the strand. On Illumina every pattern comes back at risk 0.000, correctly.</div></div>`;
   }
 
+  /* ------------------------------------------------------------ appendix: the two models */
+
+  const TWO_LEFT = [
+    { t: 'Input', p: 'Not raw letters. The classic decoder’s draft plus its vote columns: 17 numbers per position, votes for A, C, G, T, for a deletion, for an inserted letter and which one, coverage, the draft base, agreement and relative position, all as fractions' },
+    { t: 'Trunk', p: 'Dilated 1D CNN. Stem of kernel 5, then 8 residual blocks with dilations 1, 2, 4, 8, 1, 2, 4, 8, at 128 channels, GroupNorm and GELU. About 0.8M parameters, receptive field about 65 positions', learned: true },
+    { t: 'Two heads', p: 'Per position: keep, substitute to A, C, G or T, or delete. Per gap: nothing, or insert A, C, G or T' },
+    { t: 'Output', p: 'The edits are applied so deletions and insertions balance, which keeps the strand length exact. Trained in 13 minutes' },
+  ];
+  const TWO_RIGHT = [
+    { t: 'Input', p: 'One candidate strand as one-hot letters. Nothing else: no reads, no votes, no channel numbers' },
+    { t: 'Trunk', p: 'A small 1D CNN over the letters', learned: true },
+    { t: 'Labels', p: 'Each training strand is simulated 32 times and decoded, so the target is a failure rate, not a yes or no' },
+    { t: 'Output', p: 'One number between 0 and 1: the predicted fraction of decoding attempts that fail for that strand' },
+  ];
+  const TWO_Y = [[64, 176], [256, 150], [422, 118], [566, 122]];
+
+  function buildTwoModels() {
+    const host = document.getElementById('twomodels');
+    if (!host) return;
+    const W = 760;
+    const col = (items, x, f) =>
+      items.map((b, i) => {
+        const [y, h] = TWO_Y[i];
+        return (
+          `<div class="abox${b.learned ? ' learned' : ''} frag fade" data-f="${f}" style="left:${x}px;top:${y}px;width:${W}px;height:${h}px">` +
+          `<h4>${b.t}</h4><p>${b.p}</p>${b.learned ? '<span class="tagl">learned</span>' : ''}</div>`
+        );
+      }).join('');
+    const down = (x, y1, y2, f) =>
+      `<path class="frag fade" data-f="${f}" d="M${x} ${y1} V${y2 - 14} ${arrow(x, y2 - 24, x, y2)}"/>`;
+    let wires = '';
+    [380, 1300].forEach((x, k) => {
+      for (let i = 0; i < TWO_Y.length - 1; i++) {
+        wires += down(x, TWO_Y[i][0] + TWO_Y[i][1], TWO_Y[i + 1][0], k + 1);
+      }
+    });
+    host.innerHTML =
+      `<div class="colhead frag fade" data-f="1" style="left:0;top:0;width:${W}px">Polisher<span class="lt">learned</span><span class="where">inside the decoder</span></div>` +
+      `<div class="colhead frag fade" data-f="2" style="left:920px;top:0;width:${W}px">Risk model<span class="lt">learned</span><span class="where">inside the encoder</span></div>` +
+      `<svg class="wires" width="1680" height="726" viewBox="0 0 1680 726" aria-hidden="true">${wires}</svg>` +
+      col(TWO_LEFT, 0, 1) + col(TWO_RIGHT, 920, 2) +
+      `<div class="closer frag fade" data-f="3" style="top:706px">The decoder’s failures become the risk model’s labels` +
+      `<svg viewBox="0 0 46 28" aria-hidden="true"><path d="M2 14h36M30 5l9 9-9 9" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>` +
+      `so the encoder writes what the decoder can read</div>`;
+  }
+
   function buildArchitecture() {
     const host = document.getElementById('arch');
     if (!host) return;
@@ -994,6 +1040,7 @@
       buildTier2();
       buildArchitecture();
       buildLearned();
+      buildTwoModels();
       buildCycle();
       buildPareto(R);
       buildAblation(R);
