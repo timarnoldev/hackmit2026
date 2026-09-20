@@ -2,7 +2,7 @@
 
 Seven slides, built to support the 3-minute pitch in `PITCH.md`. Most of the time is spent in the live dashboard; the slides frame it and are the fallback if the demo fails.
 
-**Style:** paper background (`#F2F5F4`) or dark paper (`#0F1417`), Instrument Sans for text, JetBrains Mono only for DNA sequences and numeric tables. One idea per slide. Every placeholder uses the Tbd style from `BRAND.md` (amber, dashed outline) so it can't be mistaken for a result. Footer on every slide: the mark, "Erbgut", slide number.
+**Style:** dark paper (`#060F0A`), or light paper (`#EAF3ED`) if the room is bright, Instrument Sans for text, JetBrains Mono only for DNA sequences and numeric tables. One idea per slide. Every placeholder uses the Tbd style from `BRAND.md` (amber, dashed outline) so it can't be mistaken for a result. Footer on every slide: the mark, "Erbgut", slide number.
 
 ---
 

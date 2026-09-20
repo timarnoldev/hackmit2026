@@ -1,13 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="t">
-  <title id="t">Erbgut mark: a strand of four bases with a dimension line measuring a run of two identical bases</title>
-  <rect width="64" height="64" rx="14" fill="#131B20"/>
-  <!-- bases A, C, G, G standing on the strand -->
-  <rect x="8" y="26" width="9" height="20" rx="2" fill="#A3A6FF"/>
-  <rect x="21" y="26" width="9" height="20" rx="2" fill="#FF86B0"/>
-  <rect x="34" y="26" width="9" height="20" rx="2" fill="#4FD6B5"/>
-  <rect x="47" y="26" width="9" height="20" rx="2" fill="#4FD6B5"/>
-  <!-- the strand -->
-  <rect x="8" y="50" width="48" height="3" rx="1.5" fill="#E6ECEA"/>
-  <!-- a dimension line measuring the GG run -->
-  <path d="M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5" fill="none" stroke="#E6ECEA" stroke-width="3" stroke-linecap="round"/>
+  <title id="t">Erbgut mark: a double helix, two strands crossing between two rungs</title>
+  <!-- Mark for light backgrounds. Geometry from the deck (marketing/deck/slides.js). -->
+  <rect width="64" height="64" rx="14" fill="#08130B"/>
+  <path d="M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54" fill="none" stroke="#39E6FF" stroke-width="3.4" stroke-linecap="round"/>
+  <path d="M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54" fill="none" stroke="#FF2E9C" stroke-width="3.4" stroke-linecap="round"/>
+  <line x1="24" y1="16" x2="40" y2="16" stroke="#39FF6E" stroke-width="3" stroke-linecap="round"/>
+  <line x1="24" y1="48" x2="40" y2="48" stroke="#39FF6E" stroke-width="3" stroke-linecap="round"/>
+  <!-- The deck's markup carries a third rung at the crossover; it renders invisible there
+       because the token it is painted with is not defined. Left out so this file matches
+       what the deck shows on screen. -->
 </svg>

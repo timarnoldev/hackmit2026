@@ -6,46 +6,47 @@
 <title>Erbgut</title>
 <meta name="description" content="Erbgut measures whether a DNA coding rule actually pays off on your sequencing channel, and tunes the codec accordingly. HackMIT 2026.">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23131B20'/%3E%3Crect x='8' y='26' width='9' height='20' rx='2' fill='%23A3A6FF'/%3E%3Crect x='21' y='26' width='9' height='20' rx='2' fill='%23FF86B0'/%3E%3Crect x='34' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='47' y='26' width='9' height='20' rx='2' fill='%234FD6B5'/%3E%3Crect x='8' y='50' width='48' height='3' rx='1.5' fill='%23E6ECEA'/%3E%3Cpath d='M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5' fill='none' stroke='%23E6ECEA' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308130B'/%3E%3Cpath d='M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54' fill='none' stroke='%2339E6FF' stroke-width='3.4' stroke-linecap='round'/%3E%3Cpath d='M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54' fill='none' stroke='%23FF2E9C' stroke-width='3.4' stroke-linecap='round'/%3E%3Cline x1='24' y1='16' x2='40' y2='16' stroke='%2339FF6E' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='24' y1='48' x2='40' y2='48' stroke='%2339FF6E' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
+  /* Tokens follow marketing/BRAND.md, which follows the deck (marketing/deck/deck.css).
+     On light, the accents used for text are a step darker than the deck's graphic values,
+     so normal-size text clears WCAG AA. Ratios are in BRAND.md. */
   :root {
-    --paper: #F2F5F4;
+    --paper: #EAF3ED;
     --surface: #FFFFFF;
-    --ink: #131B20;
-    --muted: #4B5A60;
-    --rule: #CBD4D2;
-    --audit: #3A3FC2;
-    --cost: #B02A63;
-    --gain: #0B7465;
-    --tbd-ink: #7A4F00;
-    --tbd-bg: #FDF1D6;
-    --tbd-line: #C98F12;
-    --tile: #131B20;
-    --tile-ink: #E6ECEA;
-    --bar-a: #A3A6FF; --bar-c: #FF86B0; --bar-g: #4FD6B5;
+    --ink: #08130B;
+    --muted: #3E6B52;
+    --rule: #C3D9C9;
+    --audit: #0B6E82;
+    --cost: #C41477;
+    --gain: #0A7A41;
+    --tbd-ink: #6E6200;
+    --tbd-bg: #EAF5DA;
+    --tbd-line: #A9B81C;
+    --tile: #08130B;
+    --mark-a: #39E6FF; --mark-c: #FF2E9C; --mark-g: #39FF6E;
     --sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
     --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #0F1417;
-      --surface: #172026;
-      --ink: #E6ECEA;
-      --muted: #9AA9AE;
-      --rule: #2C353B;
-      --audit: #A3A6FF;
-      --cost: #FF86B0;
-      --gain: #4FD6B5;
-      --tbd-ink: #F4C45A;
-      --tbd-bg: #2A2312;
-      --tbd-line: #B98A25;
-      --tile: #E6ECEA;
-      --tile-ink: #131B20;
-      --bar-a: #3A3FC2; --bar-c: #B02A63; --bar-g: #0B7465;
+      --paper: #060F0A;
+      --surface: #0B2116;
+      --ink: #EAFFF3;
+      --muted: #6FCB98;
+      --rule: #1B4A2E;
+      --audit: #39E6FF;
+      --cost: #FF2E9C;
+      --gain: #39FF6E;
+      --tbd-ink: #FFE13D;
+      --tbd-bg: #1E2A0C;
+      --tbd-line: #D4B62E;
+      --tile: #EAFFF3;
+      --mark-a: #10A6C4; --mark-c: #C41477; --mark-g: #0E9C55;
       color-scheme: dark;
     }
   }
@@ -247,12 +248,10 @@
   <a class="brand" href="#top" aria-label="Erbgut home">
     <svg viewBox="0 0 64 64" aria-hidden="true">
       <rect width="64" height="64" rx="14" fill="var(--tile)"/>
-      <rect x="8" y="26" width="9" height="20" rx="2" fill="var(--bar-a)"/>
-      <rect x="21" y="26" width="9" height="20" rx="2" fill="var(--bar-c)"/>
-      <rect x="34" y="26" width="9" height="20" rx="2" fill="var(--bar-g)"/>
-      <rect x="47" y="26" width="9" height="20" rx="2" fill="var(--bar-g)"/>
-      <rect x="8" y="50" width="48" height="3" rx="1.5" fill="var(--tile-ink)"/>
-      <path d="M34.5 17H55.5M34.5 11.5V22.5M55.5 11.5V22.5" fill="none" stroke="var(--tile-ink)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54" fill="none" stroke="var(--mark-a)" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54" fill="none" stroke="var(--mark-c)" stroke-width="3.4" stroke-linecap="round"/>
+      <line x1="24" y1="16" x2="40" y2="16" stroke="var(--mark-g)" stroke-width="3" stroke-linecap="round"/>
+      <line x1="24" y1="48" x2="40" y2="48" stroke="var(--mark-g)" stroke-width="3" stroke-linecap="round"/>
     </svg>
     Erbgut
   </a>

@@ -51,8 +51,8 @@ table.passes th, table.passes td {{ padding: 0.3rem 0.8rem; border-top: 1px soli
   text-align: left; font-variant-numeric: tabular-nums; }}
 .ok-t {{ color: {B["gain"]}; font-weight: 700; }}
 .lost-t {{ color: {B["cost"]}; font-weight: 700; }}
-@media (prefers-color-scheme: dark) {{ .ok-t {{ color: #4FD6B5; }} .lost-t {{ color: #FF86B0; }} }}
-.mock-banner {{ background: #c62828; color: #fff; padding: 0.8rem 1rem; border-radius: 10px;
+@media (prefers-color-scheme: dark) {{ .ok-t {{ color: #39FF6E; }} .lost-t {{ color: #FF2E9C; }} }}
+.mock-banner {{ background: #C41477; color: #fff; padding: 0.8rem 1rem; border-radius: 10px;
   font-size: 1.4rem; font-weight: 800; text-align: center; }}
 </style>
 """

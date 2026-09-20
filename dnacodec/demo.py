@@ -66,17 +66,19 @@ STATUS_TEXT = {
 }
 
 # Erbgut palette (marketing/BRAND.md): G gain teal, C cost magenta, T amber, A audit indigo.
+# Light-theme brand tokens, from marketing/BRAND.md. The accents used as text are a
+# step darker than the deck's graphic values so normal-size text clears WCAG AA.
 BRAND = {
-    "audit": "#3A3FC2",
-    "cost": "#B02A63",
-    "gain": "#0B7465",
-    "tbd_fill": "#F4C45A",
-    "tbd_text": "#8A5A00",
-    "paper": "#F2F5F4",
+    "audit": "#0B6E82",
+    "cost": "#C41477",
+    "gain": "#0A7A41",
+    "tbd_fill": "#FFE13D",
+    "tbd_text": "#6E6200",
+    "paper": "#EAF3ED",
     "surface": "#FFFFFF",
-    "ink": "#131B20",
-    "muted": "#4B5A60",
-    "rule": "#CBD4D2",
+    "ink": "#08130B",
+    "muted": "#3E6B52",
+    "rule": "#C3D9C9",
 }
 STATUS_COLOR = {CORRECT: BRAND["gain"], CAUGHT: BRAND["cost"], LOST: BRAND["tbd_fill"], SLIPPED: BRAND["ink"]}
 
@@ -472,28 +474,45 @@ def _rgb(hex_color: str) -> np.ndarray:
     return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], dtype=np.int16)
 
 
+# The Erbgut mark, in the same 64 unit space as marketing/logo-mark.svg: two strands that
+# cross, Audit over Cost, with two Gain rungs. Each strand is one cubic Bezier chain.
+_MARK_STRANDS = (
+    ("audit", ((22, 10), (46, 10), (46, 26), (32, 30), (18, 34), (18, 50), (42, 54))),
+    ("cost", ((42, 10), (18, 10), (18, 26), (32, 30), (46, 34), (46, 50), (22, 54))),
+)
+_MARK_RUNGS = ((24, 16, 40), (24, 48, 40))
+
+
 def demo_image_png(size: int = 64) -> bytes:
-    """The default demo image, drawn in code: the Erbgut mark (bars A, C, G, G on a strand,
-    a dimension line over the run of two G bars) on paper with a light grain. The grain is
-    fixed (not a channel seed) and gives the file a realistic size of a few KB."""
+    """The default demo image, drawn in code: the Erbgut mark (a double helix, two strands
+    crossing between two rungs) on paper with a light grain. The grain is fixed (not a
+    channel seed) and gives the file a realistic size of a few KB."""
     s = size / 64
     img = np.empty((size, size, 3), dtype=np.int16)
     img[:] = _rgb(BRAND["paper"])
     grain = np.random.default_rng(64).integers(-7, 8, size=(size, size, 1))
     img = img + grain
-    ink = _rgb(BRAND["ink"])
 
-    def rect(x0: float, y0: float, x1: float, y1: float, color: np.ndarray) -> None:
-        img[int(y0 * s):int(y1 * s), int(x0 * s):int(x1 * s)] = color
+    yy, xx = np.mgrid[0:size, 0:size]
 
-    bars = [BRAND["audit"], BRAND["cost"], BRAND["gain"], BRAND["gain"]]
-    for i, color in enumerate(bars):
-        x = 8 + i * 13
-        rect(x, 20, x + 9, 48, _rgb(color))
-    rect(5, 48, 59, 51, ink)  # the strand
-    rect(34, 12, 56, 13, ink)  # dimension line over the run
-    rect(34, 9, 35, 16, ink)
-    rect(55, 9, 56, 16, ink)
+    def disc(cx: float, cy: float, r: float, color: np.ndarray) -> None:
+        m = (xx - cx * s) ** 2 + (yy - cy * s) ** 2 <= (r * s) ** 2
+        img[m] = color
+
+    for key, pts in _MARK_STRANDS:
+        color = _rgb(BRAND[key])
+        for seg in range(0, len(pts) - 1, 3):
+            (x0, y0), (x1, y1), (x2, y2), (x3, y3) = pts[seg:seg + 4]
+            for step in range(121):
+                t = step / 120
+                u = 1 - t
+                a, b, c, d = u ** 3, 3 * u * u * t, 3 * u * t * t, t ** 3
+                disc(a * x0 + b * x1 + c * x2 + d * x3,
+                     a * y0 + b * y1 + c * y2 + d * y3, 1.7, color)
+
+    gain = _rgb(BRAND["gain"])
+    for x0, y, x1 in _MARK_RUNGS:
+        img[int((y - 1.5) * s):int((y + 1.5) * s), int(x0 * s):int(x1 * s)] = gain
     return png_bytes(np.clip(img, 0, 255).astype(np.uint8))
 
 

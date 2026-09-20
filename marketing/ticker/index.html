@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Erbgut live decode</title>
 <meta name="description" content="A live ticker of a real DNA decode: noisy reads in, corrected strands out.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23E6ECEA'/%3E%3Crect x='5' y='10' width='4' height='12' fill='%233A3FC2'/%3E%3Crect x='11' y='10' width='4' height='12' fill='%23B02A63'/%3E%3Crect x='17' y='10' width='4' height='12' fill='%230B7465'/%3E%3Crect x='23' y='10' width='4' height='12' fill='%230B7465'/%3E%3Crect x='4' y='22' width='24' height='2' fill='%23131B20'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23EAFFF3'/%3E%3Cpath d='M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54' fill='none' stroke='%2310A6C4' stroke-width='3.4' stroke-linecap='round'/%3E%3Cpath d='M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54' fill='none' stroke='%23C41477' stroke-width='3.4' stroke-linecap='round'/%3E%3Cline x1='24' y1='16' x2='40' y2='16' stroke='%230E9C55' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='24' y1='48' x2='40' y2='48' stroke='%230E9C55' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 /* Erbgut live decode ticker. Self contained, dark, built for a projector.
    Fonts come from the deck when this page is served by scripts/ticker_server.py
@@ -27,20 +27,20 @@
 }
 
 :root {
-  --sa-paper: #0F1417;
-  --sa-surface: #172026;
-  --sa-surface-2: #1E2930;
-  --sa-ink: #E6ECEA;
-  --sa-muted: #9AA9AE;
-  --sa-rule: #2C353B;
-  --sa-audit: #A3A6FF;
-  --sa-cost: #FF86B0;
-  --sa-gain: #4FD6B5;
-  --sa-tbd: #F4C45A;
-  --on-accent: #0F1417;
-  --tint-audit: rgba(163, 166, 255, 0.14);
-  --tint-cost: rgba(255, 134, 176, 0.15);
-  --tint-gain: rgba(79, 214, 181, 0.13);
+  --sa-paper: #060F0A;
+  --sa-surface: #0B2116;
+  --sa-surface-2: #10331F;
+  --sa-ink: #EAFFF3;
+  --sa-muted: #6FCB98;
+  --sa-rule: #1B4A2E;
+  --sa-audit: #39E6FF;
+  --sa-cost: #FF2E9C;
+  --sa-gain: #39FF6E;
+  --sa-tbd: #FFE13D;
+  --on-accent: #060F0A;
+  --tint-audit: rgba(57, 230, 255, 0.14);
+  --tint-cost: rgba(255, 46, 156, 0.15);
+  --tint-gain: rgba(57, 255, 110, 0.13);
   --sans: "SA Sans", "Instrument Sans", system-ui, -apple-system, sans-serif;
   --mono: "SA Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --gutter: 118px;
@@ -170,14 +170,14 @@ main::after {
 
 /* a wrong letter in a read: the deck's cost magenta */
 .nt.x { background: var(--sa-cost); color: var(--on-accent); font-weight: 600; animation: flash 0.5s ease-out both; }
-/* an extra letter the strand does not have: the deck's audit indigo */
+/* an extra letter the strand does not have: the deck's audit cyan */
 .nt.e { background: var(--sa-audit); color: var(--on-accent); font-weight: 600; animation: flash 0.5s ease-out both; }
 /* a letter the read is missing: a dashed gap in front of this position */
 .nt.m::before {
   content: ""; position: absolute; left: -2px; top: 12%; bottom: 12%;
   border-left: 2px dashed var(--sa-cost); animation: flash 0.5s ease-out both;
 }
-/* corrections the decoder applied, in gain teal */
+/* corrections the decoder applied, in gain green */
 .nt.s, .nt.i { background: var(--sa-gain); color: var(--on-accent); font-weight: 600; animation: flash 0.5s 0.12s ease-out both; }
 .nt.d::before {
   content: ""; position: absolute; left: -2px; top: 12%; bottom: 12%;

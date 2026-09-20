@@ -34,43 +34,51 @@ from dnacodec.results import (
 from dnacodec.types import EncoderSettings, Metrics
 
 # ---------------------------------------------------------------------------
-# Palette. Gray = the default codec (system B), blue = the tailored codec.
-# Steps come from a CVD-validated categorical palette, with separate light and dark steps.
+# Palette. Tokens come from marketing/BRAND.md, which follows the deck.
+# Green-gray = the default codec (system B), Audit cyan = the tailored codec.
+# Audit cyan against Cost magenta stays separable under the common forms of color
+# blindness, and every verdict carries a word or a symbol as well as a color.
+# On light, the accents used as text are a step darker than the deck's graphic
+# values so normal-size text clears WCAG AA. Ratios are in marketing/BRAND.md.
 # ---------------------------------------------------------------------------
 
 PALETTES = {
     "light": {
-        "tailored": "#2a78d6",
-        "default": "#7a7974",
-        "baseline": "#b5b4ad",
-        "tailored_soft": "#86b6ef",
-        "ladder": ["#9ec5f4", "#5598e7", "#1c5cab"],
-        "transformer": "#eb6834",
-        "extra": ["#1baf7a", "#4a3aa7", "#e87ba4", "#008300"],
-        "grid": "rgba(0,0,0,0.08)",
-        "muted": "#52514e",
-        "good": "#0f7a3d",
-        "bad": "#c2362f",
-        "better_fill": "rgba(42,120,214,0.08)",
-        "heat": [[0.0, "#fcfcfb"], [0.2, "#cde2fb"], [0.5, "#6da7ec"], [0.8, "#256abf"], [1.0, "#0d366b"]],
-        "diverging": [[0.0, "#c2362f"], [0.25, "#ef9a93"], [0.5, "#f0efec"], [0.75, "#86b6ef"], [1.0, "#1c5cab"]],
+        "tailored": "#0B6E82",
+        "default": "#55705F",
+        "baseline": "#93AC9C",
+        "tailored_soft": "#5FB6C8",
+        "ladder": ["#9AD7E2", "#3D9DB2", "#0A5768"],
+        "transformer": "#6E6200",
+        "extra": ["#0A7A41", "#C41477", "#6E6200", "#0A5768"],
+        "grid": "rgba(8,19,11,0.10)",
+        "muted": "#3E6B52",
+        # A verdict of "no measurable benefit" must not read as Gain: desaturated, not green.
+        "neutral": "#4A5C51",
+        "good": "#0A7A41",
+        "bad": "#C41477",
+        "better_fill": "rgba(16,166,196,0.10)",
+        "heat": [[0.0, "#FFFFFF"], [0.2, "#CFEAF0"], [0.5, "#63B9CC"], [0.8, "#127C93"], [1.0, "#0A3F4B"]],
+        "diverging": [[0.0, "#C41477"], [0.25, "#E68FBC"], [0.5, "#EAF3ED"], [0.75, "#7EC4D3"], [1.0, "#0B6E82"]],
     },
     "dark": {
-        "tailored": "#3987e5",
-        "default": "#a3a29b",
-        "baseline": "#5f5e5a",
-        "tailored_soft": "#1c5cab",
-        "ladder": ["#184f95", "#2a78d6", "#6da7ec"],
-        "transformer": "#d95926",
-        "extra": ["#199e70", "#9085e9", "#d55181", "#008300"],
-        "grid": "rgba(255,255,255,0.10)",
-        "muted": "#c3c2b7",
-        "good": "#4cc38a",
-        "bad": "#f07470",
-        "better_fill": "rgba(57,135,229,0.12)",
-        "heat": [[0.0, "#1a1a19"], [0.25, "#184f95"], [0.6, "#3987e5"], [1.0, "#b7d3f6"]],
+        "tailored": "#39E6FF",
+        "default": "#9FB8A9",
+        "baseline": "#5C7A68",
+        "tailored_soft": "#127C93",
+        "ladder": ["#0E5F73", "#1E9CB8", "#39E6FF"],
+        "transformer": "#FFE13D",
+        "extra": ["#39FF6E", "#FF2E9C", "#FFE13D", "#1E9CB8"],
+        "grid": "rgba(234,255,243,0.10)",
+        "muted": "#6FCB98",
+        # A verdict of "no measurable benefit" must not read as Gain: desaturated, not green.
+        "neutral": "#9FB8A9",
+        "good": "#39FF6E",
+        "bad": "#FF2E9C",
+        "better_fill": "rgba(57,230,255,0.12)",
+        "heat": [[0.0, "#060F0A"], [0.25, "#0E4757"], [0.6, "#1E9CB8"], [1.0, "#9BF0FF"]],
         # Both poles stay mid-dark so the white cell text keeps its contrast.
-        "diverging": [[0.0, "#b8403f"], [0.25, "#6e3432"], [0.5, "#383835"], [0.75, "#1c4f8f"], [1.0, "#2a6cc0"]],
+        "diverging": [[0.0, "#8E1059"], [0.25, "#5A1039"], [0.5, "#10331F"], [0.75, "#0E4757"], [1.0, "#127C93"]],
     },
 }
 
@@ -379,9 +387,9 @@ h3 { font-size: 1.35rem !important; }
 [data-testid="stMetricLabel"] p { font-size: 1.0rem; font-weight: 600; }
 [data-testid="stMetricDelta"] { font-size: 1.0rem; }
 .mock-banner {
-  background: #c62828; color: #ffffff; padding: 0.9rem 1.2rem; border-radius: 10px;
+  background: #C41477; color: #FFFFFF; padding: 0.9rem 1.2rem; border-radius: 10px;
   font-size: 1.6rem; font-weight: 800; text-align: center; letter-spacing: 0.04em;
-  margin: 0.4rem 0 1rem 0; border: 3px solid #8e0000;
+  margin: 0.4rem 0 1rem 0; border: 3px solid #8E1059;
 }
 .mock-banner small { display: block; font-size: 0.95rem; font-weight: 500; letter-spacing: 0; }
 .lede { font-size: 1.3rem; opacity: 0.88; margin-top: -0.6rem; max-width: 70rem; }
@@ -394,12 +402,12 @@ table.dash th, table.dash td {
   padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(128,128,128,0.25); text-align: left; vertical-align: top;
 }
 table.dash td.knob small { display: block; opacity: 0.65; font-size: 0.85rem; }
-table.dash td.chg { background: rgba(57,135,229,0.20); font-weight: 700; }
+table.dash td.chg { background: rgba(57,230,255,0.18); font-weight: 700; }
 table.dash td.same { opacity: 0.55; }
 table.dash tr.result td { font-weight: 650; border-top: 2px solid rgba(128,128,128,0.45); }
 table.dash td.strand { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem;
   word-break: break-all; max-width: 34rem; line-height: 1.5; }
-table.dash .run { background: rgba(235,104,52,0.28); border-radius: 3px; font-weight: 700; }
+table.dash .run { background: rgba(255,225,61,0.30); border-radius: 3px; font-weight: 700; }
 table.compare { width: 100%; border-collapse: collapse; font-size: 1.05rem; margin: 0.4rem 0 0.3rem 0; }
 table.compare th { text-align: right; font-size: 0.9rem; opacity: 0.7; font-weight: 600; padding: 0.2rem 0.4rem; }
 table.compare td { text-align: right; padding: 0.35rem 0.4rem; border-top: 1px solid rgba(128,128,128,0.22);
@@ -520,7 +528,7 @@ def glossary() -> None:
 # verdict -> (palette key for the badge color, icon, phrase used in the headline sentence)
 VERDICTS = {
     "pays off": ("good", "✓", "pays off"),
-    "no measurable benefit": ("muted", "–", "has no measurable benefit"),
+    "no measurable benefit": ("neutral", "–", "has no measurable benefit"),
     "harmful": ("bad", "✗", "is harmful"),
     "tuned is better": ("tailored", "↻", "is beaten by a tuned value"),
 }
@@ -1418,11 +1426,11 @@ def render_body(run_id: str, focus: str, target: float) -> None:
 
     if runs:
         section("The tuned codec moves past the default")
-        cap("Each panel is one channel. Gray diamond = default codec, blue dots = tuning steps "
-            "(C = rules audited, D = + learned selection, E = full loop). Hollow gray diamond = the default "
-            "rules at the same bits per base as the blue dot above it, so the gap is reads saved at equal "
+        cap("Each panel is one channel. Pale diamond = default codec, cyan dots = tuning steps "
+            "(C = rules audited, D = + learned selection, E = full loop). Hollow pale diamond = the default "
+            "rules at the same bits per base as the cyan dot above it, so the gap is reads saved at equal "
             "density. Down and right is better.",
-            "Gray = default codec, blue = tuning steps, hollow gray = default rules at the same density. "
+            "Pale = default codec, cyan = tuning steps, hollow pale = default rules at the same density. "
             "Down and right is better.")
         in_columns(runs, verdict)
 
@@ -1430,9 +1438,9 @@ def render_body(run_id: str, focus: str, target: float) -> None:
         section("Each codec at home and away")
         cap("Every tuned codec on every channel: reads per strand needed to recover the file, bits per base "
             "it stores, and file recovery at the channel's read budget. Changes are against the default on "
-            "that channel. Blue = better than the default in reads and density, red = worse in both or "
-            "target missed, gray = a trade-off. Outlined cells: the codec on its own channel.",
-            "Blue = better than the default in reads and density, red = worse in both, gray = a trade-off. "
+            "that channel. Cyan = better than the default in reads and density, magenta = worse in both or "
+            "target missed, neutral = a trade-off. Outlined cells: the codec on its own channel.",
+            "Cyan = better than the default in reads and density, magenta = worse in both, neutral = a trade-off. "
             "Outlined: the codec on its own channel.")
         fig = crossover_chart(summary)
         cols = st.columns([3, 2]) if len(shown) <= 2 else [st.container(), st.container()]
@@ -1504,8 +1512,8 @@ def render_body(run_id: str, focus: str, target: float) -> None:
             st.subheader("Same strand, different verdict per channel")
             st.markdown(examples_table(summary, shown), unsafe_allow_html=True)
         st.subheader("Encoder settings per channel")
-        cap("Blue cells: rules the loop changed from the default for that channel.",
-            "Blue cells: what the loop changed.")
+        cap("Cyan cells: rules the loop changed from the default for that channel.",
+            "Cyan cells: what the loop changed.")
         st.markdown(settings_table(runs), unsafe_allow_html=True)
 
     # On the projector the details are one collapsed expander: nothing to squint at unless asked.
@@ -1612,7 +1620,7 @@ def main() -> None:
                          help="Re-reads the result files so the loop can be watched while it runs.")
         interval = st.select_slider("Refresh every (seconds)", [5, 10, 20, 30, 60], value=10, disabled=not live)
         st.divider()
-        st.caption("Gray = the default codec (B: fixed rules, same decoder). Blue = the codec tailored to the channel.")
+        st.caption("Pale = the default codec (B: fixed rules, same decoder). Cyan = the codec tailored to the channel.")
 
     if live:
         st.fragment(render_body, run_every=interval)(run_id, focus, target)

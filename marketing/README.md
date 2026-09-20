@@ -20,12 +20,22 @@ Tagline: **Measure the rule. Keep what pays.**
 | `DEVPOST.md` | Full Devpost submission text | Paste section by section into Devpost |
 | `SOCIAL.md` | X thread, LinkedIn post, 75-second demo video voiceover | Posting after judging, recording the backup video |
 | `index.html` | Single-file landing page with light and dark mode, responsive to phone width | Open locally, or host anywhere static |
+| `social/social-preview.html` | Source for the 1280x640 social card, rendered with headless Chrome | Re-render it whenever a number on it changes |
+| `social/social-preview.png` | The rendered card | Open Graph image, X card, Devpost |
 
 ## How to use them
 
 **Open the landing page:** open `marketing/index.html` in a browser. It needs no build step and no JavaScript. Fonts load from Google Fonts; without a network it falls back to system fonts.
 
-**Logos:** the wordmark is SVG text in Instrument Sans with a system fallback. Browsers that show the SVG through an `<img>` tag use the fallback font. For print, stickers or a PNG export, open the SVG with Instrument Sans installed and convert the text to outlines.
+**Logos:** the mark is the deck's double helix and the wordmark is already converted to outlines from the deck's own Instrument Sans file, so the SVGs render identically through an `<img>` tag, offline and in print. `BRAND.md` section 9 has the geometry and the two color sets.
+
+**Social card:** re-render it after editing `social/social-preview.html`:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+  --hide-scrollbars --window-size=1280,640 \
+  --screenshot=marketing/social/social-preview.png marketing/social/social-preview.html
+```
 
 **Filling in results:** final results don't exist yet. Every place that needs one has a placeholder in this exact form:
 

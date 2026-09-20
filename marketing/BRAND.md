@@ -33,7 +33,7 @@ The identity for our HackMIT 2026 project. The repository is still called **Adap
 
 **Trademark note:** we did a quick web search only, and "Erbgut" is a common German noun, so it is unlikely to be ownable as a mark. We could not verify trademarks or domains. Check before using the name outside the hackathon.
 
-**The mark still fits:** four bases with a dimension line measuring a run of identical letters. It says "this is being measured", which is what the tool does, whatever the name.
+**The mark still fits:** a double helix drawn as two strands that cross, each strand in one of the accent colors that the product uses for its verdicts. Inheritance, in the shape of the thing we measure.
 
 ---
 
@@ -166,90 +166,151 @@ Final results are not in yet. Every place that needs one uses this exact form:
 
 ## 9. Visual identity
 
-### Concept: the strand under audit
+> **The old palette is retired.** Indigo, magenta, teal and amber on near-black (`#3A3FC2`, `#B02A63`, `#0B7465`, `#F4C45A`, `#0F1417`) and the bar-chart mark with a dimension line are gone. Nothing new should use them. The pitch deck in `marketing/deck/` is the source of truth for this section; if the deck and this file ever disagree, the deck wins and this file gets fixed.
 
-The mark shows four bases (A, C, G, G) as bars standing on a strand. The last two bars are the same base, a run, and an engineering dimension line sits over them. A run of identical letters is exactly what the best known hand rule polices, and the dimension line is the universal sign for "this is being measured". The picture says: this piece of the strand is under audit.
+### Concept: the strand, lit
 
-The bars are deliberately level and plain. It reads as a sequence first and a measurement second, never as a chart that claims a result.
+Pale, high-chroma accents on a deep green-black. The palette reads as an instrument panel in a dark room: the page recedes, the measurements glow. It is meant to be seen on a projector from the back of a room, and to survive being photographed off a screen.
 
-We deliberately avoid the double helix, the cliché of DNA branding, and anything that looks like a lab product.
+The mark is a double helix: two strands crossing, the Audit strand over the Cost strand, held by two Gain rungs. The strands are drawn in the same colors the product uses for its verdicts, so the logo and the data are one system. It is a rounded tile, so it works as an avatar, a favicon and a splash screen without a container.
 
 ### Color
 
 The four brand accents map to the four bases, and each has a job in the product. The mapping is our own, not the classic sequencer trace colors, so it doesn't read as a generic chromatogram.
 
-| Base | Token | Role | Light | Dark |
+| Base | Token | Role | Dark | Light |
 |---|---|---|---|---|
-| A | `--sa-audit` | **Audit.** Brand accent, links, the tool's own marks | `#3A3FC2` | `#A3A6FF` |
-| C | `--sa-cost` | **Cost.** A rule that costs without paying off, failures, risk | `#B02A63` | `#FF86B0` |
-| G | `--sa-gain` | **Gain.** A rule that pays off, recovered, safe | `#0B7465` | `#4FD6B5` |
-| T | `--sa-tbd` | **To be measured.** Placeholders, pending results | `#8A5A00` (text), `#F4C45A` (fill) | `#F4C45A` |
+| A | `--sa-audit` | **Audit.** Brand accent, links, the tool's own marks, the tailored codec | `#39E6FF` | `#10A6C4` |
+| C | `--sa-cost` | **Cost.** A rule that costs without paying off, failures, risk | `#FF2E9C` | `#C41477` |
+| G | `--sa-gain` | **Gain.** A rule that pays off, recovered, safe | `#39FF6E` | `#0E9C55` |
+| T | `--sa-tbd` | **To be measured.** Placeholders, pending results | `#FFE13D` | `#8A7A00` |
 
 Mnemonic: **A**udit, **C**ost, **G**ain, **T**o be measured.
 
 Neutrals:
 
-| Token | Role | Light | Dark |
+| Token | Role | Dark | Light |
 |---|---|---|---|
-| `--sa-paper` | Page background | `#F2F5F4` | `#0F1417` |
-| `--sa-surface` | Panels, tables | `#FFFFFF` | `#172026` |
-| `--sa-ink` | Body text, the mark's tile | `#131B20` | `#E6ECEA` |
-| `--sa-muted` | Secondary text | `#4B5A60` | `#9AA9AE` |
-| `--sa-rule` | Lines and borders | `#CBD4D2` | `#2C353B` |
+| `--sa-paper` | Page background | `#060F0A` | `#EAF3ED` |
+| `--sa-surface` | Cards, panels, tables | `#0B2116` | `#FFFFFF` |
+| `--sa-surface-2` | A second level inside a card | `#10331F` | `#DCEDE1` |
+| `--sa-ink` | Body text | `#EAFFF3` | `#08130B` |
+| `--sa-muted` | Secondary text | `#6FCB98` | `#3E6B52` |
+| `--sa-rule` | Lines and borders | `#1B4A2E` | `#C3D9C9` |
+| `--on-accent` | Text on a solid accent fill | `#060F0A` | `#FFFFFF` |
 
-Measured contrast (WCAG 2.x), all at least AA for normal text:
+Placeholder support tokens:
 
-| Pair | Light | Dark |
+| Token | Role | Dark | Light |
+|---|---|---|---|
+| `--sa-tbd-fill` | Solid fill for a pending swatch | `#FFE13D` | `#FFE13D` |
+| `--sa-tbd-bg` | Background behind a placeholder | `#1E2A0C` | `#EAF5DA` |
+| `--sa-tbd-line` | Its dashed border | `#D4B62E` | `#A9B81C` |
+
+Tints, for a faint wash of an accent behind a verdict:
+
+```
+--tint-audit: rgba(57, 230, 255, 0.14)    --tint-cost: rgba(255, 46, 156, 0.15)
+--tint-gain:  rgba(57, 255, 110, 0.18)    --tint-ink:  rgba(230, 236, 234, 0.06)
+```
+
+#### Text colors on light: use the darker step
+
+The light values above are the deck's, and they are tuned for headline-size type on a projector. Three of them are below WCAG AA at normal text size. **For text on a light background, use these instead.** They are the same hues, one step darker, and they are what `marketing/index.html`, `dashboard/app.py` and `dnacodec/demo.py` use.
+
+| Role | Light text value | Instead of |
 |---|---|---|
-| Ink on paper | 15.9 : 1 | 15.5 : 1 |
-| Muted on paper | 6.5 : 1 | 7.7 : 1 |
-| Audit on paper | 7.2 : 1 | 8.4 : 1 |
-| Cost on paper | 5.7 : 1 | 8.2 : 1 |
-| Gain on paper | 5.2 : 1 | 10.3 : 1 |
-| Tbd on paper | 5.4 : 1 | 11.4 : 1 |
-| Ink on Tbd fill | 10.7 : 1 | |
+| Audit | `#0B6E82` | `#10A6C4` |
+| Gain | `#0A7A41` | `#0E9C55` |
+| Tbd | `#6E6200` | `#8A7A00` |
+| Cost | `#C41477` (unchanged) | |
 
-Cost and gain were picked as magenta and teal rather than red and green, so they stay distinct for the most common forms of color blindness. Even so, **never use color alone for a verdict**: always pair it with a word or a symbol ("pays off" with a check, "doesn't pay off" with a cross).
+#### Measured contrast (WCAG 2.x)
+
+Dark theme, on `--sa-paper` `#060F0A`. All pass AA for normal text, all but Cost pass AAA:
+
+| Pair | Ratio |
+|---|---|
+| Ink on paper | 18.6 : 1 |
+| Muted on paper | 9.9 : 1 |
+| Audit on paper | 12.9 : 1 |
+| Gain on paper | 14.5 : 1 |
+| Tbd on paper | 14.9 : 1 |
+| Cost on paper | 5.7 : 1 |
+| Ink on surface `#0B2116` | 16.2 : 1 |
+| Tbd on tbd-bg `#1E2A0C` | 11.6 : 1 |
+| Paper on an Audit or Gain fill | 12.9 : 1 and 14.5 : 1 |
+
+Light theme, on `--sa-paper` `#EAF3ED`, using the darker text step:
+
+| Pair | Ratio |
+|---|---|
+| Ink on paper | 16.7 : 1 |
+| Muted on paper | 5.4 : 1 |
+| Audit `#0B6E82` on paper | 5.2 : 1 |
+| Cost `#C41477` on paper | 5.0 : 1 |
+| Gain `#0A7A41` on paper | 4.8 : 1 |
+| Tbd `#6E6200` on tbd-bg `#EAF5DA` | 5.5 : 1 |
+| White on an Audit, Cost or Gain fill | 5.9, 5.7, 5.4 : 1 |
+
+The deck's own light values, for reference, are below AA at normal size: Audit `#10A6C4` 2.6 : 1, Gain `#0E9C55` 3.1 : 1, Tbd `#8A7A00` 3.8 : 1. They are fine for 60 px headlines on a projector and nowhere else.
+
+Cost and Gain are magenta and green rather than red and green, and Audit is cyan, so the three stay separable under deuteranopia and protanopia: they differ in lightness as well as hue. Even so, **never use color alone for a verdict**: always pair it with a word or a symbol ("pays off" with a check, "doesn't pay off" with a cross, "pending" with a dashed outline).
 
 ### Typography
 
-Both from Google Fonts.
-
 | Role | Family | Weights | Notes |
 |---|---|---|---|
-| Display and text | **Instrument Sans** | 400, 500, 600, 700 | A measuring-instrument name for a measuring tool. Headlines at 600 with slightly tight tracking (-0.01em to -0.02em). Body at 400, 17 to 18 px, line height 1.55. |
-| Sequences and numbers in tables | **JetBrains Mono** | 400, 600 | Only for DNA sequences (`ACGTGGGA`), code, and aligned numeric columns. Not for decorative labels. |
+| Display and text | **Instrument Sans** (`SA Sans` in the deck) | 400 to 700, variable | A measuring-instrument name for a measuring tool. Headlines at 600 with tight tracking (-0.02em, -0.03em on the wordmark). Body at 400. |
+| Sequences and numbers | **JetBrains Mono** (`SA Mono`) | 400, 600 | Only for DNA sequences (`ACGTGGGA`), code, and aligned numeric columns. Not for decorative labels. |
 
-Type scale (1.25 ratio, 18 px base): 14, 18, 22, 28, 35, 44, 55. Sentence case everywhere. No all-caps labels.
-
-Import:
+The deck self-hosts both as woff2 in `marketing/deck/fonts/`, so it works with no network. Everything else may load them from Google Fonts:
 
 ```html
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 ```
 
-### Iconography
+**Deck type scale** (logical px on the 1920 x 1080 stage): 176 wordmark, 94 tagline, 72 slide title, 60 small title, 38 one-liner, 32 lede, 30 verdict, 28 kicker, 24 pill, 22 footer, 20 slide number.
 
-- Line icons on a 24 px grid, 2 px stroke, round caps and joins, no fills except the four base bars.
-- Build from the logo's parts: bars (bases), the dimension line (a measured window), a horizontal line (the strand).
-- Verdict icons: a check in `--sa-gain`, a cross in `--sa-cost`, a dashed circle in `--sa-tbd` for pending.
-- No helices, test tubes, pipettes or flasks. We don't do wet lab work, so we don't show it.
+**Web and dashboard scale** (1.25 ratio, 18 px base): 14, 18, 22, 28, 35, 44, 55. Body 17 to 18 px at line height 1.55. Sentence case everywhere. No all-caps labels.
 
-### Logo files
+### Logo
+
+The mark lives in a 64 unit square: a tile with `rx="14"`, two strands stroked at 3.4 with round caps, two rungs stroked at 3.
+
+```
+strand A  M22 10 C 46 10 46 26 32 30 C 18 34 18 50 42 54
+strand C  M42 10 C 18 10 18 26 32 30 C 46 34 46 50 22 54
+rungs G   x 24 to 40, at y 16 and y 48
+```
+
+**The tile always contrasts with the page, and the strands invert with it:**
+
+| On | Tile | Strand A | Strand C | Rungs G |
+|---|---|---|---|---|
+| A dark page | `#EAFFF3` | `#10A6C4` | `#C41477` | `#0E9C55` |
+| A light page | `#08130B` | `#39E6FF` | `#FF2E9C` | `#39FF6E` |
+
+The wordmark is Instrument Sans 600 at 0.89 of the mark's height, tracking -0.03em, with a gap of 0.22 of the mark's height between them, cap height centered on the mark. In the SVG files it is converted to outlines from the deck's own font file, so it renders the same through an `<img>` tag, offline, and in print.
 
 | File | Use |
 |---|---|
 | `logo.svg` | Full logo, mark plus wordmark, on light backgrounds |
 | `logo-dark.svg` | Full logo on dark backgrounds |
-| `logo-mark.svg` | Mark only: favicons, avatars, the ESP32-S3-BOX-3 splash screen if we show it |
-
-The wordmark is set in Instrument Sans through an SVG `<text>` element with a system sans fallback. For print or merch, open the file with the font installed and convert the text to outlines.
+| `logo-mark.svg` | Mark only: favicons, avatars, the ESP32-S3-BOX-3 splash screen |
 
 ### Usage rules
 
 - **Clear space:** at least half the mark's height on every side.
-- **Minimum size:** mark 16 px (tested as a favicon), full logo 120 px wide.
-- **Backgrounds:** `logo.svg` on paper, surface or white. `logo-dark.svg` on `--sa-paper` dark or any background darker than `#3A4650`. Never on photos or busy gradients.
-- **Don't** recolor the bars, rotate the mark, stretch it, add a helix, add shadows or outlines, or change the order of the bars (the run of two identical bars under the dimension line is the point).
+- **Minimum size:** mark 24 px (below that the crossover blurs into a blob; it still reads as a colored tile at 16 px). Full logo 120 px wide.
+- **Backgrounds:** `logo.svg` on paper, surface or white. `logo-dark.svg` on `--sa-paper` dark or any background darker than `#1B4A2E`. Never on photos, busy gradients or a mid-tone.
+- **Don't** recolor the strands, swap which strand is on top, rotate or stretch the mark, add a glow or a drop shadow, or set the wordmark in another face.
 - **Placeholders** are always Tbd colored and dashed, never styled like a real number.
-- **Verdict colors** (cost, gain) are only used for verdicts and data, never as decoration.
+- **Verdict colors** (Cost, Gain) are only used for verdicts and data, never as decoration.
+
+### Iconography
+
+- Line icons on a 24 px grid, 2 px stroke, round caps and joins, no fills.
+- Verdict icons: a check in `--sa-gain`, a cross in `--sa-cost`, a dashed outline in `--sa-tbd` for pending. Always with a word next to them.
+- Sequence letters are colored by base with the same four accents (`--nt-A`, `--nt-C`, `--nt-G`, `--nt-T` in the deck), never highlighted in a fifth color.
+- No test tubes, pipettes or flasks. We don't do wet lab work, so we don't show it.
