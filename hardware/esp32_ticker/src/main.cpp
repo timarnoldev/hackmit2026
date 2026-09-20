@@ -31,6 +31,7 @@
 
 #include "board_config.h"
 #include "box_data.h"
+#include "box_decoder.h"
 
 // The panel. LovyanGFX ships a profile for this exact board, so we use it instead of
 // hand writing pins: LGFX_ESP32_S3_BOX_V3 in the library's LGFX_AutoDetect_ESP32_all.hpp.
@@ -271,6 +272,9 @@ static uint32_t lastLineMs = 0;
 static char touchNote[24] = "";
 static uint32_t touchNoteUntil = 0;
 static float fps = 0;
+static uint32_t gDecodeUs = 0;   // rolling mean time for one on-device decode
+static uint32_t gDecoded = 0;
+static inline uint32_t micros_now() { return (uint32_t)micros(); }
 
 static bool modelOnScreen() { return source == SRC_HOST && hostModelLive; }
 
@@ -311,12 +315,21 @@ static void unpackReplaced(const char *packed, const char *replaced, char *out) 
 
 // ---------------------------------------------------------------- the frozen run
 
-// One record of box_data.h into a Strand. The format is documented at the top of that file
-// and is deliberately line based, so this is a walk over the text with no allocation.
-static bool parseRecord(const char *rec, Strand &out, int &nfix) {
+// One record of box_data.h. The full reads and the reference are what the box needs: it
+// decodes the cluster itself with box_decoder, the same majority vote dnacodec.baseline
+// runs, and only uses the reference to judge whether it got the strand exactly right. The
+// display fields the Mac precomputed are ignored, so nothing on screen is replayed.
+static char gFullReads[boxdec::kMaxReads][boxdec::kMaxLen + 1];
+static const char *gReadPtr[boxdec::kMaxReads];
+static int gReadLen[boxdec::kMaxReads];
+
+static bool parseRecord(const char *rec, Strand &out, int &nfix, uint32_t &micros) {
   out = Strand();
   nfix = 0;
-  int lane = 0;
+  int nFull = 0;
+  char reference[boxdec::kMaxLen + 1] = {0};
+  int nRef = 0;
+
   const char *p = rec;
   while (*p) {
     const char kind = *p;
@@ -328,61 +341,102 @@ static bool parseRecord(const char *rec, Strand &out, int &nfix) {
       int idx = 0, ok = 0, nr = 0, nf = 0;
       sscanf(line, "%d|%d|%d|%d", &idx, &ok, &nr, &nf);
       out.index = idx;
-      out.ok = ok != 0;
       out.nreads = nr;
       out.dropout = nr == 0;
-      nfix = nf;
-    } else if (kind == 'c') {
-      char cons[VISIBLE_LETTERS + 1] = {0}, marks[64] = {0}, from[32] = {0};
-      // the line is cons|marks|from, any of the last two may be empty
-      const char *a = line, *b = (const char *)memchr(line, '|', len);
-      if (b) {
-        const size_t n = (size_t)(b - a) < VISIBLE_LETTERS ? (size_t)(b - a) : VISIBLE_LETTERS;
-        memcpy(cons, a, n);
-        const char *c = (const char *)memchr(b + 1, '|', len - (b + 1 - line));
-        if (c) {
-          const size_t m = (size_t)(c - b - 1) < sizeof(marks) - 1 ? (size_t)(c - b - 1) : sizeof(marks) - 1;
-          memcpy(marks, b + 1, m);
-          const size_t k = (size_t)(line + len - c - 1) < sizeof(from) - 1
-                               ? (size_t)(line + len - c - 1) : sizeof(from) - 1;
-          memcpy(from, c + 1, k);
-        }
-      }
-      strncpy(out.cons, cons, VISIBLE_LETTERS);
-      unpackMarks(marks, out.fix);
-      unpackReplaced(marks, from, out.was);
-    } else if (kind == 'r' && lane < MAX_READ_LANES) {
-      const char *b = (const char *)memchr(line, '|', len);
-      const size_t n = b ? (size_t)(b - line) : len;
-      const size_t keep = n < VISIBLE_LETTERS ? n : VISIBLE_LETTERS;
-      memcpy(out.reads[lane], line, keep);
-      out.reads[lane][keep] = 0;
-      char marks[64] = {0};
-      if (b) {
-        const size_t m = (size_t)(line + len - b - 1) < sizeof(marks) - 1
-                             ? (size_t)(line + len - b - 1) : sizeof(marks) - 1;
-        memcpy(marks, b + 1, m);
-      }
-      unpackMarks(marks, out.rmark[lane]);
-      ++lane;
+    } else if (kind == 'f' && nFull < boxdec::kMaxReads) {
+      const size_t keep = len < boxdec::kMaxLen ? len : boxdec::kMaxLen;
+      memcpy(gFullReads[nFull], line, keep);
+      gFullReads[nFull][keep] = 0;
+      gReadPtr[nFull] = gFullReads[nFull];
+      gReadLen[nFull] = (int)keep;
+      ++nFull;
+    } else if (kind == 'x') {
+      nRef = (int)(len < boxdec::kMaxLen ? len : boxdec::kMaxLen);
+      memcpy(reference, line, (size_t)nRef);
+      reference[nRef] = 0;
     }
-    // 'f' full reads and 'x' the reference are for the on-device decoder, not the display
-
     if (!eol) break;
     p = eol + 1;
   }
-  out.shown = lane;
+
+  if (nFull == 0) {  // a strand with no reads at all, the fountain code covers it
+    out.dropout = true;
+    out.used = true;
+    micros = 0;
+    return true;
+  }
+
+  const uint32_t t0 = micros_now();
+  boxdec::Cluster c;
+  boxdec::subsample(gReadPtr, gReadLen, nFull, boxdec::kMaxReads, c);
+
+  char cons[boxdec::kMaxLen + 1] = {0};
+  char draft[boxdec::kMaxLen + 1] = {0};
+  const int nCons = boxdec::reconstruct(c, BOX_DATA_STRAND_LENGTH, 3, cons, sizeof(cons));
+  const int nDraft = boxdec::pickDraft(c, BOX_DATA_STRAND_LENGTH, draft, sizeof(draft));
+  micros = micros_now() - t0;
+
+  out.ok = (nRef == nCons) && memcmp(cons, reference, (size_t)nCons) == 0;
+  strncpy(out.cons, cons, VISIBLE_LETTERS);
+  out.cons[VISIBLE_LETTERS] = 0;
+
+  // what the vote corrected, against the single best raw read it started from
+  char marks[VISIBLE_LETTERS + 1], replaced[VISIBLE_LETTERS + 1];
+  nfix = boxdec::fixMarks(draft, nDraft, cons, nCons, VISIBLE_LETTERS, marks, replaced);
+  memcpy(out.fix, marks, VISIBLE_LETTERS + 1);
+  memcpy(out.was, replaced, VISIBLE_LETTERS + 1);
+
+  const int lanes = nFull < MAX_READ_LANES ? nFull : MAX_READ_LANES;
+  for (int r = 0; r < lanes; ++r) {
+    strncpy(out.reads[r], c.read[r], VISIBLE_LETTERS);
+    out.reads[r][VISIBLE_LETTERS] = 0;
+    boxdec::readMarks(c.read[r], c.len[r], cons, nCons, VISIBLE_LETTERS, out.rmark[r]);
+  }
+  out.shown = lanes;
   out.used = true;
   return true;
 }
 
-// Feed the next frozen strand, and keep the header's own running totals. In this mode
-// nobody is sending statistics, so the box counts what it plays.
-static void feedEmbedded() {
-  Strand b;
-  int nfix = 0;
-  parseRecord(kBoxData[embeddedAt], b, nfix);
-  embeddedAt = (embeddedAt + 1) % BOX_DATA_STRANDS;  // wraps, so the run loops seamlessly
+// Decoding happens on the second core, one strand ahead of the tape.
+//
+// A strand costs about 160 ms of classic majority vote, which is nothing against the four
+// or five seconds it takes to flow across the screen, but it is five dropped frames if it
+// runs inside the render loop. The S3 has two cores, so the decode gets its own task and the
+// animation never waits for it. The handoff is a single slot with two flags, which is enough
+// because exactly one task writes each of them.
+static Strand gSlot;              // written by the decoder task, read by the render loop
+static int gSlotFix = 0;
+static volatile bool gSlotReady = false;   // set by the task, cleared by the loop
+static volatile bool gSlotWanted = true;   // set by the loop, cleared by the task
+
+static void decodeTask(void *) {
+  for (;;) {
+    if (gSlotWanted && !gSlotReady) {
+      uint32_t us = 0;
+      parseRecord(kBoxData[embeddedAt], gSlot, gSlotFix, us);
+      embeddedAt = (embeddedAt + 1) % BOX_DATA_STRANDS;  // wraps, so the run loops seamlessly
+      if (us) {
+        gDecodeUs = gDecoded ? (gDecodeUs * 7 + us) / 8 : us;
+        ++gDecoded;
+      }
+      gSlotWanted = false;
+      gSlotReady = true;
+    }
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+
+// Take whatever the decoder task has ready, and keep the header's own running totals. In
+// this mode nobody is sending statistics, so the box counts what it decoded.
+static bool feedEmbedded() {
+  if (!gSlotReady) {
+    gSlotWanted = true;  // ask for the next one and let the tape keep flowing
+    return false;
+  }
+  Strand b = gSlot;
+  const int nfix = gSlotFix;
+  gSlotReady = false;
+  gSlotWanted = true;
 
   ++embDone;
   embOk += b.ok ? 1 : 0;
@@ -405,6 +459,7 @@ static void feedEmbedded() {
   pending = b;
   hasPending = true;
   haveData = true;
+  return true;
 }
 
 // ---------------------------------------------------------------- drawing
@@ -597,7 +652,7 @@ static void drawHeader() {
     capColour = C_AUDIT;
   } else if (source == SRC_EMBEDDED) {
     // standing on its own: say so, and say which decoder produced what is on screen
-    snprintf(caption, sizeof(caption), "majority vote, embedded run");
+    snprintf(caption, sizeof(caption), "majority vote, on device");
   } else if (!hostModelLive) {
     // the Mac is attached but its polisher is not loaded, which would otherwise be invisible
     snprintf(caption, sizeof(caption), "majority vote, on the Mac");
@@ -1014,6 +1069,9 @@ void setup() {
                 lcd.height(), (int)canvasReady, (int)inPsram, (unsigned)ESP.getFreeHeap());
   memset(spark, 0, sizeof(spark));
   if (canvasReady) splash();
+  // the decoder gets the core the renderer is not on
+  xTaskCreatePinnedToCore(decodeTask, "decode", 8192, nullptr, 1, nullptr,
+                          xPortGetCoreID() == 0 ? 1 : 0);
   Serial.println("display ready");
   Serial.println('?');  // ask the server what is running
 }
@@ -1050,7 +1108,8 @@ void loop() {
 
   if (now - fpsWindow > 3000) {
     fps = frames * 1000.0f / (now - fpsWindow);
-    Serial.printf("fps=%.1f heap=%u\n", fps, (unsigned)ESP.getFreeHeap());
+    Serial.printf("fps=%.1f heap=%u decode=%luus n=%lu\n", fps, (unsigned)ESP.getFreeHeap(),
+                  (unsigned long)gDecodeUs, (unsigned long)gDecoded);
     fpsWindow = now;
     frames = 0;
   }
