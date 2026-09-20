@@ -65,12 +65,72 @@
 
 // ---------------------------------------------------------------- protocol
 
-// The server trims every line to this many letters, so the box never has to wrap.
-#define VISIBLE_LETTERS 38
-#define MAX_READS 3
-#define MAX_BLOCKS 4       // strands kept on screen
-#define JSON_CAPACITY 3072 // one line is well under 512 bytes, this is roomy on purpose
+// The server trims every line to this many letters, so the box never has to wrap. 22 of the
+// strand's 110 letters, at 12 px per cell, is what fits between the margins while the
+// letters stay readable from two metres. The browser view shows a wider window.
+#define VISIBLE_LETTERS 22
+#define MAX_READ_LANES 2   // two read lanes above the decoded strand; three would crowd the panel
+#define MAX_BLOCKS 1       // the tape holds one strand at a time, plus one pending
 #define LINE_BUFFER 1024
 
 // How long without a line before the box calls the link down, in milliseconds.
 #define LINK_TIMEOUT_MS 4000
+
+// ---------------------------------------------------------------- layout
+
+// Every edge keeps this much clear. Nothing is drawn outside it.
+#define MARGIN 14
+
+// Header rhythm. Every element gets at least 4 px of air, and 8 px or more between groups,
+// so the stats never visually merge into the progress bar under them.
+#define H_TITLE_Y 8        // wordmark row
+#define H_VALUE_Y 27       // the three headline numbers
+#define H_LABEL_Y 57       // their labels
+#define H_SPARK_Y 73       // sparkline, 6 px tall
+#define H_SPARK_H 6
+#define H_BAR_Y 89         // progress bar, 3 px tall, 10 px clear above it
+#define H_BAR_H 3
+#define HEADER_H 98
+#define TICKER_TOP 104
+#define TICKER_BOTTOM 232  // 8 px of clear panel below
+
+// The flowing tape. Letters run right to left through a fixed decode head, one column per
+// strand position, with the reads above the decoded strand and everything column aligned.
+#define CELL_W 20          // one column: one letter position of one strand
+#define HEAD_X 100         // the decode head, about a third in from the left
+#define COLS 44            // ring buffer of columns, more than fit on screen
+
+#define LABEL_Y 106        // the strand label strip, scrolls with the tape
+#define LANE1_Y 120        // first read
+#define LANE2_Y 138        // second read
+#define CONS_Y 160         // the decoded strand, the hero line
+#define LANE_TOP 116       // where the head marker starts
+#define LANE_BOTTOM 190    // where it ends
+
+#define READ_SIZE 2        // 12 x 16 glyphs for the reads
+#define CONS_SIZE 3        // 18 x 24 glyphs for the decoded strand
+
+// ---------------------------------------------------------------- animation
+
+#define TARGET_FPS 30
+#define FRAME_MS (1000 / TARGET_FPS)
+
+// How fast the tape flows, in letters per second. Slow on purpose: a judge has to be able to
+// read a letter as it crosses the head. Touching the left or right third changes it.
+#define FLOW_MIN 1.5f
+#define FLOW_MAX 14.0f
+#define FLOW_DEFAULT 5.0f
+#define TWEEN 0.22f        // how fast a counter closes on its new value, per frame
+#define SCROLL_TWEEN 0.28f // how fast the ticker settles after a new strand
+#define FLASH_FRAMES 14    // a changed number stays lit this long
+#define FIX_FRAMES 22      // a corrected letter decays over this many frames
+#define SPARK_N 48         // strand outcomes in the sparkline
+
+// ---------------------------------------------------------------- touch
+
+// Pausing the demo on stage by accident is worse than not being able to pause at all, so the
+// middle of the screen needs a deliberate long press. A short tap there does nothing. The
+// GT911 also reports ghost touches right after boot, so the first second is ignored outright.
+#define TOUCH_HOLD_MS 400    // how long the middle must be held before pause or resume fires
+#define TOUCH_IGNORE_MS 1500 // no touch is believed before this many ms after boot
+#define TOUCH_REPEAT_MS 500  // minimum gap between two actions

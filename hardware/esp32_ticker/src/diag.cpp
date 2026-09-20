@@ -1,21 +1,20 @@
 // Display bring-up diagnostic for the ESP32-S3-BOX-3.
 //
-// Why this exists: the ticker firmware flashed and its USB link worked, but the panel stayed
-// white with the backlight on. A white panel with a live serial link means the panel is not
-// receiving SPI at all, so the question is which of panel driver, pins, bus or reset is
-// wrong. Guessing one knob per reflash is slow, so this sketch sweeps the candidates by
-// itself and only needs a pair of eyes.
+// Round one of this sweep found why the panel stayed white: the BOX-3 is an ILI9342C, GPIO
+// 48 is an input pull-up and not a reset line, and the bus is three wire SPI. Round two is
+// about colour. The panel came up but everything looked blue, which is what a channel order
+// or inversion mismatch does, so this draws six named colour bars and asks a human which bar
+// is actually which colour. Nothing else can answer that: the panel's MISO is not wired, so
+// the firmware can never read back what it drew.
 //
-// How it works: one configuration per boot. The index lives in RTC memory, so after five
-// seconds the board restarts itself into the next one. Every configuration draws the same
-// unmistakable pattern, with its own number in the middle, and prints a line over USB.
+// One configuration per boot, six seconds each, the index kept in RTC memory.
 //
 // Build and flash:
 //   pio run -e diag -t upload --upload-port /dev/cu.usbmodem1101
 // Watch it:
-//   pio device monitor -e diag            (or any reader on /dev/cu.usbmodem1101)
+//   pio device monitor -e diag        (or any reader on /dev/cu.usbmodem1101)
 //
-// Serial keys while it runs:
+// Serial keys:
 //   0..9 a..f  hold that configuration and stop cycling
 //   C          resume cycling
 //   n          jump to the next one now
@@ -30,99 +29,77 @@
 
 // ---------------------------------------------------------------- the candidates
 
-enum PanelKind { P_ILI9341, P_ILI9342, P_ST7789 };
+enum PanelKind { P_ILI9342, P_ILI9341 };
 
 struct Candidate {
   const char *name;
   PanelKind panel;
-  int8_t cs, dc, mosi, sclk, rst;
-  uint32_t freq;
   bool invert;
-  bool rgb_order;  // false = BGR
-  uint8_t rotation;
-  uint8_t host;    // 2 = SPI2_HOST, 3 = SPI3_HOST
-  bool via_sprite; // draw through a PSRAM sprite instead of straight to the panel
-  uint8_t spi_mode;
-  bool manual_reset;  // pulse the reset pin by hand, slowly, before the driver runs
+  bool rgb_order;  // false = BGR, true = RGB
 };
 
-// Candidate 0 is exactly what the ticker firmware does, so if it draws, the bug was the
-// sprite and not the panel. The rest change one thing at a time.
+// The wiring is settled, so only the two colour knobs and the controller vary. Candidate 0
+// is what LovyanGFX's own ESP32_S3_BOX_V3 profile does.
 static const Candidate CANDIDATES[] = {
-    {"ILI9341 base, as the ticker", P_ILI9341, 5, 4, 6, 7, 48, 40000000, true, false, 1, 2, false, 0, false},
-    {"ILI9341, invert off", P_ILI9341, 5, 4, 6, 7, 48, 40000000, false, false, 1, 2, false, 0, false},
-    {"ILI9341, RGB order", P_ILI9341, 5, 4, 6, 7, 48, 40000000, true, true, 1, 2, false, 0, false},
-    {"ILI9341, no reset pin", P_ILI9341, 5, 4, 6, 7, -1, 40000000, true, false, 1, 2, false, 0, false},
-    {"ILI9341, slow bus 10 MHz", P_ILI9341, 5, 4, 6, 7, 48, 10000000, true, false, 1, 2, false, 0, false},
-    {"ILI9342 (the other BOX panel)", P_ILI9342, 5, 4, 6, 7, 48, 40000000, true, false, 1, 2, false, 0, false},
-    {"ILI9342, invert off", P_ILI9342, 5, 4, 6, 7, 48, 40000000, false, false, 1, 2, false, 0, false},
-    {"ST7789", P_ST7789, 5, 4, 6, 7, 48, 40000000, true, false, 1, 2, false, 0, false},
-    {"ILI9341, MOSI and SCLK swapped", P_ILI9341, 5, 4, 7, 6, 48, 40000000, true, false, 1, 2, false, 0, false},
-    {"ILI9341, CS and DC swapped", P_ILI9341, 4, 5, 6, 7, 48, 40000000, true, false, 1, 2, false, 0, false},
-    {"ILI9341 on SPI3_HOST", P_ILI9341, 5, 4, 6, 7, 48, 40000000, true, false, 1, 3, false, 0, false},
-    {"ILI9341 base, drawn via a PSRAM sprite", P_ILI9341, 5, 4, 6, 7, 48, 40000000, true, false, 1, 2, true, 0, false},
-    {"ILI9341, SPI mode 3", P_ILI9341, 5, 4, 6, 7, 48, 40000000, true, false, 1, 2, false, 3, false},
-    {"ILI9341, 2 MHz and a slow manual reset", P_ILI9341, 5, 4, 6, 7, 48, 2000000, true, false, 1, 2, false, 0, true},
+    {"ILI9342  BGR  invert off", P_ILI9342, false, false},
+    {"ILI9342  RGB  invert off", P_ILI9342, false, true},
+    {"ILI9342  BGR  invert ON", P_ILI9342, true, false},
+    {"ILI9342  RGB  invert ON", P_ILI9342, true, true},
+    {"ILI9341  BGR  invert off", P_ILI9341, false, false},
+    {"ILI9341  RGB  invert off", P_ILI9341, false, true},
+    {"ILI9341  BGR  invert ON", P_ILI9341, true, false},
+    {"ILI9341  RGB  invert ON", P_ILI9341, true, true},
 };
 static const int N_CANDIDATES = sizeof(CANDIDATES) / sizeof(CANDIDATES[0]);
 
-#define BACKLIGHT_PIN 47
-#define HOLD_MS 5000
+// Settled by round one of the sweep, same as LovyanGFX's BOX-3 profile.
+#define PIN_MOSI 6
+#define PIN_SCLK 7
+#define PIN_CS 5
+#define PIN_DC 4
+#define PIN_RST -1   // GPIO 48 is an input pull-up on this board, never a reset line
+#define PIN_PULLUP 48
+#define PIN_BL 47
+#define SPI_HZ 40000000
+#define OFFSET_ROTATION 1
+#define ROTATION 1
+#define HOLD_MS 6000
 
 // ---------------------------------------------------------------- one configurable device
 
 class DiagDisplay : public lgfx::LGFX_Device {
-  lgfx::Panel_ILI9341 _ili9341;
   lgfx::Panel_ILI9342 _ili9342;
-  lgfx::Panel_ST7789 _st7789;
+  lgfx::Panel_ILI9341 _ili9341;
   lgfx::Bus_SPI _bus;
   lgfx::Light_PWM _light;
 
  public:
   bool apply(const Candidate &c) {
-    if (c.manual_reset && c.rst >= 0) {  // some panels want a much longer reset than the driver gives
-      pinMode(c.rst, OUTPUT);
-      digitalWrite(c.rst, HIGH);
-      delay(20);
-      digitalWrite(c.rst, LOW);
-      delay(50);
-      digitalWrite(c.rst, HIGH);
-      delay(150);
-    }
-    lgfx::Panel_LCD *panel = nullptr;
-    switch (c.panel) {
-      case P_ILI9342: panel = &_ili9342; break;
-      case P_ST7789: panel = &_st7789; break;
-      default: panel = &_ili9341; break;
-    }
+    pinMode(PIN_PULLUP, INPUT_PULLUP);
+    lgfx::Panel_LCD *panel = (c.panel == P_ILI9341) ? (lgfx::Panel_LCD *)&_ili9341
+                                                    : (lgfx::Panel_LCD *)&_ili9342;
     {
       auto cfg = _bus.config();
-      cfg.spi_host = (c.host == 3) ? SPI3_HOST : SPI2_HOST;
-      cfg.spi_mode = c.spi_mode;
-      cfg.freq_write = c.freq;
+      cfg.spi_host = SPI2_HOST;
+      cfg.spi_mode = 0;
+      cfg.freq_write = SPI_HZ;
       cfg.freq_read = 16000000;
-      cfg.spi_3wire = false;
+      cfg.spi_3wire = true;
       cfg.use_lock = true;
       cfg.dma_channel = SPI_DMA_CH_AUTO;
-      cfg.pin_sclk = c.sclk;
-      cfg.pin_mosi = c.mosi;
-      cfg.pin_miso = -1;  // the BOX-3 does not wire the panel's MISO, so nothing is readable
-      cfg.pin_dc = c.dc;
+      cfg.pin_sclk = PIN_SCLK;
+      cfg.pin_mosi = PIN_MOSI;
+      cfg.pin_miso = -1;
+      cfg.pin_dc = PIN_DC;
       _bus.config(cfg);
       panel->setBus(&_bus);
     }
     {
       auto cfg = panel->config();
-      cfg.pin_cs = c.cs;
-      cfg.pin_rst = c.rst;
+      cfg.pin_cs = PIN_CS;
+      cfg.pin_rst = PIN_RST;
       cfg.pin_busy = -1;
-      cfg.panel_width = 240;
-      cfg.panel_height = 320;
-      cfg.memory_width = 240;
-      cfg.memory_height = 320;
-      cfg.offset_x = 0;
-      cfg.offset_y = 0;
-      cfg.offset_rotation = 0;
+      cfg.offset_rotation = OFFSET_ROTATION;
       cfg.readable = false;
       cfg.invert = c.invert;
       cfg.rgb_order = c.rgb_order;
@@ -132,7 +109,7 @@ class DiagDisplay : public lgfx::LGFX_Device {
     }
     {
       auto cfg = _light.config();
-      cfg.pin_bl = BACKLIGHT_PIN;
+      cfg.pin_bl = PIN_BL;
       cfg.invert = false;
       cfg.freq = 12000;
       cfg.pwm_channel = 7;
@@ -141,7 +118,7 @@ class DiagDisplay : public lgfx::LGFX_Device {
     }
     setPanel(panel);
     const bool ok = init();
-    setRotation(c.rotation);
+    setRotation(ROTATION);
     setBrightness(255);
     return ok;
   }
@@ -151,31 +128,46 @@ static DiagDisplay lcd;
 
 // ---------------------------------------------------------------- the test pattern
 
-// Four quadrants, a border, the configuration number in the middle and its name under it.
-// Anything visible at all answers the only question that matters: does the panel take SPI.
-template <typename Target>
-static void drawPattern(Target &g, int w, int h, int index, const Candidate &c) {
-  const int hw = w / 2, hh = h / 2;
-  g.fillRect(0, 0, hw, hh, g.color888(255, 0, 0));      // red, top left
-  g.fillRect(hw, 0, w - hw, hh, g.color888(0, 255, 0)); // green, top right
-  g.fillRect(0, hh, hw, h - hh, g.color888(0, 0, 255)); // blue, bottom left
-  g.fillRect(hw, hh, w - hw, h - hh, g.color888(255, 255, 255));  // white, bottom right
+// Six named bars. The name is the colour the bar is meant to be, so a person can read off
+// exactly which channel went where. Two of them are the brand colours we actually care
+// about, because "teal and magenta look right" is the real acceptance test.
+struct Swatch {
+  const char *name;
+  uint8_t r, g, b;
+};
+static const Swatch SWATCHES[] = {
+    {"RED", 255, 0, 0},      {"GREEN", 0, 255, 0},   {"BLUE", 0, 0, 255},
+    {"WHITE", 230, 236, 234}, {"TEAL", 79, 214, 181}, {"MAGENTA", 255, 134, 176},
+};
+static const int N_SWATCHES = sizeof(SWATCHES) / sizeof(SWATCHES[0]);
 
-  g.drawRect(0, 0, w, h, g.color888(255, 255, 0));
-  g.drawRect(1, 1, w - 2, h - 2, g.color888(255, 255, 0));
+static void drawPattern(int index, const Candidate &c) {
+  const int w = lcd.width(), h = lcd.height();
+  lcd.fillScreen(lcd.color888(15, 20, 23));  // Erbgut paper: this must look near black
 
-  g.fillRect(hw - 74, hh - 34, 148, 68, g.color888(0, 0, 0));
-  g.setTextColor(g.color888(255, 255, 255), g.color888(0, 0, 0));
-  g.setTextSize(6);
-  g.setCursor(hw - 54, hh - 22);
-  g.printf("%02d", index);
-  g.setTextSize(1);
-  g.setCursor(6, h - 26);
-  g.setTextColor(g.color888(0, 0, 0), g.color888(255, 255, 255));
-  g.printf("%d/%d %s", index, N_CANDIDATES - 1, c.name);
-  g.setCursor(6, h - 14);
-  g.printf("R%d G%d B%d W  inv=%d rgb=%d rot=%d %luMHz", 1, 2, 3, c.invert, c.rgb_order,
-           c.rotation, (unsigned long)(c.freq / 1000000));
+  const int barW = w / N_SWATCHES;
+  const int top = 40, barH = 120;
+  for (int i = 0; i < N_SWATCHES; ++i) {
+    const Swatch &s = SWATCHES[i];
+    lcd.fillRect(i * barW, top, barW - 2, barH, lcd.color888(s.r, s.g, s.b));
+    lcd.setFont(&fonts::Font0);
+    lcd.setTextSize(1);
+    lcd.setTextColor(lcd.color888(0, 0, 0));
+    lcd.setCursor(i * barW + 3, top + barH - 12);
+    lcd.print(s.name);
+  }
+
+  lcd.setTextSize(2);
+  lcd.setTextColor(lcd.color888(230, 236, 234), lcd.color888(15, 20, 23));
+  lcd.setCursor(8, 8);
+  lcd.printf("cfg %d/%d", index, N_CANDIDATES - 1);
+  lcd.setTextSize(1);
+  lcd.setCursor(8, 172);
+  lcd.print(c.name);
+  lcd.setCursor(8, 188);
+  lcd.print("background should be near black");
+  lcd.setCursor(8, 202);
+  lcd.print("each bar should match its label");
 }
 
 // ---------------------------------------------------------------- state across a restart
@@ -186,20 +178,20 @@ static void drawPattern(Target &g, int w, int h, int index, const Candidate &c) 
 RTC_NOINIT_ATTR static uint32_t rtcMagic;
 RTC_NOINIT_ATTR static int rtcIndex;
 RTC_NOINIT_ATTR static bool rtcHold;
-static const uint32_t MAGIC = 0xE26B0704;
+static const uint32_t MAGIC = 0xE26B0705;
 
 static void printTable() {
   Serial.println();
-  Serial.println("Erbgut display bring-up. One configuration per boot, five seconds each.");
+  Serial.println("Erbgut colour bring-up. One configuration per boot, six seconds each.");
   Serial.println("Keys: 0..9 a..f hold one, C resume cycling, n next now, ? this table.");
   for (int i = 0; i < N_CANDIDATES; ++i) {
-    Serial.printf("  %2d %s%s\n", i, CANDIDATES[i].name, i == rtcIndex ? "   <= now" : "");
+    Serial.printf("  %d %s%s\n", i, CANDIDATES[i].name, i == rtcIndex ? "   <= now" : "");
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(1500);  // let the host enumerate the CDC endpoint before the first line
+  delay(1500);
 
   if (rtcMagic != MAGIC) {
     rtcMagic = MAGIC;
@@ -211,33 +203,9 @@ void setup() {
   const Candidate &c = CANDIDATES[rtcIndex];
 
   const bool ok = lcd.apply(c);
-  const int w = lcd.width(), h = lcd.height();
-
-  Serial.printf("cfg %2d | %-38s | init=%d w=%d h=%d | cs=%d dc=%d mosi=%d sclk=%d rst=%d "
-                "host=SPI%d %luMHz inv=%d rgb=%d rot=%d sprite=%d\n",
-                rtcIndex, c.name, (int)ok, w, h, c.cs, c.dc, c.mosi, c.sclk, c.rst, c.host,
-                (unsigned long)(c.freq / 1000000), (int)c.invert, (int)c.rgb_order,
-                (int)c.rotation, (int)c.via_sprite);
-  Serial.printf("        psram=%u free=%u  mode=%d manual_reset=%d\n", (unsigned)ESP.getPsramSize(),
-                (unsigned)ESP.getFreePsram(), (int)c.spi_mode, (int)c.manual_reset);
-
-  if (c.via_sprite) {
-    LGFX_Sprite sprite(&lcd);
-    sprite.setPsram(true);
-    sprite.setColorDepth(16);
-    void *buf = sprite.createSprite(w, h);
-    Serial.printf("        sprite %dx%d allocated=%d psram_free=%u\n", w, h, buf != nullptr,
-                  (unsigned)ESP.getFreePsram());
-    if (buf) {
-      drawPattern(sprite, w, h, rtcIndex, c);
-      sprite.pushSprite(0, 0);
-      sprite.deleteSprite();
-    } else {
-      drawPattern(lcd, w, h, rtcIndex, c);  // fall back so the screen is never left blank
-    }
-  } else {
-    drawPattern(lcd, w, h, rtcIndex, c);
-  }
+  Serial.printf("cfg %d | %-26s | init=%d %dx%d\n", rtcIndex, c.name, (int)ok, lcd.width(),
+                lcd.height());
+  drawPattern(rtcIndex, c);
 }
 
 void loop() {
@@ -255,7 +223,6 @@ void loop() {
     } else if (ch == 'n') {
       rtcIndex = (rtcIndex + 1) % N_CANDIDATES;
       rtcHold = false;
-      Serial.printf("jumping to %d\n", rtcIndex);
       delay(60);
       esp_restart();
     } else {
