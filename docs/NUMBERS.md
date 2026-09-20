@@ -137,6 +137,21 @@ The gain survives a structurally different simulator. In the coarse target metri
 
 Smaller than with the classic decoder, which is what you would expect, and still clearly separated from zero on both simulators. Raw: `results/run6/`.
 
+### Tier 2 at file level, isolated properly ✅ — the strongest version of our own claim
+
+The ablation ladder's C→D rung was never a clean isolation: the settings search is free to move redundancy between the rungs, and in run 6 it did (1.6 against 1.3). So we held **every** setting fixed and changed **only which scorer ranks the 32 candidates**, then measured the whole recovery curve at 300 held-out trials per point (`scripts/tier2_recovery_curve.py`, raw in `results/tier2_recovery_curve_run2_strict_nanopore_budget.json`):
+
+| Reads per strand | 4.0 | **4.5** | 5.0 | 5.5 | 6.0 |
+|---|---|---|---|---|---|
+| Candidates ranked by the hand rules | 0.000 | **0.270** | 1.000 | 1.000 | 1.000 |
+| Candidates ranked by the learned risk model | 0.100 | **0.983** | 0.997 | 1.000 | 1.000 |
+
+Same redundancy (1.6), same strand length (140), same hard rules, same 32 candidates, same decoder, same seeds, same file. **The only difference is which model picks the candidate.**
+
+**At 4.5 reads per strand that is 27% of files recovered against 98.3%**, a difference of 71 points at a standard error of 2.7 points, so about 27 sigma. In reads it is worth roughly half a read per strand, which matches what the coarse threshold metric suggested but now with an error bar and a clean isolation.
+
+**This is the quotable form of tier 2.** It is the claim the project exists to test, it costs no density (choosing among candidates is free), and it is measured where the codec is actually under stress rather than at a comfortable operating point. The one blemish, reported rather than smoothed: at 5.0 reads the learned codec sits at 0.997, one failed trial in 300, while the hand rules reach 1.000.
+
 ⚠️ **What did not reproduce in run 6: the tier-2 rung of the ablation ladder.** With the polisher, C (audited rules, tuned redundancy) comes out at 4.5 reads and D (C plus the risk model) at 5.5, so the ladder says the risk model *hurt*, while the direct paired measurement above says it helped with a tight confidence interval. Run 6 used 100 evaluation trials per point rather than 300, and the all-or-nothing threshold is knife-edge near the top of the curve, exactly as [LEARNED_RULES.md](LEARNED_RULES.md) documents. **We quote the paired measurement, not the ladder rung**, because it is the one with an error bar. The honest statement on stage: *at file level the effect is inside the noise of our coarse metric; per strand it is measurable and survives the firewall.*
 
 **Why the deck quotes run 2, not run 6.** Run 2's codecs were re-measured at 3 blocks × 300 held-out trials; run 6 ran 100. Run 6 is the cross-check, run 2 strict is the record. The two must never be mixed in one table, because the decoder differs and every reads-per-strand number shifts with it (the default codec needs 19.5 reads with the classic decoder and 15.5 with the polisher).
