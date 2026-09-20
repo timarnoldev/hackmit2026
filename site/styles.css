@@ -489,11 +489,40 @@ html:not(.js) .cue { display: none; }
    Verdict colours are never used alone: cost and audit only tint a phrase that
    already says what it means, and the placeholder is dashed as well as yellow. */
 
+/* Beat 9 is drawn twice: the proof scene counts the three receipts up, and the
+   copy block below repeats them as static HTML. The copy block is the no-JS
+   fallback, so it is hidden once the scene is running, the same way the close
+   scene's duplicates are. Flip this one rule if the receipts should be HTML
+   instead, and delete the counters in site/scenes/proof.js with it. */
+html.js .copy--flow .stats { display: none; }
+/* and with the receipts gone the wash has nothing left to lift, so it only
+   dissolved the scene's own numbers. The scene number below it reads on paper. */
+html.js .scene--center .copy--flow::before { display: none; }
+
 /* The close scene draws its own mark, wordmark and links. The copy block below is the
    no-JS fallback, so it is hidden once the scene is running; the dataset credit is not
    drawn by the scene and stays. */
 html.js .scene--close .copy .wordmark,
 html.js .scene--close .copy .asks { display: none; }
+
+/* Two things the close scene needs from the copy layer, and nothing else.
+   1. No paper wash. The wash exists to lift copy off busy art, but here the only
+      copy left is one credit line, and the wash's hot centre landed exactly on
+      the scene's wordmark and dissolved it.
+   2. The credit is a footnote under the composition, not a second column: it
+      goes to the bottom of the stage, centred, instead of floating at the left
+      edge halfway up. */
+html.js .scene--close .copy::before { display: none; }
+html.js .scene--close .copy { align-self: stretch; }
+html.js .scene--close .copy > .cb {
+  justify-content: flex-end;
+  padding-bottom: clamp(24px, 5vh, 64px);
+}
+html.js .scene--close .credit {
+  margin: 0 auto;
+  max-width: 62ch;
+  text-align: center;
+}
 
 /* The hero's second block: a short plain-language explainer that appears once the
    headline has cleared, for a reader who has no idea what DNA storage is. */
