@@ -1710,8 +1710,9 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
 #s-benefits .ben-sub {
   position: absolute;
   left: 120px;
-  top: 776px;
+  top: 764px;
   font-size: 24px;
+  line-height: 1.2;
   font-weight: 600;
   color: var(--sa-muted);
 }
@@ -1720,7 +1721,7 @@ html[data-theme="light"] .p-notes .cue.next { background: #FFE13D; color: #08130
   position: absolute;
   left: 120px;
   right: 120px;
-  top: 820px;
+  top: 862px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 24px;
