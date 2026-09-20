@@ -96,3 +96,46 @@ Read together, the two say the same thing from different directions. The model f
 rule, corrects its threshold, discards the rule that does not pay, adds a distinction nobody
 writes down, and ranks patterns by how much they hurt the decoder rather than by how often the
 channel gets them wrong.
+
+---
+
+# A second finding: why the hand rules actually hurt on our Nanopore channel
+
+The rule audit says both standard rules are **harmful** on `nanopore_budget`, reproducibly at
+3 x 300 held-out trials: reads needed go from 24.5 with the rules to 19.5 without the homopolymer
+rule and 16.0 without the GC rule. That is a large effect in the wrong direction, so we went
+looking for the mechanism instead of reporting it as a curiosity.
+
+**It is not the sequences.** Without the homopolymer rule, 25.4% of strands contain a run of 5 or
+more, and by our own calibrated channel table their mean deletion multiplier is *worse*
+(1.013 against 0.931). By sequence quality alone, the rule should help.
+
+**It is the code.** Encoding the same file with and without the rules:
+
+| | Mean droplet degree | Minimum coverage of a data chunk |
+|---|---|---|
+| Default, both rules | 9.83 | **3** |
+| Rules off | 11.97 | **6** |
+
+The seed of a Fountain droplet lives in the first 16 bases of the strand, and **those bases have
+to satisfy the sequence rules too**. Seeds whose base-4 spelling contains a long run, or whose
+letters push the strand out of the GC window, are rejected. Since the seed is what selects which
+data chunks a droplet combines, filtering seeds filters the *structure of the code*: chunk
+coverage becomes uneven, and the worst-covered chunk sits in 3 droplets instead of 6. Lose those
+three and the file is gone, however clean the sequence was.
+
+So the rule trades a small, real sequence benefit for a structural weakness in the erasure code,
+and on this channel the trade is a loss.
+
+**Why this is worth saying out loud.** DNA Fountain, the standard construction, screens candidate
+droplets against exactly these constraints. Our measurement says that screening carries a hidden
+cost that is not usually accounted for, and it is easy to avoid:
+
+1. apply the constraints to the payload only, not to the seed bases, or
+2. encode the seed so that it satisfies the constraints by construction, so no droplet is ever
+   rejected for its seed.
+
+We did not implement either, and we do not claim a fix that we have not measured. What we claim
+is the measurement: on a channel calibrated to real Nanopore reads, screening droplets by the two
+standard rules costs more reads than it saves, and the reason is the erasure code, not the
+chemistry.
