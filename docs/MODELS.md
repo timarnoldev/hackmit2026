@@ -7,7 +7,9 @@ The project has exactly two learned models. Everything else (encoder, simulator,
 | **Polisher** (`PolishNet`, a 1D CNN) | "What was the original strand?" | The classic decoder's draft plus its vote columns, from up to 16 noisy reads | One strand of exactly `strand_length` letters (or `None`) | Evaluation, the loop, the demo |
 | **Risk model** (1D CNN) | "How likely is this strand to be decoded wrongly on this channel?" | One or more candidate strands | One number in [0, 1] per strand | The encoder, when choosing between candidate strands |
 
-Both are plugged in through the shared interfaces in `dnacodec/types.py` (`Decoder` and `Scorer`), so either can be swapped for the classic alternative: the majority vote baseline decoder, or the hand-written rule scorer. A third model, a from-scratch transformer, was built and did not work; section 3 says what happened and why.
+Both are plugged in through the shared interfaces in `dnacodec/types.py` (`Decoder` and `Scorer`), so either can be swapped for the classic alternative: the majority vote baseline decoder, or the hand-written rule scorer. A third model, a from-scratch transformer, lost to the classic baseline and is not used; section 3 records what it was and what it cost.
+
+Every accuracy figure below is registered with its provenance in [NUMBERS.md](NUMBERS.md).
 
 ---
 
@@ -19,7 +21,7 @@ Code: `dnacodec/model/polish.py` (model and `PolishDecoder`), training in `scrip
 
 Sequencing returns many noisy copies ("reads") of each stored strand: wrong letters, extra letters, missing letters, each read different. Reconstructing the original strand from them is called trace reconstruction.
 
-We split that in two: the classic majority vote decoder does the **alignment** (which letter of read 3 belongs to position 47), and a small learned model does the **correction** of what's left. That's how Nanopore assembly polishers work, and it's why this model trains in 13 minutes while a from-scratch transformer failed (see section 3).
+We split that in two: the classic majority vote decoder does the **alignment** (which letter of read 3 belongs to position 47), and a small learned model does the **correction** of what's left. That's how Nanopore assembly polishers work, and it is the reason this model trains in 13 minutes where a from-scratch transformer, which had to learn the alignment as well, did not get there at all (section 3).
 
 ### Output, exactly
 
@@ -69,17 +71,12 @@ corrected strand
 - **Thresholds:** the confidence thresholds for applying deletions and insertions are tuned on a validation carve of the train split, separately for clusters with at most 3 reads and for larger ones.
 - Held-out data is never used for training or tuning.
 
-### Status: this is the decoder used in all results
+### This is the decoder used in all results
 
-Measured on the real Microsoft **held-out** split (1,996 clusters), exact strands, with the protocol of `scripts/eval_real.py`:
-
-Averaged over 20 independent read draws per point, mean ± sd:
-
-| Reads per strand | 2 | 4 | 6 | 10 | 16 |
-|---|---|---|---|---|---|
-| Baseline (majority vote) | 5.2% ±0.5 | 39.9% ±0.9 | 67.2% ±0.8 | 84.1% ±0.5 | 89.7% ±0.3 |
-| **Polisher, default** | 5.8% ±0.5 | **56.7%** ±1.2 | **82.3%** ±0.9 | **92.9%** ±0.3 | **95.3%** ±0.2 |
-| **Polisher, best inference variant** | 7.0% ±0.7 | **66.6%** ±1.1 | **88.1%** ±0.5 | **95.7%** ±0.3 | **97.2%** ±0.2 |
+Measured on the real Microsoft **held-out** split (1,996 clusters), exact strands, protocol of
+`scripts/eval_real.py`, averaged over 20 independent read draws per point. The full table with
+error bars is [NUMBERS.md](NUMBERS.md) section 1; the headline is 88.1% exact strands at 6 reads
+for the best inference variant against 67.2% for the baseline.
 
 The gain is largest at 4 to 6 reads, which is the range the loop operates in. At 2 reads it's a tie: the draft is essentially a single read there, so there is nothing to correct with.
 
@@ -102,7 +99,7 @@ The Fountain encoder can produce many different candidate strands for the same s
 ```python
 from dnacodec.risk import load_risk_model
 
-risk = load_risk_model("checkpoints/risk_nanopore_budget.pt")
+risk = load_risk_model("checkpoints/risk/risk_nanopore_budget.pkl")
 scores = risk(["ACGT...", "GGTA..."])   # numpy array, one value per strand
 ```
 
@@ -135,29 +132,30 @@ Why rates instead of single failures: a strand can fail once by bad luck (few re
 
 A simpler `KmerRiskModel` (logistic regression on short-pattern counts) has the same interface and serves as a fallback.
 
-### Status and current numbers
+### What it measures out at
 
-Trained locally for both core channels (baseline decoder, 12,000 strands, K = 32):
+Trained for both core channels on the simulator that carries the real-read context table
+(baseline decoder, 12,000 strands, K = 32). Held-out simulated strands, Illumina flatness and the
+transfer to real reads are all registered in [NUMBERS.md](NUMBERS.md) section 6; the patterns the
+model names are read back out of it in [LEARNED_RULES.md](LEARNED_RULES.md).
 
-| Test | Result |
-|---|---|
-| Nanopore, held-out simulated strands (mixed set) | AUC 0.91, Spearman 0.76 |
-| Nanopore, held-out uniform random strands | AUC 0.65 |
-| Illumina | Predicted risk is flat at about 1%, correctly: sequence doesn't matter on that channel |
-| Real Nanopore reads, held-out (firewall preview) | AUC 0.54, weak |
+The short version: it rediscovers the homopolymer effect by itself, puts its threshold at a run of
+4 to 5 rather than the field's 3, rates G and C runs above A and T runs, treats the channel's
+real deletion contexts as dangerous and its substitution contexts as harmless, and returns a flat
+zero on Illumina. On real Nanopore reads its ranking holds at AUC 0.69 once coverage is held
+fixed, against 0.66 for the homopolymer rule alone.
 
-What it has learned so far: risk rises steeply with the longest run of identical letters (0.36 for runs of 3 or less, 0.81 for runs of 8 or more). That was the only sequence effect in the simulator it was trained on, and the hand-written homopolymer rule already covers it.
-
-**Next:** the simulator now includes sequence-context error patterns measured on real reads (see [ERRORS.md](ERRORS.md)). The risk model will be retrained on that simulator. Then it can learn patterns the hand rules don't cover, which is what claim tier 2 needs. The real-data AUC is the check for whether it learned something real.
 ## 3. What didn't work: a from-scratch transformer
 
-Code is still in `dnacodec/model/` (`net.py`, `train.py`, `decoder.py`) and unused.
+`ConsensusNet` (9.6M parameters, `dnacodec/model/net.py`, `train.py`, `decoder.py`) tried to learn
+the whole task end to end, alignment included, instead of correcting a classic draft. After 11,300
+steps on simulated data it reached 1.4% / 5.6% / 10.8% exact strands at 2 / 6 / 16 reads on real
+Microsoft validation data, against 4.8% / 68.1% / 90.6% for the baseline, and it was improving too
+slowly to catch up within the time budget. It was dropped in favour of the polisher, which is 12
+times smaller, trains in 13 minutes and beats the baseline. The code stays in the repository,
+unused, because it is the measurement behind that decision.
 
-`ConsensusNet` (9.6M parameters) was meant to learn the whole task: a transformer encoder per read, then `strand_length` learned queries cross-attending to all read tokens (Perceiver style), predicting each output letter directly. It had to learn the alignment itself, which is the hard part of the problem, because insertions and deletions shift every read differently.
-
-After 11,300 steps on simulated data it reached 1.4% / 5.6% / 10.8% exact strands at 2 / 6 / 16 reads on real Microsoft validation data, against 4.8% / 68.1% / 90.6% for the baseline, and it improved too slowly to catch up in the time available. We stopped it and built the polisher instead, which is 12 times smaller, trained in 13 minutes, and beats the baseline.
-
-**The lesson, and it belongs in the pitch:** we didn't need a bigger model, we needed the model in the right place. The classic algorithm is very good at alignment. What it lacks is knowledge about the channel, and that is exactly what the small CNN supplies.
-
----
+The lesson: the model belongs where the knowledge is missing, not where the problem is hardest.
+The classic algorithm is very good at alignment. What it lacks is knowledge about the channel, and
+that is what the small CNN supplies.
 

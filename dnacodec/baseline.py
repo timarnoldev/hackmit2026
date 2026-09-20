@@ -1,4 +1,4 @@
-"""Classic baseline decoder. Owner: Agent C.
+"""Classic baseline decoder.
 
 Every reported result shows this baseline next to our models.
 """

@@ -1,4 +1,4 @@
-"""Calibrate the channel simulator on real reads (train splits only). Owner: Agent A.
+"""Calibrate the channel simulator on real reads (train splits only).
 
 Two stages:
 

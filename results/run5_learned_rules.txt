@@ -1,0 +1,84 @@
+
+==============================================================================
+illumina_standard   (risk_it3.pkl)
+==============================================================================
+
+Patterns it rates most dangerous (5-mers, inserted into random backgrounds):
+   AAAAA   risk 0.000
+   AGAAA   risk 0.000
+   AATAA   risk 0.000
+   AAACA   risk 0.000
+   GAAAA   risk 0.000
+   ATAAA   risk 0.000
+   AAATA   risk 0.000
+   CAAAA   risk 0.000
+   AATTA   risk 0.000
+   AGACA   risk 0.000
+   (a random background strand sits at 0.000)
+
+Response to a single homopolymer run of length r:
+   run of  1   risk 0.000
+   run of  2   risk 0.000
+   run of  3   risk 0.000
+   run of  4   risk 0.000
+   run of  5   risk 0.000
+   run of  6   risk 0.000
+   run of  7   risk 0.000
+   run of  8   risk 0.000
+   run of 10   risk 0.000
+
+Response to GC content (runs capped at 3, so this is GC alone):
+   GC 0.20   risk 0.000
+   GC 0.30   risk 0.000
+   GC 0.40   risk 0.000
+   GC 0.50   risk 0.000
+   GC 0.60   risk 0.000
+   GC 0.70   risk 0.000
+   GC 0.80   risk 0.000
+
+==============================================================================
+nanopore_budget   (risk_it3.pkl)
+==============================================================================
+
+Patterns it rates most dangerous (5-mers, inserted into random backgrounds):
+   GGGGG   risk 0.707
+   CCCCC   risk 0.685
+   AGGGG   risk 0.638
+   TCCCC   risk 0.615
+   TTTTT   risk 0.613
+   CGGGG   risk 0.611
+   AAAAA   risk 0.608
+   GGGGA   risk 0.603
+   CCCCT   risk 0.596
+   GGGGT   risk 0.595
+   (a random background strand sits at 0.526)
+
+Response to a single homopolymer run of length r:
+   run of  1   risk 0.429
+   run of  2   risk 0.430
+   run of  3   risk 0.436
+   run of  4   risk 0.460
+   run of  5   risk 0.518
+   run of  6   risk 0.603
+   run of  7   risk 0.689
+   run of  8   risk 0.756
+   run of 10   risk 0.833
+
+Response to GC content (runs capped at 3, so this is GC alone):
+   GC 0.20   risk 0.453
+   GC 0.30   risk 0.455
+   GC 0.40   risk 0.459
+   GC 0.50   risk 0.465
+   GC 0.60   risk 0.473
+   GC 0.70   risk 0.482
+   GC 0.80   risk 0.489
+
+What the calibrated channel says is worst for del (the model never saw this):
+   GAAAG x71.3  CAAAG x22.8  TAAAG x20.1  ACCCA x16.8  AAAAG x13.1  TAGGG x11.0
+   the model's risk for those same patterns: 0.934  0.775  0.610  0.519  0.973  0.512
+
+What the calibrated channel says is worst for sub (the model never saw this):
+   CCCGA x12.8  TCGGG x8.2  CCCGT x8.0  CCCGG x7.3  CCCGC x7.0  ACGGG x5.4
+   the model's risk for those same patterns: 0.444  0.465  0.530  0.484  0.829  0.545
+
+(tip: rerun with a tee into /home/asus/hackmit2026/results/run5_learned_rules.txt if you want this on disk)

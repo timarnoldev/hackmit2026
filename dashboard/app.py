@@ -111,10 +111,12 @@ NICE_SITUATION_NAMES = {
     "default": "Default (B)",
 }
 
+# The "transformer" key is the fixed wire name in dnacodec.results for system B's learned
+# decoder, whichever one the run used. The labels below are what a reader sees.
 DECODER_LABELS = {
     "baseline": "Default codec + majority vote (A)",
-    "transformer": "Default codec + transformer (B)",
-    "tailored": "Tailored codec, same transformer",
+    "transformer": "Default codec + learned decoder (B)",
+    "tailored": "Tailored codec, same learned decoder",
 }
 
 SYSTEMS = {

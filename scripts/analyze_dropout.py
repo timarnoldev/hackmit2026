@@ -1,6 +1,6 @@
 """How often is a designed strand missing, and does yield depend on GC or homopolymers?
 
-Owner: Agent A. Train splits only. Read-only: this script never writes a profile.
+Train splits only. Read-only: this script never writes a profile.
 
 For every designed reference it counts the reads it got (0 if the strand never appears in
 the dataset), then relates that count to the reference's GC content and longest homopolymer

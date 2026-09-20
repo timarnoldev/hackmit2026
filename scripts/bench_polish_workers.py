@@ -1,7 +1,7 @@
 """How fast is PolishDecoder.decode() with N feature workers?
 
-Measures the CPU part of the polisher, which used to run on one core while the loop's own
-worker pool was idle. Two measurements:
+Feature building for the polisher is CPU work and runs in its own worker pool, separate from
+the loop's. This measures how that pool scales. Two measurements:
 
   decode: one trial's worth of clusters (default 1239, the number of strands of the default
           codec on the test file), simulated at the profile's coverage, decoded in one call

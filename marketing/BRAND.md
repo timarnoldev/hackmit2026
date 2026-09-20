@@ -22,15 +22,6 @@ The identity for our HackMIT 2026 project. The repository is still called **Adap
 - In code and URLs: `erbgut`.
 - First mention in long text: "Erbgut (Adaptive DNA Codec)" where the repo name matters.
 
-### Other candidates considered
-
-| Name | Why not |
-|---|---|
-| StrandAudit | Descriptive of the main output, but less distinctive, and "Strand" is used in product names by a bioinformatics company |
-| Adaptive DNA Codec | Safe descriptor, but sounds like we built a new codec, which invites the wrong question. Kept as the technical name |
-| Earnbase | From the thesis, every rule earns its bases. Meaning isn't obvious without the tagline |
-| Ruleproof | Several existing products with that name |
-
 **Trademark note:** we did a quick web search only, and "Erbgut" is a common German noun, so it is unlikely to be ownable as a mark. We could not verify trademarks or domains. Check before using the name outside the hackathon.
 
 **The mark still fits:** a double helix drawn as two strands that cross, each strand in one of the accent colors that the product uses for its verdicts. Inheritance, in the shape of the thing we measure.
@@ -91,7 +82,8 @@ Saying this up front is part of the brand. It makes every other claim more belie
 | **Any outcome is a useful answer.** | If the hand rules are already near optimal on a channel, the tool shows that with measurements. |
 | **It's real engineering.** | About 11,000 lines of Python, about 2,500 of them tests. Baseline decoder at 90.6% exact strands with 16 reads on real held-out data. Runs on an ASUS Ascent GX10 (NVIDIA GB10). |
 
-Results that don't exist yet are always written as placeholders, for example **[RESULT: reads per strand saved on Nanopore at matched density]**. See section 8.
+Every number used in public material comes from [`docs/NUMBERS.md`](../docs/NUMBERS.md) with its
+conditions attached. Nothing else goes on a slide or a page.
 
 ---
 
@@ -113,7 +105,7 @@ Plain, confident, concrete. We sound like a careful engineer explaining a measur
 | "Same encoder, same decoder. Only the rules and redundancy change." | "Our AI codec beats the state of the art." |
 | "If the hand rules are already near optimal on Nanopore, the audit shows that." | "Hand rules are always wrong." |
 | "No wet lab. We check against real sequencing reads instead." | Implying we synthesized or sequenced anything. |
-| "[RESULT: reads saved on Nanopore at matched density]" | Any number that hasn't come out of `dnacodec.evaluate`. |
+| "19.5 reads per strand with the rule, 24.5 without" | Any number that isn't in `docs/NUMBERS.md`. |
 | Commas and full stops. | Em dashes or hyphens used as sentence punctuation. |
 | "a tool", "the audit", "the channel" | "first ever", "world's best", "breakthrough", "game changer". |
 
@@ -145,28 +137,14 @@ Erbgut treats each rule as a hypothesis. For a channel (sequencing technology, r
 
 We can't run a wet lab at a hackathon, so we built the evidence to be hard to fool. The channel simulator is calibrated on real Nanopore and Illumina reads and lands within about 3 points of real reads at every read count on held-out data. We found that shared Nanopore errors are 45 to 66% predictable from the local 5-letter context, patterns the hand rules don't cover. And every result goes through an ablation ladder, a crossover matrix and a sim-to-real firewall with a structurally different second simulator.
 
-The outcome is a measured answer per channel: [RESULT: headline rule audit verdict per channel]. If the hand rules turn out to be near optimal on a channel, that's the answer, and now it's measured instead of assumed.
+The outcome is a measured answer per channel. On Nanopore the run-length rule pays off, 19.5 reads per strand with it against 24.5 without, and the GC rule does nothing. On Illumina it is the other way round. Where the hand rules turn out to be near optimal, that is the answer, and now it's measured instead of assumed.
 
 ---
 
-## 8. Placeholder convention
+## 8. Visual identity
 
-Final results are not in yet. Every place that needs one uses this exact form:
-
-```
-[RESULT: what will go here, with its conditions]
-```
-
-- Square brackets, the word RESULT in capitals, a colon, then a description specific enough that someone can fill it from the results folder without guessing.
-- Write the surrounding sentence so it works whether the result is a gain or a "no difference". For example: "On Nanopore at matched density, the tuned codec needs [RESULT: reads per strand, tuned vs default]."
-- On the landing page and slides, placeholders are styled in the **Tbd** color (section 9) with a dashed outline, so they can't be mistaken for results.
-- Before any public use: `grep -rn "\[RESULT" marketing/` must return nothing, or every hit must be intentionally left as "pending".
-
----
-
-## 9. Visual identity
-
-> **The old palette is retired.** Indigo, magenta, teal and amber on near-black (`#3A3FC2`, `#B02A63`, `#0B7465`, `#F4C45A`, `#0F1417`) and the bar-chart mark with a dimension line are gone. Nothing new should use them. The pitch deck in `marketing/deck/` is the source of truth for this section; if the deck and this file ever disagree, the deck wins and this file gets fixed.
+The pitch deck in `marketing/deck/` is the implementation of this section. If the deck and this
+file disagree, the deck wins and this file gets fixed.
 
 ### Concept: the strand, lit
 
@@ -183,7 +161,7 @@ The four brand accents map to the four bases, and each has a job in the product.
 | A | `--sa-audit` | **Audit.** Brand accent, links, the tool's own marks, the tailored codec | `#39E6FF` | `#10A6C4` |
 | C | `--sa-cost` | **Cost.** A rule that costs without paying off, failures, risk | `#FF2E9C` | `#C41477` |
 | G | `--sa-gain` | **Gain.** A rule that pays off, recovered, safe | `#39FF6E` | `#0E9C55` |
-| T | `--sa-tbd` | **To be measured.** Placeholders, pending results | `#FFE13D` | `#8A7A00` |
+| T | `--sa-tbd` | **To be measured.** Anything still pending, never a measured value | `#FFE13D` | `#8A7A00` |
 
 Mnemonic: **A**udit, **C**ost, **G**ain, **T**o be measured.
 
@@ -199,12 +177,12 @@ Neutrals:
 | `--sa-rule` | Lines and borders | `#1B4A2E` | `#C3D9C9` |
 | `--on-accent` | Text on a solid accent fill | `#060F0A` | `#FFFFFF` |
 
-Placeholder support tokens:
+Pending-value tokens:
 
 | Token | Role | Dark | Light |
 |---|---|---|---|
 | `--sa-tbd-fill` | Solid fill for a pending swatch | `#FFE13D` | `#FFE13D` |
-| `--sa-tbd-bg` | Background behind a placeholder | `#1E2A0C` | `#EAF5DA` |
+| `--sa-tbd-bg` | Background behind a pending value | `#1E2A0C` | `#EAF5DA` |
 | `--sa-tbd-line` | Its dashed border | `#D4B62E` | `#A9B81C` |
 
 Tints, for a faint wash of an accent behind a verdict:
@@ -216,7 +194,7 @@ Tints, for a faint wash of an accent behind a verdict:
 
 #### Text colors on light: use the darker step
 
-The light values above are the deck's, and they are tuned for headline-size type on a projector. Three of them are below WCAG AA at normal text size. **For text on a light background, use these instead.** They are the same hues, one step darker, and they are what `marketing/index.html`, `dashboard/app.py` and `dnacodec/demo.py` use.
+The light values above are the deck's, and they are tuned for headline-size type on a projector. Three of them are below WCAG AA at normal text size. **For text on a light background, use these instead.** They are the same hues, one step darker, and they are what `site/index.html`, `dashboard/app.py` and `dnacodec/demo.py` use.
 
 | Role | Light text value | Instead of |
 |---|---|---|
@@ -305,7 +283,7 @@ The wordmark is Instrument Sans 600 at 0.89 of the mark's height, tracking -0.03
 - **Minimum size:** mark 24 px (below that the crossover blurs into a blob; it still reads as a colored tile at 16 px). Full logo 120 px wide.
 - **Backgrounds:** `logo.svg` on paper, surface or white. `logo-dark.svg` on `--sa-paper` dark or any background darker than `#1B4A2E`. Never on photos, busy gradients or a mid-tone.
 - **Don't** recolor the strands, swap which strand is on top, rotate or stretch the mark, add a glow or a drop shadow, or set the wordmark in another face.
-- **Placeholders** are always Tbd colored and dashed, never styled like a real number.
+- **Pending values** are always Tbd colored and dashed, never styled like a real number.
 - **Verdict colors** (Cost, Gain) are only used for verdicts and data, never as decoration.
 
 ### Iconography

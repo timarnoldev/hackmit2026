@@ -1,15 +1,15 @@
 """Does learned candidate selection help at file level? Measured as a curve.
 
 The ablation ladder answers this with one threshold, "fewest reads at which all trials recover",
-and that metric is knife-edge near the top of the curve: run 2 says the risk model is worth half
-a read, run 6 says it costs a read. Neither number has an error bar.
+and that metric is knife-edge near the top of the curve: run 2 puts the risk model at half a read
+of benefit, run 6 at a read of cost. Neither number has an error bar.
 
-Worse, the ladder's C and D rungs are not a clean isolation. The settings search is free to move
-redundancy between them, and in run 6 it did (1.6 against 1.3), so the rung compares two codecs
+The ladder's C and D rungs are also not a clean isolation. The settings search is free to move
+redundancy between them, and in run 6 it does (1.6 against 1.3), so the rung compares two codecs
 that differ in more than the scorer.
 
-This script fixes both. It holds every setting identical, changes only the scorer, and measures
-the whole recovery curve at 300 held-out trials per point.
+This script addresses both. It holds every setting identical, changes only the scorer, and
+measures the whole recovery curve at 300 held-out trials per point.
 
     uv run --extra train python scripts/tier2_recovery_curve.py --run-id run2_strict
 

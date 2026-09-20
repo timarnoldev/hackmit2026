@@ -1,6 +1,6 @@
 """Situation profiles: what the storage channel looks like in a given situation.
 
-Profiles live as JSON in profiles/. Agent A calibrates the numbers on real data.
+Profiles live as JSON in profiles/. scripts/calibrate.py fits the numbers on real train reads.
 """
 
 from __future__ import annotations

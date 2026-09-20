@@ -1,6 +1,8 @@
-# Working notes behind COMPARISON.md
+# Provenance behind COMPARISON.md
 
-Provenance, arithmetic and open items. Not part of the pitch.
+Where each number in [COMPARISON.md](COMPARISON.md) comes from: the arithmetic we did ourselves,
+the figures we refused to digitize, the papers we checked and ruled out, and what we could not
+verify. Anyone auditing that comparison should start here.
 
 ## 1. Our protocol, verified from code (not from slides)
 
@@ -23,18 +25,18 @@ that fixes N = 2 or 4; at 6, 10 and 16 we are slightly below.
 
 ## 2. Internal number spread (seed noise)
 
-Four tables in this repo report the same baseline measurement with different subsample seeds.
+One subsample draw moves the baseline's mid-coverage columns by up to two points. Tables in this
+repository that quote a single draw therefore disagree with each other at that resolution:
 
 | source | 2 | 4 | 6 | 10 | 16 | full |
 |---|---|---|---|---|---|---|
 | the canonical table used in COMPARISON.md | 4.8 | 39.2 | 68.0 | 85.3 | 90.5 | 90.3 |
 | `README.md`, "Baseline on real data" | 4.8 | 39.2 | 68.1 | 85.3 | 90.6 | — |
-| `docs/MODELS.md` §1 | 5.0 | 41.0 | 67.0 | 83.0 | 90.0 | 90.3 |
 | `docs/ERRORS.md`, held-out calibration check | 4.9 | 39.8 | 66.5 | 84.5 | 90.1 | — |
 
-Up to 2 points of spread at 4 to 6 reads. The 16 and "full" columns do not subsample and are
-stable. Someone should reconcile these four tables before the demo; a judge who reads two of them
-will notice.
+The 16 and "full" columns do not subsample and do not carry this noise.
+[NUMBERS.md](NUMBERS.md) section 1 is the reconciled version: 20 independent draws per point with
+a standard deviation, and every single-draw value above sits inside its spread. Quote that one.
 
 ## 3. Arithmetic done here (not quoted from any paper)
 
@@ -64,14 +66,11 @@ will notice.
 
 ## 5. Things we could not verify
 
-- **The polisher numbers are not reproducible in this worktree.** `results/` holds only `run1/`
-  and `run2/` loop output; there is no `results/baseline_real_microsoft.json` and no polisher
-  benchmark JSON, and `data/` is empty. The three-row table in COMPARISON.md was supplied by the
-  run owner. The code paths exist (`polish_experiments.py` defines `polish_gain_d3r2`), but the
-  numbers were not re-run here, and the GX10 was off limits.
-- **Whether the best-of-22 variant selection used the train or the held-out split.** The script's
-  docstring says the right thing ("train split for tuning decisions, heldout only for final
-  numbers"). We did not verify which split the selection actually used.
+- **Which split the best-of-22 variant selection ran on.** `scripts/polish_experiments.py`
+  documents the right thing ("train split for tuning decisions, heldout only for final numbers"),
+  and the gain margins are tuned on a validation carve of the train split. We have not verified in
+  the run logs which split the *selection among the 22 variants* actually scored on. 95.3%, the
+  default variant, is the number that does not depend on the answer.
 - **Whether our 1,996-cluster subset is easier than the full 10,000.** Our plain majority vote
   scores 90.3% at ≤16 reads, above MUSCLE's 84.70% and ITR's 87.58% at coverage 27 in BBS Table 2.
   That is surprising and unexplained. Running the baseline on all 10,000 clusters would settle it

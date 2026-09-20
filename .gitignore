@@ -13,16 +13,18 @@ results/*
 !results/.gitkeep
 !results/run1/
 !results/run2/
-!results/run3/
-!results/run4/
 !results/run2_strict/
 !results/run5_strict/
 !results/run6/
+!results/run5_learned_rules.txt
 !results/rule_recovery_curve_*.json
 !results/tier2_recovery_curve_*.json
 !results/decoder_real_heldout.json
 .DS_Store
 /.claude/worktrees
+
+# Local scratch: per-machine job scheduling notes, never part of the repo
+GPU_JOBS.md
 
 # PlatformIO build output for the box firmware
 hardware/esp32_ticker/.pio/
