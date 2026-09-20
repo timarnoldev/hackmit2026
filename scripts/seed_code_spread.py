@@ -42,6 +42,10 @@ VARIANTS = {
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--files", type=int, default=10)
+    ap.add_argument("--start", type=int, default=0, help="index of the first file, to extend a run")
+    ap.add_argument(
+        "--codecs", default="", help="comma separated substrings; empty means all three"
+    )
     ap.add_argument("--coverage", type=float, default=12.0)
     ap.add_argument("--trials", type=int, default=300)
     ap.add_argument("--workers", type=int, default=14)
@@ -49,21 +53,28 @@ def main() -> None:
     args = ap.parse_args()
 
     n_bytes = len(test_file())
+    index = list(range(args.start, args.start + args.files))
     files = [
         np.random.default_rng(train_seed(800 + i)).integers(0, 256, n_bytes, dtype=np.uint8).tobytes()
-        for i in range(args.files)
+        for i in index
     ]
+    wanted = [w.strip() for w in args.codecs.split(",") if w.strip()]
+    variants = {
+        name: settings
+        for name, settings in VARIANTS.items()
+        if not wanted or any(w in name for w in wanted)
+    }
     channel = dataclasses.replace(load_profile(args.profile), coverage_mean=args.coverage)
     seeds = heldout_seeds(args.trials)
     decoder = MajorityVoteDecoder()
 
     print(
         f"{args.profile} at {args.coverage:g} reads per strand, {args.trials} held-out trials per "
-        f"point, {args.files} different {n_bytes // 1024} KB files\n"
+        f"point, {args.files} different {n_bytes // 1024} KB files (index {index[0]}..{index[-1]})\n"
     )
-    print(f"{'codec':38s}" + "".join(f"{i:>7d}" for i in range(args.files)) + "    mean     sd")
+    print(f"{'codec':38s}" + "".join(f"{i:>7d}" for i in index) + "    mean     sd")
     table: dict[str, list[float]] = {}
-    for name, settings in VARIANTS.items():
+    for name, settings in variants.items():
         rates = []
         for data in files:
             metrics = recovery_trials(
@@ -79,7 +90,8 @@ def main() -> None:
             flush=True,
         )
 
-    path = RESULTS_DIR / f"seed_code_spread_{args.profile}.json"
+    tag = "" if args.start == 0 else f"_from{args.start}"
+    path = RESULTS_DIR / f"seed_code_spread{tag}_{args.profile}.json"
     path.write_text(
         json.dumps(
             {
@@ -87,6 +99,7 @@ def main() -> None:
                 "coverage": args.coverage,
                 "trials": args.trials,
                 "files": args.files,
+                "file_index": index,
                 "n_bytes": n_bytes,
                 "recovery_by_file": table,
             },
