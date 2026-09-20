@@ -64,11 +64,23 @@ Examples that lead in both datasets: substitutions around CGGG and CCCG, deletio
 | Default codec, reads needed | 19.5 | 3.0 |
 | Tier 1 (rules audited + redundancy tuned) | 5.5 reads at 0.64 bits/base | 5.5 reads at 1.50 bits/base |
 | Best round, reads needed | 5.0 | 5.0 |
-| Rule "max 3 identical letters" | no measurable benefit (19.5 vs 20.0) | no measurable benefit (3.0 vs 2.5) |
-| Rule "GC 40 to 60%" | no measurable benefit (19.5 vs 20.0) | pays off (3.0 vs 3.5) |
+| Rule "max 3 identical letters" | see the strict measurement below | see below |
+| Rule "GC 40 to 60%" | see the strict measurement below | see below |
 | Redundancy default vs tuned | tuned better: 19.5 → 5.5 reads | tuned better: 1.20 → 1.50 bits/base |
 
-⚠️ **Caveat we state ourselves:** the two sequence-rule verdicts flip between run 1 and run 2, so they are within the noise. The redundancy result is large and consistent. Run 4 (3 × 300 trials) is running to settle it. ⏳
+### The rule audit, strict measurement ✅
+
+Run 2's codecs re-measured with **3 blocks × 300 held-out trials** (`results/run2_strict`), the version to quote:
+
+| Rule | Nanopore | Illumina |
+|---|---|---|
+| **Max 3 identical letters in a row** | **pays off: 19.5 reads with it, 24.5 without** | no measurable benefit (3.0 vs 2.5) |
+| **GC between 40 and 60%** | no measurable benefit (19.5 vs 20.0) | **pays off: 3.0 reads with it, 4.0 without** |
+| Redundancy, default vs tuned | tuned better: 19.5 → 5.5 reads | tuned better: 3.0 reads → 1.50 bits per base |
+
+**The quotable sentence:** each of the two standard rules pays off on exactly one of the two channels and does nothing on the other. Nobody measures that today.
+
+This also settles an earlier wobble: at 100 trials per block the Nanopore homopolymer verdict came out as "no measurable benefit", at 300 trials it is a clear 5 reads, matching run 1. Fewer trials made the test too weak, not the rule less real.
 
 **Tier 2, measured directly** (same settings, same decoder, paired held-out trials, rule scorer vs learned risk model): ☑️
 
