@@ -113,21 +113,62 @@ Box to Mac, single characters:
 Touch, if the GT911 panel answers: tap the left third for slower, the middle for pause and
 resume, the right third for faster.
 
-## If the screen looks wrong
+## The white screen, and what it actually was
 
-Every board guess lives in `src/board_config.h`. Change one value, reflash, look again.
+First bring-up flashed fine, the USB link worked, the backlight was on, and the panel stayed
+white. Three things were wrong, all of them in the hand written panel configuration:
 
-| Symptom | Knob |
+1. **Wrong controller.** The BOX-3 panel is an **ILI9342C**, not an ILI9341. It is natively
+   320 x 240, where the ILI9341 is 240 x 320, and its init sequence is different.
+2. **GPIO 48 is not the reset line.** It was being driven as one. On this board it is only
+   set to input with a pull-up. Driving it is what kept the panel dark.
+3. **Three wire SPI.** The panel shares one data line; `spi_3wire` has to be true.
+
+The fix is to stop hand writing it. LovyanGFX ships a profile for this exact board, and the
+firmware now uses it:
+
+```cpp
+#define LGFX_ESP32_S3_BOX_V3
+#define LGFX_AUTODETECT
+#include <LovyanGFX.hpp>
+#include <LGFX_AUTODETECT.hpp>
+static LGFX lcd;
+```
+
+That one profile supplies the controller, the pins, the 40 MHz three wire SPI bus on SPI2,
+the GPIO 47 backlight, `offset_rotation = 1`, and the GT911 touch panel at address 0x14 with
+a 0x5D fallback. It is defined in the library's `LGFX_AutoDetect_ESP32_all.hpp` as
+`_detector_ESP32_S3_BOX_V3_t`, which is the reference to check against if anything else ever
+looks wrong.
+
+`USE_AUTODETECT` in `src/board_config.h` switches back to the hand written path, which now
+carries the same corrected numbers, if a future board ever needs different ones.
+
+## If the screen still looks wrong
+
+| Symptom | Knob in `src/board_config.h` |
 |---|---|
-| Colours look like a photo negative | `LCD_INVERT` |
-| Red and blue are swapped | `LCD_RGB_ORDER` |
+| Colours look like a photo negative | `LCD_INVERT` (needs `USE_AUTODETECT 0`) |
+| Red and blue are swapped | `LCD_RGB_ORDER` (needs `USE_AUTODETECT 0`) |
 | Picture rotated or mirrored | `LCD_ROTATION`, values 0 to 3 |
-| Picture shifted by a few pixels | `LCD_OFFSET_X`, `LCD_OFFSET_Y` |
-| Blank screen but `box_alive` is true | `LCD_PIN_BL`, then the SPI pins |
-| Touch does nothing | set `TOUCH_ENABLED` to 0, or try `TOUCH_I2C_ADDR` 0x14 |
+| Blank screen but `box_alive` is true | `USE_AUTODETECT`, then the bring-up sweep below |
+| Touch does nothing | `TOUCH_ENABLED 0`, or `TOUCH_I2C_ADDR` 0x5D |
 
-The pin numbers match the Espressif BSP for `esp32_s3_box_3`. The panel is driven as an
-ILI9341 with inverted colour and BGR order.
+## The bring-up sweep
+
+`src/diag.cpp` is a separate firmware that walks a list of panel configurations, one per
+boot, five seconds each, drawing a numbered colour pattern and printing what it is trying
+over USB. It exists because a white panel gives you nothing to go on, and it is the fastest
+way to find out which knob matters on a board nobody has brought up before.
+
+```bash
+pio run -e diag -t upload --upload-port /dev/cu.usbmodem1101   # sweep
+pio device monitor -e diag                                     # watch it
+pio run -t upload --upload-port /dev/cu.usbmodem1101           # back to the ticker
+```
+
+Keys over serial: `0`..`9` `a`..`f` hold one configuration, `C` resume cycling, `n` next now,
+`?` print the table.
 
 ## What is tested and what is not
 
@@ -145,9 +186,9 @@ Not exercised with a real cable pull, only with the port being taken away, but t
 same code path: any read or write error closes the port and the sender retries every 1.5
 seconds.
 
-**Not verified:** what the screen actually shows. Nobody looked at the panel while this was
-written, so the layout, the orientation, the colour order and the touch mapping are
-unconfirmed. The knobs above exist for exactly that reason. Plug the box in, run the server,
-look at it, and if something is off it is almost certainly one line in `board_config.h`.
+After the fix the firmware reports `lcd init=1 320x240` over USB, which the first version
+never did correctly because it was configured as a 240 x 320 ILI9341.
+
+**Still to confirm with eyes on the panel:** the layout, the rotation and the touch mapping.
 
 The browser view is the stage fallback and does not depend on any of this.

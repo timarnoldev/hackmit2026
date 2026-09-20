@@ -19,15 +19,27 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#define LGFX_USE_V1
-#include <LovyanGFX.hpp>
 
 #include "board_config.h"
 
-// ---------------------------------------------------------------- panel
+// The panel. LovyanGFX ships a profile for this exact board, so we use it instead of
+// hand writing pins: LGFX_ESP32_S3_BOX_V3 in the library's LGFX_AutoDetect_ESP32_all.hpp.
+// It knows the panel is an ILI9342C, that GPIO 48 is an input pull-up and not a reset line,
+// that the bus is three wire SPI on SPI2 at 40 MHz, that the backlight is GPIO 47, and how
+// the GT911 touch panel is wired. Getting those by hand is what left the screen white.
+#if USE_AUTODETECT
+#define LGFX_ESP32_S3_BOX_V3
+#define LGFX_AUTODETECT
+#include <LovyanGFX.hpp>
+#include <LGFX_AUTODETECT.hpp>
+static LGFX lcd;
+#else
+#define LGFX_USE_V1
+#include <LovyanGFX.hpp>
 
+// Hand written fallback, with the corrected values from board_config.h.
 class Box3Display : public lgfx::LGFX_Device {
-  lgfx::Panel_ILI9341 _panel;
+  lgfx::Panel_ILI9342 _panel;
   lgfx::Bus_SPI _bus;
   lgfx::Light_PWM _light;
 #if TOUCH_ENABLED
@@ -36,13 +48,14 @@ class Box3Display : public lgfx::LGFX_Device {
 
  public:
   Box3Display() {
+    pinMode(LCD_PIN_PULLUP, INPUT_PULLUP);  // GPIO 48, never driven on this board
     {
       auto cfg = _bus.config();
       cfg.spi_host = LCD_SPI_HOST;
       cfg.spi_mode = 0;
       cfg.freq_write = LCD_SPI_HZ;
       cfg.freq_read = 16000000;
-      cfg.spi_3wire = false;
+      cfg.spi_3wire = LCD_SPI_3WIRE;
       cfg.use_lock = true;
       cfg.dma_channel = SPI_DMA_CH_AUTO;
       cfg.pin_sclk = LCD_PIN_SCLK;
@@ -57,11 +70,9 @@ class Box3Display : public lgfx::LGFX_Device {
       cfg.pin_cs = LCD_PIN_CS;
       cfg.pin_rst = LCD_PIN_RST;
       cfg.pin_busy = -1;
-      cfg.panel_width = 240;
-      cfg.panel_height = 320;
       cfg.offset_x = LCD_OFFSET_X;
       cfg.offset_y = LCD_OFFSET_Y;
-      cfg.offset_rotation = 0;
+      cfg.offset_rotation = LCD_OFFSET_ROTATION;
       cfg.readable = false;
       cfg.invert = LCD_INVERT;
       cfg.rgb_order = LCD_RGB_ORDER;
@@ -82,13 +93,13 @@ class Box3Display : public lgfx::LGFX_Device {
     {
       auto cfg = _touch.config();
       cfg.x_min = 0;
-      cfg.x_max = 319;
+      cfg.x_max = LCD_WIDTH - 1;
       cfg.y_min = 0;
-      cfg.y_max = 239;
+      cfg.y_max = TOUCH_Y_MAX;
       cfg.pin_int = TOUCH_PIN_INT;
       cfg.pin_rst = TOUCH_PIN_RST;
       cfg.bus_shared = false;
-      cfg.offset_rotation = 0;
+      cfg.offset_rotation = TOUCH_OFFSET_ROTATION;
       cfg.i2c_port = 0;
       cfg.i2c_addr = TOUCH_I2C_ADDR;
       cfg.pin_sda = TOUCH_PIN_SDA;
@@ -103,6 +114,7 @@ class Box3Display : public lgfx::LGFX_Device {
 };
 
 static Box3Display lcd;
+#endif
 static LGFX_Sprite canvas(&lcd);
 
 // ---------------------------------------------------------------- palette
@@ -478,9 +490,10 @@ void setup() {
   delay(1200);           // let the host enumerate the CDC endpoint before we say anything
   Serial.write('B');     // "the sketch is running", before anything that could hang
   Serial.flush();
-  lcd.init();
+  const bool lcdOk = lcd.init();
   lcd.setRotation(LCD_ROTATION);
   lcd.setBrightness(200);
+  Serial.printf("lcd init=%d %dx%d\n", (int)lcdOk, lcd.width(), lcd.height());
   canvas.setPsram(true);
   canvas.setColorDepth(16);
   canvas.createSprite(LCD_WIDTH, LCD_HEIGHT);
