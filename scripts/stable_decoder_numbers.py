@@ -47,15 +47,19 @@ def _build_decoder(spec):
 
 
 def one_draw(args):
-    k, seed, extra = args
+    k, seed, extra, protocol = args
     held = _held()
+    if protocol == "exactly":
+        # TReconLM's protocol: subclusters of exactly k reads, so clusters that do not have
+        # k reads are not part of the measurement at all. Reported next to ours, never instead.
+        held = [c for c in held if len(c.reads) >= k]
     refs = [c.reference for c in held]
     rng = np.random.default_rng(seed)
     clusters = [
         list(rng.choice(c.reads, min(k, len(c.reads)), replace=False)) if c.reads else []
         for c in held
     ]
-    out = {"baseline": float(np.mean([o == r for o, r in zip(MajorityVoteDecoder().decode(clusters, 110), refs)]))}
+    out = {"n_clusters": len(held), "baseline": float(np.mean([o == r for o, r in zip(MajorityVoteDecoder().decode(clusters, 110), refs)]))}
     specs = [
         ("polish", "v1", CHECKPOINT, {}),
         ("polish_best", "v1", CHECKPOINT, BEST_VARIANT),
@@ -86,6 +90,10 @@ def main() -> None:
         "'v2=v2:checkpoints/polish2/polish2.pt' or "
         "'v2_best=v2:ckpt.pt:{\"drafts\":3,\"rounds\":2,\"mode\":\"gain\"}'",
     )
+    ap.add_argument("--protocol", choices=("atmost", "exactly"), default="atmost",
+                    help="atmost: our protocol, every held-out cluster, subsampled to at most k "
+                         "reads. exactly: TReconLM's protocol, only clusters that have k reads, "
+                         "subsampled to exactly k.")
     ap.add_argument("--out", default=None, help="result json (default results/decoder_real_heldout.json)")
     args = ap.parse_args()
 
@@ -98,7 +106,7 @@ def main() -> None:
 
     budgets = [int(x) for x in args.reads.split(",")]
     seeds = heldout_seeds(200)[50:]  # evaluation only, disjoint from the loop's blocks
-    jobs = [(k, seeds[i], extra) for k in budgets for i in range(args.draws)]
+    jobs = [(k, seeds[i], extra, args.protocol) for k in budgets for i in range(args.draws)]
     results: dict[int, list[dict]] = {}
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         for k, out in pool.map(one_draw, jobs):
@@ -110,7 +118,10 @@ def main() -> None:
 
     keys = [k for k in ("baseline", "polish", "polish_best", *[e[0] for e in extra])
             if k in results[budgets[0]][0]]
-    print(f"{len(_held())} held-out clusters, {args.draws} independent read draws per point, mean +- sd")
+    counts = {k: results[k][0]["n_clusters"] for k in budgets}
+    print(f"protocol={args.protocol}, {args.draws} independent read draws per point, mean +- sd")
+    print("clusters measured per read budget: "
+          + ", ".join(f"{k}:{counts[k]}" for k in budgets))
     header = f"{'reads':>5}" + "".join(f"{k:>18}" for k in keys)
     print(header)
     table = {}
@@ -124,7 +135,8 @@ def main() -> None:
         print(row)
 
     path = Path(args.out) if args.out else RESULTS_DIR / "decoder_real_heldout.json"
-    path.write_text(json.dumps({"draws": args.draws, "clusters": len(_held()), "table": table}, indent=2) + "\n")
+    path.write_text(json.dumps({"draws": args.draws, "protocol": args.protocol,
+                                "clusters": counts, "table": table}, indent=2) + "\n")
     print(f"wrote {path}")
 
 

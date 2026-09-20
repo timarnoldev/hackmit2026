@@ -349,7 +349,11 @@ def main(argv=None) -> None:
     p.add_argument("--warmup", type=int, default=500)
     p.add_argument("--channels", type=int, default=192)
     p.add_argument("--blocks", default="1,2,4,8,16,1,2,4,8,16")
-    p.add_argument("--read-channels", type=int, default=48)
+    p.add_argument("--read-channels", type=int, default=32)
+    p.add_argument("--read-blocks", default="1,2")
+    p.add_argument("--read-blocks2", default="1")
+    p.add_argument("--compile", action="store_true",
+                   help="torch.compile the training forward (about 2.5x on the GX10)")
     p.add_argument("--eval-every", type=int, default=2_000)
     p.add_argument("--val-size", type=int, default=500)
     p.add_argument("--low-prob", type=float, default=0.5)
@@ -397,8 +401,11 @@ def main(argv=None) -> None:
 
     blocks = tuple(int(x) for x in args.blocks.split(","))
     if args.arch == "v2":
-        cfg = PolishConfig2(channels=args.channels, blocks=blocks,
-                            read_channels=args.read_channels)
+        cfg = PolishConfig2(
+            channels=args.channels, blocks=blocks, read_channels=args.read_channels,
+            read_blocks=tuple(int(x) for x in args.read_blocks.split(",") if x),
+            read_blocks2=tuple(int(x) for x in args.read_blocks2.split(",") if x),
+        )
         model = PolishNet2(cfg).to(device)
     else:
         cfg = PolishConfig(channels=args.channels, blocks=blocks)
@@ -411,6 +418,10 @@ def main(argv=None) -> None:
         ema_model = torch.optim.swa_utils.AveragedModel(
             model, avg_fn=lambda a, b, _n: args.ema_decay * a + (1 - args.ema_decay) * b
         )
+
+    # the compiled module shares parameters with `model`; eval, EMA and saving use `model`,
+    # which keeps the eval path shape-agnostic and the checkpoint free of compile wrappers
+    train_model = torch.compile(model) if (args.compile and device.type == "cuda") else model
 
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     rng = np.random.default_rng(train_seed(11))
@@ -453,9 +464,9 @@ def main(argv=None) -> None:
         model.train()
         with torch.autocast(device.type, dtype=torch.bfloat16, enabled=amp):
             if args.arch == "v2":
-                op_logits, ins_logits = model(x_read, x_pos, mask4)
+                op_logits, ins_logits = train_model(x_read, x_pos, mask4)
             else:
-                op_logits, ins_logits = model(x_pos)
+                op_logits, ins_logits = train_model(x_pos)
             loss = (F.cross_entropy(op_logits.float(), y_op)
                     + F.cross_entropy(ins_logits.float(), y_ins))
         opt.zero_grad(set_to_none=True)
