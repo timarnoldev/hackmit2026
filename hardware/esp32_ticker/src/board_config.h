@@ -81,6 +81,11 @@
 // How long without a line before the box calls the link down, in milliseconds.
 #define LINK_TIMEOUT_MS 4000
 
+// How long without a host line before the box falls back to the run compiled into it. Short
+// enough that unplugging the Mac mid demo is barely visible, long enough that a slow tape
+// on the Mac never triggers it.
+#define HOST_TIMEOUT_MS 2500
+
 // ---------------------------------------------------------------- layout
 
 // Every edge keeps this much clear. Nothing is drawn outside it.
