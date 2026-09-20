@@ -605,9 +605,9 @@
   function buildFieldChart() {
     const host = document.getElementById('fieldchart');
     if (host) {
-      const W = 940;
+      const W = 1010;
       const H = 540;
-      const m = { l: 80, r: 250, t: 20, b: 76 };
+      const m = { l: 80, r: 320, t: 20, b: 76 };
       const pw = W - m.l - m.r;
       const phh = H - m.t - m.b;
       const X = (i) => m.l + (i / (FIELD_READS.length - 1)) * pw;

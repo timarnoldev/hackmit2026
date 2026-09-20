@@ -1833,7 +1833,7 @@ html.layout-presenter .p-cur .viewport { position: absolute; inset: 0; }
 }
 
 /* --- 12. against published work */
-#s-field .fieldgrid { position: absolute; left: 120px; right: 120px; top: 284px; display: grid; grid-template-columns: 1fr 520px; gap: 56px; align-items: start; }
+#s-field .fieldgrid { position: absolute; left: 120px; right: 120px; top: 276px; display: grid; grid-template-columns: 1fr 520px; gap: 56px; align-items: start; }
 #s-field .fline path { fill: none; stroke: var(--sa-rule); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 #s-field .fline circle { fill: var(--sa-rule); }
 #s-field .fline .flab { font-size: 21px; fill: var(--sa-muted); }
@@ -1846,11 +1846,11 @@ html.layout-presenter .p-cur .viewport { position: absolute; inset: 0; }
 #s-field .fline.peer path { stroke: var(--sa-audit); stroke-width: 5; }
 #s-field .fline.peer circle { fill: var(--sa-audit); }
 #s-field .fline.peer .flab { fill: var(--sa-audit); font-size: 22px; }
-#s-field .costpanel h3 { margin: 0 0 16px; font-size: 28px; font-weight: 600; color: var(--sa-gain); }
-#s-field .costrow { margin-bottom: 22px; }
-#s-field .clab { font-size: 23px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+#s-field .costpanel h3 { margin: 0 0 10px; font-size: 28px; font-weight: 600; color: var(--sa-gain); }
+#s-field .costrow { margin-bottom: 12px; }
+#s-field .clab { font-size: 22px; font-weight: 600; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: baseline; }
 #s-field .clab em { font-style: normal; font-family: var(--mono); font-size: 24px; color: var(--sa-gain); }
-#s-field .cbar { position: relative; height: 30px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+#s-field .cbar { position: relative; height: 26px; margin-bottom: 5px; display: flex; align-items: center; gap: 12px; }
 #s-field .cbar i { height: 24px; border-radius: 6px; background: var(--sa-audit); display: block; min-width: 5px; }
 #s-field .cbar i.ours { background: var(--sa-gain); }
 #s-field .cbar span { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--sa-muted); white-space: nowrap; }
@@ -1936,3 +1936,13 @@ html.layout-presenter .p-cur .viewport { position: absolute; inset: 0; }
 #s-results .close .who { display: flex; gap: 28px; align-items: baseline; flex-wrap: wrap; font-size: 25px; color: var(--sa-muted); margin-top: 12px; }
 #s-results .close .who .repo { font-family: var(--mono); font-weight: 600; font-size: 25px; color: var(--sa-audit); }
 #s-results .close .who .team { color: var(--sa-ink); font-weight: 600; }
+
+/* the verdict sits beside the chart, in the space the lines do not reach */
+#s-field .footline {
+  left: auto; right: 120px; bottom: auto; top: 300px; width: 560px;
+  display: block;
+}
+#s-field .pill2 {
+  display: block; font-size: 23px; line-height: 1.4; border-radius: 22px;
+  padding: 16px 24px; text-align: left;
+}
