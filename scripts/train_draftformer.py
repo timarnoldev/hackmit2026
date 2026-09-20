@@ -223,8 +223,11 @@ def main(argv=None) -> None:
     p.add_argument("--low-max", type=int, default=6)
     p.add_argument("--aux-weight", type=float, default=0.3)
     p.add_argument("--teacher-noise", type=float, default=0.05)
-    p.add_argument("--d", type=int, default=192)
-    p.add_argument("--d-read", type=int, default=80)
+    p.add_argument("--d", type=int, default=160)
+    p.add_argument("--heads", type=int, default=4)
+    p.add_argument("--cross-dim", type=int, default=64)
+    p.add_argument("--ffn-mult", type=int, default=3)
+    p.add_argument("--d-read", type=int, default=48)
     p.add_argument("--trunk-layers", type=int, default=4)
     p.add_argument("--dec-layers", type=int, default=4)
     p.add_argument("--cross-layers", type=int, default=2)
@@ -251,9 +254,9 @@ def main(argv=None) -> None:
         torch.backends.cudnn.allow_tf32 = True
 
     cfg = DraftFormerConfig(
-        d=args.d, d_read=args.d_read, trunk_layers=args.trunk_layers,
-        dec_layers=args.dec_layers, cross_layers=args.cross_layers,
-        dropout=args.dropout,
+        d=args.d, d_read=args.d_read, heads=args.heads, cross_dim=args.cross_dim,
+        ffn_mult=args.ffn_mult, trunk_layers=args.trunk_layers,
+        dec_layers=args.dec_layers, cross_layers=args.cross_layers, dropout=args.dropout,
     )
     model = DraftFormer(cfg).to(device)
     start_step = 0

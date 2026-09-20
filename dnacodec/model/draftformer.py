@@ -193,15 +193,17 @@ class _Attn(nn.Module):
     decoding linear instead of quadratic in the strand length.
     """
 
-    def __init__(self, d: int, heads: int, dropout: float, d_kv: int | None = None):
+    def __init__(self, d: int, heads: int, dropout: float, d_kv: int | None = None,
+                 d_attn: int | None = None):
         super().__init__()
-        if d % heads:
-            raise ValueError(f"d={d} must be divisible by heads={heads}")
-        self.heads, self.hd, self.dropout = heads, d // heads, dropout
-        self.q = nn.Linear(d, d)
-        self.k = nn.Linear(d_kv or d, d)
-        self.v = nn.Linear(d_kv or d, d)
-        self.o = nn.Linear(d, d)
+        d_attn = d_attn or d
+        if d_attn % heads:
+            raise ValueError(f"d_attn={d_attn} must be divisible by heads={heads}")
+        self.heads, self.hd, self.dropout = heads, d_attn // heads, dropout
+        self.q = nn.Linear(d, d_attn)
+        self.k = nn.Linear(d_kv or d, d_attn)
+        self.v = nn.Linear(d_kv or d, d_attn)
+        self.o = nn.Linear(d_attn, d)
 
     def _split(self, x: torch.Tensor) -> torch.Tensor:
         b, t, _ = x.shape
@@ -254,10 +256,11 @@ class _SelfBlock(nn.Module):
 class _CrossBlock(nn.Module):
     """Pre-norm cross-attention into a memory, plus a feed-forward."""
 
-    def __init__(self, d: int, heads: int, ffn: int, dropout: float, d_mem: int | None = None):
+    def __init__(self, d: int, heads: int, ffn: int, dropout: float, d_mem: int | None = None,
+                 d_attn: int | None = None):
         super().__init__()
         self.n1, self.nm, self.n2 = nn.LayerNorm(d), nn.LayerNorm(d_mem or d), nn.LayerNorm(d)
-        self.attn = _Attn(d, heads, dropout, d_kv=d_mem)
+        self.attn = _Attn(d, heads, dropout, d_kv=d_mem, d_attn=d_attn)
         self.ff = _ffn(d, ffn)
         self.drop = nn.Dropout(dropout)
 
@@ -272,13 +275,14 @@ class _CrossBlock(nn.Module):
 
 @dataclass
 class DraftFormerConfig:
-    d_read: int = 80
-    d: int = 192
-    heads: int = 6
+    d_read: int = 48
+    d: int = 160
+    heads: int = 4
+    cross_dim: int = 64  # width of the attention over reads: the read axis carries 16x the tokens
     cross_layers: int = 2
     trunk_layers: int = 4
     dec_layers: int = 4
-    ffn_mult: int = 4
+    ffn_mult: int = 3
     dropout: float = 0.0
     max_len: int = 200  # positional tables cover strand lengths and read lengths up to this
     max_reads: int = MAX_READS
@@ -294,8 +298,8 @@ class DraftFormer(nn.Module):
         dr, d, ffn = cfg.d_read, cfg.d, cfg.d * cfg.ffn_mult
         # --- per-read encoder: the read-coordinate window at each draft position
         self.win_proj = nn.Linear(WINDOW * 5 + 2, dr)  # one-hots plus "aligned" and read quality
-        self.read_mlp = nn.Sequential(nn.LayerNorm(dr), nn.Linear(dr, dr * 2), nn.GELU(),
-                                      nn.Linear(dr * 2, dr))
+        self.read_mlp = nn.Sequential(nn.LayerNorm(dr), nn.Linear(dr, dr), nn.GELU(),
+                                      nn.Linear(dr, dr))
         self.read_norm = nn.LayerNorm(dr)
         # --- draft-position query
         self.feat_proj = nn.Linear(N_FEATURES, d)
@@ -303,7 +307,8 @@ class DraftFormer(nn.Module):
         self.pos_emb = nn.Embedding(cfg.max_len, d)
         self.cov_emb = nn.Embedding(cfg.max_reads + 1, d)
         self.cross_blocks = nn.ModuleList(
-            [_CrossBlock(d, cfg.heads, ffn, cfg.dropout, d_mem=dr) for _ in range(cfg.cross_layers)]
+            [_CrossBlock(d, cfg.heads, ffn, cfg.dropout, d_mem=dr, d_attn=cfg.cross_dim)
+             for _ in range(cfg.cross_layers)]
         )
         self.trunk_blocks = nn.ModuleList(
             [_SelfBlock(d, cfg.heads, ffn, cfg.dropout) for _ in range(cfg.trunk_layers)]
