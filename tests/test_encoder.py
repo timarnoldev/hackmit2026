@@ -430,6 +430,7 @@ def test_seed_code_counter_is_a_bijection_onto_the_seed_space():
     [
         SeedCodedSettings(strand_length=140, seed_bases=12),
         SeedCodedSettings(strand_length=111, seed_bases=13, max_homopolymer=2),
+        SeedCodedSettings(strand_length=111, seed_bases=12),  # odd number of payload bases
         SeedCodedSettings(strand_length=60, seed_bases=10, redundancy=0.0, gc_min=0.45, gc_max=0.55),
     ],
 )
