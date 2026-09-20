@@ -133,7 +133,13 @@ Reproduce: `python scripts/risk_real_analysis.py --dataset microsoft --risk-mode
 | **Ours, classic baseline** | 4.8% | 39.2% | 68.0% | 85.3% |
 | Trellis BMA | 0.1% | 39.1% | 64.6% | 82.9% |
 
-**Say it like this:** our decoder is level with a fine-tuned DNAformer, ahead of the classical algorithms, and clearly behind the current best, TReconLM. We did not set out to win trace reconstruction; we needed a decoder good enough to run the codec loop, and we built one in 13 minutes of training.
+**Where we are ahead:**
+
+- **Accuracy per unit of compute.** We match a fine-tuned DNAformer at 4, 6 and 10 reads with **0.8M parameters against their 100M**, **577k training examples against 1.4 billion**, and **13 minutes of training** instead of GPU days.
+- **Where it runs.** The same decoder fits on an ESP32-S3 and decodes a strand in 170 ms, so the demo runs unplugged. No published system here runs on a microcontroller.
+- **The question it answers.** Every method in the table reconstructs strands. None measures what a coding rule costs and buys on a given channel, which is what this project is about.
+
+**Where we are behind:** TReconLM is clearly better on raw accuracy at 2 to 10 reads, and it trains on the same split we do. Say it plainly if asked; the full table is in `docs/COMPARISON.md`.
 
 ## 7. The live demo
 

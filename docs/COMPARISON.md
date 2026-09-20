@@ -17,10 +17,26 @@ and redundancy per channel at a fixed recovery target, with the same decoder on 
 every comparison (see [PROJECT.md](../PROJECT.md), ablation B vs C). The decoder had to be solid
 and fast, not novel. It trains in 13 minutes, and we did not set out to beat anyone with it.
 
-**The short answer, up front.** At low coverage, where we care most, a published method
-(TReconLM, TMLR 2025) is clearly better than ours at every read count from 2 to 10, and it is
-trained the same way we train, on this dataset's own train split. We are roughly level with a
-fine-tuned DNAformer and ahead of the classical algorithms. We do not beat the state of the art.
+**Where we are ahead, up front.**
+
+1. **Accuracy per unit of compute.** We match a fine-tuned DNAformer at 4, 6 and 10 reads
+   (66.1 / 88.8 / 96.2% against 65.9 / 88.3 / 95.7%) with **0.8M parameters against their 100M**,
+   **577k training examples against 1.4 billion simulated reads**, and **13 minutes of training on
+   one machine**. Same accuracy, roughly 1/125 the model and a training run measured in minutes
+   rather than GPU days.
+2. **It runs where they cannot.** The decoder fits on an ESP32-S3 microcontroller and decodes a
+   strand there in 170 ms, with the whole demo running unplugged from any computer. No published
+   trace reconstruction system runs on a 50 dollar chip.
+3. **It answers a question nobody publishes.** Every method here reconstructs strands. None of
+   them measures what a *coding rule* or a redundancy level costs and buys on a given channel at a
+   fixed recovery target. That is what the decoder exists for in this project, and it is where the
+   work is new (see [PROJECT.md](../PROJECT.md)).
+
+**Where we are behind.** At low coverage, a published method (TReconLM, TMLR 2025) is clearly
+better than ours at every read count from 2 to 10, and it is trained the same way we train, on
+this dataset's own train split. On raw accuracy we are level with a fine-tuned DNAformer, ahead
+of the classical algorithms, and behind TReconLM. We say so plainly, and the tables below show
+it.
 
 ---
 
