@@ -335,18 +335,21 @@
 
 <!-- ================================================================ 6. One real blind spot -->
 <section class="slide" id="a-cctt" data-title="One real blind spot" data-plan="82-108">
-  <p class="kicker">One real blind spot</p>
-  <h2 class="title">This combination is real trouble for Nanopore</h2>
-  <div class="ccex">
-    <span class="seq"><span class="nt nt-G">G</span><span class="nt nt-A">A</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-T">T</span><span class="hi-motif"><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-C">C</span><span class="nt nt-T">T</span></span><span class="nt nt-A">A</span><span class="nt nt-G">G</span><span class="nt nt-C">C</span><span class="nt nt-A">A</span><span class="nt nt-T">T</span><span class="nt nt-G">G</span></span>
-    <span class="cclab">deletions land right after this run &mdash; measured on real Nanopore reads, not a guess</span>
+  <p class="kicker">Real blind spots</p>
+  <h2 class="title">Nanopore is error-prone.</h2>
+  <div class="hotlist">
+    <div class="hitem"><span class="seq" data-seq="CGGG"></span><span class="htag">substitutions</span></div>
+    <div class="hitem"><span class="seq" data-seq="CCCG"></span><span class="htag">substitutions</span></div>
+    <div class="hitem"><span class="seq" data-seq="CCCT"></span><span class="htag">deletions</span></div>
+    <div class="hitem"><span class="seq" data-seq="GGGA"></span><span class="htag">deletions</span></div>
+    <div class="hitem"><span class="seq" data-seq="CGAA"></span><span class="htag">insertions</span></div>
   </div>
-  <p class="callout-line">The classical rule doesn't catch it: "no run longer than 3" allows <span class="mono">CCC</span> outright, since it's exactly the limit &mdash; and completely blind to what comes right after it.</p>
+  <p class="tiny-note">measured on real reads &mdash; none of them caught by a hand-written rule</p>
   <p class="bridge">So something has to catch this that isn't a fixed rule.</p>
   <aside class="notes">
     <p>This is where the previous slide's complaint stops being abstract.</p>
-    <p><i class="cue"></i> On real Nanopore reads, the base right after a CCCT run gets deleted more than elsewhere. Measured, not assumed.</p>
-    <p><i class="cue"></i> And the classical rule doesn't catch it at all: "no run longer than 3" allows CCC outright, because it's exactly the limit.</p>
+    <p><i class="cue"></i> Nanopore is error-prone, and not evenly. These specific short patterns are measured hot spots on real reads.</p>
+    <p><i class="cue"></i> None of them are covered by any hand-written rule.</p>
     <p><i class="cue"></i> So something else has to catch this. That's exactly what the next slide shows.</p>
   </aside>
 </section>
