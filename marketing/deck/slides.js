@@ -58,6 +58,7 @@
   }
 
   const CH = { nanopore: 'Nanopore', illumina: 'Illumina' };
+  const validPt = (p) => p && isNum(p.bpb) && isNum(p.reads);
 
   /* ------------------------------------------------------------ DNA letters */
 
@@ -138,70 +139,75 @@
     track.innerHTML = html;
   }
 
-  /* ------------------------------------------------------------ slide 4: candidates */
+  /* ------------------------------------------------------------ slide 7: rules against the model
+   * One real slot of the encoder's candidate search. Strands, rule verdicts and risk scores all
+   * come from results.js ruleCase, which scripts/rule_vs_model_case.py computes with the trained
+   * model, so the builder only lays out what it is given.
+   */
 
-  // Same chunk, eight seeds. Rule checks and risk scores below are computed, not typed in.
-  // #6 passes every hand rule (run of 3 is legal) but carries the real CCCT deletion hot spot
-  // from docs/ERRORS.md, so the risk model, not the hand rule, is what catches it.
-  const CANDS = [
-    'ATACACGTCAGCACGAAACT',
-    'TTCGTACCTTGGGGGTCGTT',
-    'ACCACTCTGTTCCCACGAGC',
-    'GGCATTTCTGGATGGCCAGC',
-    'ATTGTGCTTGTTCAATTCTT',
-    'AGTCACCCTGATGCAGTCAG',
-    'GGCTCCGACGAATTTTTAAT',
-    'GCACGGAGTGGTTAGGCTTG',
-  ];
-  // Real hot-spot families measured on Nanopore reads (docs/ERRORS.md, docs/NUMBERS.md).
-  const HOT_MOTIFS = ['CGGG', 'CCCG', 'CCCT', 'GGGA'];
-  function riskOf(s) {
-    const dev = Math.abs(gcShare(s) - 0.5);
-    let score = 5 + Math.round(dev * 60);
-    const hit = HOT_MOTIFS.find((m) => s.includes(m));
-    if (hit) score += 34;
-    return { score: Math.min(score, 96), hit };
-  }
-
-  function buildCandidates() {
-    const host = document.getElementById('cands');
+  function buildRuleCase(R) {
+    const host = document.getElementById('rvm');
     if (!host) return;
-    const W = 27;
-    const meta = CANDS.map((s) => {
-      const run = maxRun(s);
-      const gc = gcShare(s);
-      const runFail = run.len > 3;
-      const gcFail = gc < 0.4 || gc > 0.6;
-      const fail = runFail || gcFail;
-      return { s, run, gc, runFail, gcFail, fail, risk: fail ? null : riskOf(s) };
-    });
-    let bestIdx = -1;
-    let bestScore = Infinity;
-    meta.forEach((m, i) => {
-      if (!m.fail && m.risk.score < bestScore) {
-        bestScore = m.risk.score;
-        bestIdx = i;
-      }
-    });
-    host.innerHTML = meta.map((m, i) => {
-      const { s, run, gc, runFail, gcFail, fail, risk } = m;
-      const why = runFail ? `run of ${run.len}` : gcFail ? `GC ${Math.round(gc * 100)}%, outside 40 to 60%` : 'passes';
-      const isBest = i === bestIdx;
-      const isHot = !fail && !!risk.hit;
-      return (
-        `<div class="cand ${fail ? 'fail' : 'pass'}${isBest ? ' kept' : ''}${isHot ? ' airisk' : ''}" style="--i:${i}">` +
-        `<span class="no">#${i + 1}</span>` +
-        `<span class="seqwrap"><span class="seq">${seqHTML(s)}</span>` +
-        (runFail ? `<span class="runmark" style="left:${run.start * W + 3}px;width:${run.len * W - 6}px"></span>` : '') +
-        `<span class="strike"></span></span>` +
-        `<span class="why ${fail ? 'bad' : 'ok'}"><span class="why-txt">${icon(fail ? 'cross' : 'check')}${why}</span>` +
-        (!fail ? `<span class="risk">${risk.score}%</span>` : '') +
-        (isHot ? `<span class="hotflag">${icon('cross')}${risk.hit}</span>` : '') +
-        `</span>` +
-        (isBest ? '<span class="keep">kept</span>' : '') +
-        `</div>`
-      );
+    const C = (R && R.ruleCase) || {};
+    const rows = Array.isArray(C.candidates) ? C.candidates : [];
+    const foot = document.getElementById('rvmfoot');
+    if (!rows.length) {
+      host.innerHTML = `<div class="pending-box" style="left:0;right:0;top:40px">${ph('a real slot of candidates with rule verdicts and risk scores')}</div>`;
+      if (foot) foot.innerHTML = '';
+      return;
+    }
+    const ours = rows.find((r) => r.n === C.oursN) || rows.find((r) => r.passes);
+    const best = rows.reduce((x, y) => (y.risk < x.risk ? y : x), rows[0]);
+    const handed = rows.find((r) => r.rulesPick);
+    const pct = (v) => Math.max(2, Math.min(100, v * 100));
+
+    const letters = (r) => {
+      const run = maxRun(r.seq);
+      if (r.passes || run.len <= 3) return esc(r.seq);
+      return esc(r.seq.slice(0, run.start)) +
+        `<b>${esc(r.seq.slice(run.start, run.start + run.len))}</b>` +
+        esc(r.seq.slice(run.start + run.len));
+    };
+
+    const left = rows.map((r, i) =>
+      `<div class="rrow ${r.passes ? 'pass' : 'cut'}${r.rulesPick ? ' picked' : ''} frag fade" data-f="1" style="--i:${i}">` +
+      `<span class="no">${r.n}</span>` +
+      `<span class="seqwrap"><span class="seq">${letters(r)}</span><span class="strike"></span></span>` +
+      `<span class="why">${r.passes ? '' : esc(r.why)}</span>` +
+      (r.rulesPick ? '<span class="handed">handed over</span>' : '') +
+      `</div>`).join('');
+
+    const right = rows.map((r, i) => {
+      const cls = r.rulesPick ? 'cost' : (ours && r.n === ours.n ? 'gain' : (r.passes ? '' : 'cut'));
+      const tag = r.rulesPick ? 'riskier than average'
+        : (ours && r.n === ours.n ? 'what we keep'
+        : (best && r.n === best.n ? 'safest of the six, and cut' : ''));
+      return `<div class="mrow ${cls} frag fade" data-f="3" style="--i:${i}">` +
+        `<span class="no">${r.n}</span>` +
+        `<span class="track"><i style="width:${pct(r.risk)}%"></i></span>` +
+        `<span class="val">${r.risk.toFixed(2)}</span>` +
+        (tag ? `<span class="mtag">${tag}</span>` : '') +
+        `</div>`;
     }).join('');
+
+    const mean = isNum(C.mean)
+      ? `<span class="meanline frag fade" data-f="3" style="left:${pct(C.mean)}%"><i></i><em>average candidate ${C.mean.toFixed(2)}</em></span>`
+      : '';
+
+    host.innerHTML =
+      `<div class="pan frag fade" data-f="1"><h3>The hand rules<em>a yes or no</em></h3><div class="rows">${left}</div>` +
+      `<p class="pfoot frag fade" data-f="2">the encoder takes the first survivor` +
+      (isNum(C.from) && isNum(C.to) && isNum(C.length) ? `<em>letters ${C.from} to ${C.to} of ${C.length}</em>` : '') +
+      `</p></div>` +
+      `<div class="pan mod frag fade" data-f="3"><h3>Our risk model<em>a number for every candidate</em></h3>` +
+      `<div class="rows bars">${mean}${right}</div>` +
+      `<p class="pfoot frag fade" data-f="3">predicted chance the whole strand fails on this channel</p></div>`;
+
+    if (foot) {
+      foot.innerHTML =
+        (handed ? `<span class="pill2 cost frag fade" data-f="4"><span>The rules hand over <b>${handed.risk.toFixed(2)}</b>${isNum(C.mean) ? `, above the average candidate at ${C.mean.toFixed(2)}` : ''}</span></span>` : '') +
+        (ours ? `<span class="pill2 gain frag fade" data-f="4"><span>We keep <b>${ours.risk.toFixed(2)}</b>, the safest strand the rules allow</span></span>` : '');
+    }
   }
 
   /* ------------------------------------------------------------ slide 5: rule audit */
@@ -348,31 +354,24 @@
 
   // One canvas, 1680 x 700. Builds: 1 the storage path, 2 the polisher, 3 the loop, 4 evaluation
   // and the firewall. "learned" boxes are the two learned models, everything else is classic code.
+  // One canvas, 1680 x 700. Five boxes, four builds: 1 the storage path, 2 the polisher,
+  // 3 the loop that feeds the encoder, 4 the firewall. The arrows carry the argument, so the
+  // boxes carry a title and almost nothing else.
   const ARCH_BOXES = [
-    { f: 1, x: 0, y: 40, w: 290, h: 232, title: 'Channel profile',
-      text: 'Describes one situation as JSON: error rates, the 5-mer context table, dropout, coverage and the read budget, all fit on real reads.' },
-    { f: 1, x: 317, y: 40, w: 310, h: 232, title: 'Encoder',
-      text: 'A Fountain code that tries 8 to 32 candidate strands per slot, checksums each one, and keeps whichever the scorer rates safest.' },
-    { f: 1, x: 654, y: 40, w: 300, h: 232, title: 'Simulator A',
-      text: 'Turns strands into noisy read clusters: dropouts, uneven coverage, per-read quality, shared errors and 5-mer context effects.' },
-    { f: 1, x: 981, y: 12, w: 340, h: 342, title: 'Decoder chain', subs: [
-      { f: 1, title: 'Baseline', text: 'Aligns every read to a draft and votes a consensus, letter by letter.' },
-      { f: 2, learned: true, title: 'Polisher', text: 'A dilated 1D CNN corrects the draft, letter by letter: keep, substitute, delete or insert.' },
+    { f: 1, x: 0, y: 150, w: 380, h: 170, title: 'Encoder',
+      text: '8 to 32 candidates per slot' },
+    { f: 1, x: 450, y: 150, w: 340, h: 170, title: 'Simulator A',
+      text: 'the channel, fit on real reads' },
+    { f: 1, x: 860, y: 115, w: 420, h: 240, title: 'Decoder', subs: [
+      { f: 1, title: 'Majority vote' },
+      { f: 2, learned: true, title: 'Polisher', text: '0.8M parameters' },
     ] },
-    { f: 1, x: 1348, y: 40, w: 330, h: 232, title: 'Recover',
-      text: 'A failed checksum turns a wrong strand into a missing one, so the Fountain code can rebuild the file from whatever survives.' },
-    { f: 4, x: 654, y: 328, w: 300, h: 182, firewall: true, title: 'Simulator B',
-      text: 'A structurally different simulator, never optimized on, used only to check that a gain survives.' },
-    { f: 4, x: 1348, y: 346, w: 330, h: 232, title: 'Evaluation',
-      text: 'Runs 300 held-out trials, finds the fewest reads at the recovery target, and writes the result file this deck and the dashboard read.' },
-    { f: 3, x: 1020, y: 524, w: 300, h: 130, title: 'Freeze the decoder', n: '1',
-      text: 'Adapt the decoder to this channel, then freeze it.' },
-    { f: 3, x: 680, y: 524, w: 300, h: 130, title: 'Label strands', n: '2',
-      text: 'Simulate each strand 32 times to see where it fails.' },
-    { f: 3, x: 340, y: 524, w: 300, h: 130, learned: true, title: 'Train the risk model', n: '3',
-      text: 'Learn to predict each strand\u2019s failure rate here.' },
-    { f: 3, x: 0, y: 524, w: 300, h: 130, title: 'Search settings', n: '4',
-      text: 'Search for the cheapest settings that hit the target.' },
+    { f: 1, x: 1350, y: 150, w: 330, h: 170, title: 'Rebuild and score',
+      text: '300 held-out trials' },
+    { f: 3, x: 0, y: 470, w: 380, h: 150, learned: true, title: 'Risk model',
+      text: '63k parameters' },
+    { f: 4, x: 450, y: 0, w: 340, h: 100, firewall: true, title: 'Simulator B',
+      text: 'different mechanisms' },
   ];
 
   function arrow(x1, y1, x2, y2) {
@@ -538,42 +537,36 @@
     const box = (b) => {
       const cls = ['abox', b.learned ? 'learned' : '', b.firewall ? 'firewall' : '', 'frag', 'fade'].filter(Boolean).join(' ');
       const inner = b.subs
-        ? b.subs.map((s) => `<div class="sub ${s.learned ? 'learned frag fade' : ''}"${s.learned ? ` data-f="${s.f}"` : ''}><b>${s.title}</b><p>${s.text}</p>${s.learned ? '<span class="tagl">learned</span>' : ''}</div>`).join('')
+        ? b.subs.map((s) =>
+            `<div class="sub ${s.learned ? 'learned frag fade' : ''}"${s.learned ? ` data-f="${s.f}"` : ''}>` +
+            `<b>${s.title}</b>${s.text ? `<p>${s.text}</p>` : ''}${s.learned ? '<span class="tagl">learned</span>' : ''}</div>`).join('')
         : `<p>${b.text || ''}</p>`;
       return (
         `<div class="${cls}" data-f="${b.f}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px">` +
-        `<h4>${b.n ? `<span class="n">${b.n}</span>` : ''}${b.title}</h4>${inner}` +
-        (b.foot ? `<div class="afoot">${b.foot}</div>` : '') +
+        `<h4>${b.title}</h4>${inner}` +
         (b.learned && !b.subs ? '<span class="tagl">learned</span>' : '') +
         `</div>`
       );
     };
     const wire = (f, d, cls) => `<path class="frag fade ${cls || ''}" data-f="${f}" d="${d}"/>`;
-    const label = (f, x, y, text, anchor) =>
-      `<text class="frag fade" data-f="${f}" x="${x}" y="${y}"${anchor ? ` text-anchor="${anchor}"` : ''}>${text}</text>`;
+    const label = (f, x, y, text, anchor, cls) =>
+      `<text class="frag fade ${cls || ''}" data-f="${f}" x="${x}" y="${y}"${anchor ? ` text-anchor="${anchor}"` : ''}>${text}</text>`;
 
     const wires =
-      // the storage path
-      wire(1, `M292 156 H309 ${arrow(292, 156, 313, 156)}`) +
-      wire(1, `M150 34 C150 12, 804 12, 804 34 ${arrow(804, 20, 804, 34)}`) +
-      label(1, 477, 2, 'the channel, fit on real reads', 'middle') +
-      wire(1, `M631 156 H646 ${arrow(631, 156, 650, 156)}`) +
-      wire(1, `M958 156 H973 ${arrow(958, 156, 977, 156)}`) +
-      wire(1, `M1325 156 H1340 ${arrow(1325, 156, 1344, 156)}`) +
-      // the loop
-      wire(3, `M1170 358 V514 ${arrow(1170, 490, 1170, 518)}`) +
-      label(3, 1156, 440, 'decoder failures', 'end') +
-      wire(3, `M1014 589 H994 ${arrow(1014, 589, 986, 589)}`) +
-      wire(3, `M674 589 H654 ${arrow(674, 589, 646, 589)}`) +
-      wire(3, `M334 589 H314 ${arrow(334, 589, 306, 589)}`) +
-      wire(3, `M150 520 V320 H466 V286 ${arrow(466, 316, 466, 280)}`, 'learnedwire') +
-      label(3, 168, 302, 'the risk model feeds the scorer') +
-      label(3, 680, 690, 'at most 3 rounds', 'middle') +
-      // evaluation and the firewall
-      wire(4, `M804 276 V324 ${arrow(804, 300, 804, 328)}`, 'dash') +
-      label(4, 818, 306, 'firewall') +
-      wire(4, `M1513 276 V342 ${arrow(1513, 318, 1513, 346)}`) +
-      label(4, 1527, 322, 'every codec, every claim');
+      // 1. the storage path, left to right at the row's mid line
+      wire(1, `M380 235 H431 ${arrow(380, 235, 435, 235)}`) +
+      wire(1, `M790 235 H841 ${arrow(790, 235, 845, 235)}`) +
+      wire(1, `M1280 235 H1331 ${arrow(1280, 235, 1335, 235)}`) +
+      // 3. the loop: the decoder's failures train the risk model, the risk model ranks candidates
+      wire(3, `M1070 355 V545 H396 ${arrow(410, 545, 392, 545)}`) +
+      label(3, 740, 528, 'where the decoder fails', 'middle') +
+      wire(3, `M190 470 V340 ${arrow(190, 360, 190, 336)}`, 'learnedwire') +
+      label(3, 212, 408, 'ranks every candidate', null, 'key') +
+      // 4. the firewall: a second channel that only ever checks a result
+      wire(4, `M415 235 V50 H434 ${arrow(415, 50, 438, 50)}`, 'dash') +
+      label(4, 400, 132, 'firewall', 'end') +
+      wire(4, `M790 50 H1070 V97 ${arrow(1070, 80, 1070, 101)}`, 'dash') +
+      label(4, 1096, 44, 'checks a result, never tunes one');
 
     host.innerHTML =
       `<div class="legend"><span><i></i>classic code</span><span><i class="learned"></i>learned</span><span><i class="firewall"></i>firewall only</span></div>` +
@@ -667,40 +660,18 @@
     }
   }
 
-  /* ------------------------------------------------------------ slide 10: what the plot bought */
-
-  function buildParetoReading(R) {
-    const host = document.getElementById('pareto-read');
-    if (!host) return;
-    const ch = get(R, 'pareto.channel') || 'nanopore';
-    const P = get(R, `pareto.${ch}`) || {};
-    const rounds = (Array.isArray(P.rounds) ? P.rounds : []).filter(validPt);
-    const last = rounds[rounds.length - 1];
-    const md = P.matchedDefault;
-    let out = '';
-    if (validPt(md) && last) {
-      const d = md.reads - last.reads;
-      out += `<span class="pill2 gain frag fade" data-f="4">${icon('check')}Same bits per base: <b>${fmt.reads(md.reads)} → ${fmt.reads(last.reads)}</b> reads` +
-        `${d > 0 ? '' : ', no measurable gain'}</span>`;
-    } else {
-      out += `<span class="pill2 tbd frag fade" data-f="4">${ph('matched-density comparison')}</span>`;
-    }
-    out += `<span class="pill2 tbd frag fade" data-f="4">${icon('none')}Most of the drop is redundancy, not the rules</span>`;
-    host.innerHTML = out;
-  }
-
   /* ------------------------------------------------------------ slide 12: against published decoders
    * docs/COMPARISON.md: TReconLM (TMLR 2025) Table 7, and our held-out split.
    */
 
   const FIELD_READS = [2, 4, 6, 10];
+  // Their released fine-tuned checkpoint, run on our held-out clusters under our protocol,
+  // scored on the 415 clusters that are outside their own fine-tuning split. docs/NUMBERS.md 6a.
   const FIELD = [
-    { name: 'TReconLM', v: [10.9, 76.8, 91.2, 98.6], cls: 'ahead' },
-    { name: 'Erbgut', v: [7.0, 66.1, 88.8, 96.2], cls: 'ours' },
-    { name: 'DNAformer', v: [3.0, 65.9, 88.3, 95.7], cls: 'peer' },
-    { name: 'ITR', v: [4.9, 57.8, 78.1, 89.0], cls: 'other' },
-    { name: 'Majority vote', v: [4.8, 39.2, 68.0, 85.3], cls: 'other' },
-    { name: 'Trellis BMA', v: [0.1, 39.1, 64.6, 82.9], cls: 'other' },
+    { name: 'TReconLM, fine-tuned', v: [13.0, 75.7, 90.4, 96.4], cls: 'ahead' },
+    { name: 'Erbgut', v: [7.2, 67.0, 88.4, 95.4], cls: 'ours' },
+    { name: 'TReconLM, pretrained', v: [4.3, 58.1, 80.0, 89.4], cls: 'peer' },
+    { name: 'Majority vote', v: [4.8, 40.0, 69.9, 84.8], cls: 'other' },
   ];
 
   function buildFieldChart() {
@@ -751,53 +722,12 @@
       `<div class="cbar"><i class="ours" style="width:${oursW}%"></i><span class="ours">${ours}</span></div>` +
       `<div class="cbar"><i class="theirs" style="width:100%"></i><span>${theirs}</span></div></div>`;
     cost.innerHTML =
-      `<h3 class="frag fade" data-f="4">What it cost to get level</h3>` +
-      row('Parameters', '125x smaller', '0.8M', '100M', 0.8) +
-      row('Training examples', '2,400x fewer', '577k', '1.4B', 0.04) +
-      `<div class="costrow frag fade" data-f="4"><div class="clab">Training time<em>13 minutes</em></div>` +
-      `<div class="cbar"><span class="ours">one machine, once</span></div>` +
-      `<div class="cbar"><span>180 epochs on an A40</span></div></div>`;
-  }
-
-  /* ------------------------------------------------------------ slide 13: on the microcontroller
-   * hardware/esp32_ticker/README.md, tools/verify_polish.py --clusters 300.
-   */
-
-  const DEV_BARS = [
-    ['Polisher, float, laptop', 230, 'peer'],
-    ['Polisher, int8, on the chip', 229, 'ours'],
-    ['Classic majority vote', 211, 'other'],
-  ];
-
-  function buildDevice() {
-    const host = document.getElementById('devchart');
-    if (host) {
-      const W = 940;
-      const H = 330;
-      const m = { l: 400, r: 120, t: 14 };
-      const pw = W - m.l - m.r;
-      const X = (v) => m.l + (v / 300) * pw;
-      let g = '';
-      [0, 100, 200, 300].forEach((t) => {
-        g += `<line class="grid" x1="${X(t)}" x2="${X(t)}" y1="${m.t}" y2="${m.t + 3 * 76}"/>` +
-          `<text class="tick" x="${X(t)}" y="${m.t + 3 * 76 + 32}" text-anchor="middle">${t}</text>`;
-      });
-      g += `<text class="tick" x="${X(150)}" y="${m.t + 3 * 76 + 62}" text-anchor="middle">exact strands out of 300 real clusters</text>`;
-      DEV_BARS.forEach((b, i) => {
-        const y = m.t + i * 76;
-        g += `<g class="frag fade" data-f="2" style="transition-delay:${i * 90}ms">` +
-          `<text class="aucname" x="${m.l - 22}" y="${y + 44}" text-anchor="end">${b[0]}</text>` +
-          `<rect class="devbar ${b[2]}" x="${X(0)}" y="${y + 14}" width="${Math.max(3, X(b[1]) - X(0))}" height="44" rx="9"/>` +
-          `<text class="aucval ${b[2] === 'ours' ? 'ours' : ''}" x="${X(b[1]) + 16}" y="${y + 45}">${b[1]}</text></g>`;
-      });
-      host.innerHTML = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Exact strands of 300 real clusters, on device and on a laptop">${g}</svg>`;
-    }
-    const facts = document.getElementById('devfacts');
-    if (!facts) return;
-    facts.innerHTML =
-      `<div class="dcard frag fade" data-f="1"><div class="n">2 of 2</div><div class="d">learned models on the chip: 0.8M polisher in int8, 63k risk model in float32</div></div>` +
-      `<div class="dcard frag fade" data-f="2"><div class="n">1<br>strand</div><div class="d">is all that quantizing costs, 229 on device against 230 in float</div></div>` +
-      `<div class="dcard accent frag fade" data-f="3"><div class="n">0</div><div class="d">published systems here run on a microcontroller. No laptop, no network</div></div>`;
+      `<h3 class="frag fade" data-f="4">What that costs them</h3>` +
+      row('Parameters', '48x fewer', '0.8M', '38.5M', 2.1) +
+      row('Seconds for 2,000 clusters', '100x faster', '4.6 s', '463 s', 1.0) +
+      `<div class="costrow frag fade" data-f="3"><div class="clab">Against their pretrained model<em>we win</em></div>` +
+      `<div class="cbar"><span class="ours">88.4% at six reads</span></div>` +
+      `<div class="cbar"><span>80.0% at six reads</span></div></div>`;
   }
 
   /* ------------------------------------------------------------ slide 14: the verdicts nobody else measures */
@@ -819,159 +749,6 @@
       });
     });
     host.innerHTML = html;
-  }
-
-  /* ------------------------------------------------------------ slide 7: cycle and Pareto */
-
-  function buildCycle() {
-    const host = document.getElementById('cycle');
-    if (!host) return;
-    const nodes = [
-      ['Adapt decoder', 'then freeze it'],
-      ['Label strands', 'simulate each 32 times'],
-      ['Train risk model', 'on those failure rates'],
-      ['Search settings', 'rules, redundancy, threshold'],
-      ['Re-adapt decoder', 'to the new strands'],
-    ];
-    const cx = 380;
-    const cy = 330;
-    const r = 250;
-    let html =
-      `<svg class="ring" width="760" height="660" viewBox="0 0 760 660" aria-hidden="true">` +
-      `<circle class="track" cx="${cx}" cy="${cy}" r="${r}"/>` +
-      `<circle class="lit" cx="${cx}" cy="${cy}" r="${r}" transform="rotate(-90 ${cx} ${cy})"/></svg>` +
-      `<div class="orbit"><i></i></div>`;
-    nodes.forEach((n, i) => {
-      const a = ((-90 + i * 72) * Math.PI) / 180;
-      const x = cx + r * Math.cos(a);
-      const y = cy + r * Math.sin(a);
-      html += `<div class="node" style="--i:${i};left:${x.toFixed(0)}px;top:${y.toFixed(0)}px"><span class="stepno">${i + 1}</span><br>${n[0]}<small>${n[1]}</small></div>`;
-    });
-    html += `<div class="center"><b>Tuned codec</b>rules, redundancy, risk model and decoder, for one channel</div>`;
-    host.innerHTML = html;
-  }
-
-  function niceStep(span, target) {
-    const raw = span / Math.max(1, target);
-    const p = Math.pow(10, Math.floor(Math.log10(raw)));
-    const n = raw / p;
-    return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p;
-  }
-  function ticks(lo, hi, target) {
-    const step = niceStep(hi - lo, target);
-    const out = [];
-    for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
-    return out;
-  }
-  const validPt = (p) => p && isNum(p.bpb) && isNum(p.reads);
-
-  function buildPareto(R) {
-    const host = document.getElementById('pareto');
-    if (!host) return;
-    const chName = get(R, 'pareto.channel') || 'nanopore';
-    const P = get(R, `pareto.${chName}`) || {};
-    const def = P.default;
-    const rounds = (Array.isArray(P.rounds) ? P.rounds : []).filter(validPt);
-    const matched = P.matchedDefault;
-    const hasData = validPt(def) && rounds.length > 0;
-
-    const W = 880;
-    const H = 560;
-    const m = { l: 104, r: 36, t: 64, b: 86 };
-    const pw = W - m.l - m.r;
-    const phh = H - m.t - m.b;
-    let body = '';
-
-    const header =
-      `<text x="${m.l}" y="30" class="alabel" style="font-size:28px">${esc(CH[chName] || chName)}</text>` +
-      `<text x="${W - m.r}" y="30" class="note" text-anchor="end">down: fewer reads, right: more bits per base</text>`;
-    const axes =
-      `<g class="axes">` +
-      `<path class="axis" d="M${m.l} ${m.t}V${m.t + phh}H${m.l + pw}"/>` +
-      `<text class="alabel" x="${m.l + pw / 2}" y="${H - 24}" text-anchor="middle">Bits per base</text>` +
-      `<text class="alabel" transform="translate(30 ${m.t + phh / 2}) rotate(-90)" text-anchor="middle">Reads per strand needed</text>` +
-      `</g>`;
-    const bx = m.l + pw - 24;
-    const by = m.t + phh - 24;
-    const better =
-      `<g class="better"><path d="M${bx - 64} ${by - 64}L${bx - 6} ${by - 6}M${bx - 32} ${by - 4}H${bx - 4}V${by - 32}" fill="none" stroke="var(--sa-gain)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>` +
-      `<text x="${bx - 76}" y="${by - 30}" text-anchor="end" style="fill:var(--sa-gain);font-weight:600;font-size:24px">better</text></g>`;
-
-    if (hasData) {
-      // room on the right for the tuned label and the reads-saved note, room on top for labels
-      const pts = [def].concat(rounds).concat(validPt(matched) ? [matched] : []);
-      const xmin = Math.min(...pts.map((p) => p.bpb));
-      const xmax = Math.max(...pts.map((p) => p.bpb));
-      const xspan = Math.max(xmax - xmin, 0.05);
-      const x0 = xmin - xspan * 0.35;
-      const x1 = xmax + xspan * 0.95;
-      const ymin = Math.min(...pts.map((p) => p.reads));
-      const ymax = Math.max(...pts.map((p) => p.reads));
-      const yspan = Math.max(ymax - ymin, 2);
-      const y0 = Math.max(0, Math.floor(ymin - yspan * 0.7));
-      const y1 = ymax + yspan * 0.6;
-      const X = (v) => m.l + ((v - x0) / (x1 - x0)) * pw;
-      const Y = (v) => m.t + phh - ((v - y0) / (y1 - y0)) * phh;
-
-      let grid = '';
-      ticks(x0, x1, 5).forEach((t) => {
-        grid += `<line class="grid" x1="${X(t)}" x2="${X(t)}" y1="${m.t}" y2="${m.t + phh}"/><text class="tick" x="${X(t)}" y="${m.t + phh + 32}" text-anchor="middle">${t.toFixed(2)}</text>`;
-      });
-      ticks(y0, y1, 5).forEach((t) => {
-        grid += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${Y(t)}" y2="${Y(t)}"/><text class="tick" x="${m.l - 14}" y="${Y(t) + 7}" text-anchor="end">${fmt.reads(t)}</text>`;
-      });
-
-      const path = [def].concat(rounds);
-      let len = 0;
-      for (let i = 1; i < path.length; i++) len += Math.hypot(X(path[i].bpb) - X(path[i - 1].bpb), Y(path[i].reads) - Y(path[i - 1].reads));
-      const d = path.map((p, i) => `${i ? 'L' : 'M'}${X(p.bpb).toFixed(1)} ${Y(p.reads).toFixed(1)}`).join('');
-      body += `<g class="axes">${grid}</g>`;
-      body += `<path class="trail" d="${d}" style="--len:${Math.ceil(len) + 2}"/>`;
-
-      body +=
-        `<circle class="pt default" cx="${X(def.bpb)}" cy="${Y(def.reads)}" r="15" fill="var(--sa-muted)"/>` +
-        `<text class="ptlab default" x="${X(def.bpb) - 30}" y="${Y(def.reads) - 56}" style="font-size:24px;font-weight:600;fill:var(--sa-ink)">Default</text>` +
-        `<text class="ptlab default" x="${X(def.bpb) - 30}" y="${Y(def.reads) - 28}" style="font-size:20px">hand rules, same decoder</text>`;
-
-      const last = rounds[rounds.length - 1];
-      rounds.forEach((p, i) => {
-        const isLast = i === rounds.length - 1;
-        body += `<circle class="pt round" style="--i:${i}" cx="${X(p.bpb)}" cy="${Y(p.reads)}" r="${isLast ? 15 : 11}" fill="var(--sa-audit)"/>`;
-        if (isLast) {
-          body += `<text class="ptlab round" style="--i:${i};font-size:24px;font-weight:600;fill:var(--sa-audit)" x="${X(p.bpb) + 26}" y="${Y(p.reads) + 9}">Tuned${p.label ? ', ' + esc(p.label) : ''}</text>`;
-        } else if (i === 0) {
-          body += `<text class="ptlab round" style="--i:${i};font-size:19px" x="${X(p.bpb) - 18}" y="${Y(p.reads) + 36}" text-anchor="end">${esc(p.label || 'round ' + (i + 1))}</text>`;
-        }
-      });
-
-      if (validPt(matched)) {
-        const mx = X(matched.bpb);
-        const my = Y(matched.reads);
-        const ly = Y(last.reads);
-        const delta = matched.reads - last.reads;
-        const word = delta > 0 ? [`${fmt.reads(delta)} fewer reads`, 'per strand'] : delta < 0 ? [`${fmt.reads(-delta)} more reads`, 'per strand'] : ['same reads', 'per strand'];
-        body +=
-          `<circle class="pt matched" cx="${mx}" cy="${my}" r="15" fill="none" stroke="var(--sa-ink)" stroke-width="3.5" stroke-dasharray="6 5"/>` +
-          `<text class="ptlab matched" x="${mx}" y="${my - 78}" text-anchor="middle" style="font-size:21px;font-weight:600;fill:var(--sa-ink)">Default rules at the</text>` +
-          `<text class="ptlab matched" x="${mx}" y="${my - 52}" text-anchor="middle" style="font-size:21px;font-weight:600;fill:var(--sa-ink)">same bits per base</text>`;
-        const dx = mx + 44;
-        const txt = (y) =>
-          `<text x="${dx + 20}" y="${y}" style="font-size:25px;font-weight:600;fill:var(--sa-audit)">${word[0]}</text>` +
-          `<text x="${dx + 20}" y="${y + 30}" style="font-size:25px;font-weight:600;fill:var(--sa-audit)">${word[1]}</text>`;
-        if (Math.abs(my - ly) > 44) {
-          const top = Math.min(my, ly) + 18;
-          const bot = Math.max(my, ly) - 18;
-          body +=
-            `<g class="dim"><path d="M${dx} ${top}V${bot}M${dx - 12} ${top}H${dx + 12}M${dx - 12} ${bot}H${dx + 12}" stroke="var(--sa-audit)" stroke-width="4" stroke-linecap="round" fill="none"/>` +
-            `${txt((top + bot) / 2 - 6)}</g>`;
-        }
-      }
-      host.innerHTML = `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pareto plot, ${esc(CH[chName] || chName)}">${header}${axes}${body}${better}</svg>`;
-    } else {
-      host.innerHTML =
-        `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${header}${axes}${better}</svg>` +
-        `<div class="pending-box">[RESULT: Pareto points for ${esc(CH[chName] || chName)}: default, each tuning round, and the default rules at the same bits per base]<small>Results pending. Fills from results.js, pareto.${esc(chName)}</small></div>`;
-    }
   }
 
   /* ------------------------------------------------------------ slide 8: ablation and crossover */
@@ -1174,14 +951,6 @@
       if (allVerdictsKnown(R)) return 'Same answer on both channels, and now we know';
       return ph('"same rule, different answer" or "same answer on both"');
     },
-    pareto: (R) => {
-      const ch = get(R, 'pareto.channel') || 'nanopore';
-      const r = matchedFor(R, ch);
-      if (!r) return ph(`reads per strand at matched density, default vs tuned, ${CH[ch] || ch}`);
-      if (r.tuned < r.def) return `at ${val(r.bpb, 'bpb')} bits per base, the default rules need ${val(r.def)} reads per strand, the tuned codec ${val(r.tuned)}`;
-      if (r.tuned === r.def) return `at ${val(r.bpb, 'bpb')} bits per base, both need ${val(r.def)} reads per strand. On this channel the tuning doesn't buy reads`;
-      return `at ${val(r.bpb, 'bpb')} bits per base, the tuned codec needs ${val(r.tuned)} reads per strand against ${val(r.def)} for the default rules. We report that as it is`;
-    },
     headlineNanopore: (R) => {
       const r = matchedFor(R, 'nanopore');
       return r ? `${val(r.def)} reads per strand for the default rules, ${val(r.tuned)} for the tuned codec, at ${val(r.bpb, 'bpb')} bits per base` : ph('reads per strand, default vs tuned, Nanopore at matched density');
@@ -1243,21 +1012,17 @@
       });
       expandSeqs(document);
       buildRibbon();
-      buildCandidates();
+      buildRuleCase(R);
       buildAudit(R);
       buildTier2();
       buildArchitecture();
       buildLearned();
       buildTwoModels();
-      buildCycle();
       buildTier2Curve(R);
       buildFieldChart();
-      buildDevice();
-      buildPareto(R);
       buildCrossover(R);
       buildCalibration();
       buildFirewall(R);
-      buildParetoReading(R);
       buildVerdicts(R);
       buildResults(R);
       renderRes(R);

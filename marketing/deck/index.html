@@ -345,57 +345,48 @@
 </section>
 
 <!-- ================================================================ 7. Where rules come in -->
-<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="108-121"
-  data-labels="Several candidates per slot|Rules reject some|The risk model scores what's left, and picks the safest">
+<section class="slide" id="s-rules" data-title="Where the rules come in" data-plan="108-121" data-steps="4"
+  data-labels="One slot, six candidates|The hand rules cross four out|Our model scores all six|What each one hands over">
   <p class="kicker">Where the rules come in</p>
-  <h2 class="title sm">The encoder picks one of several candidate strands</h2>
-  <div class="layout">
-    <div>
-      <div class="src"><span class="chip">slot 17</span> 8 seeds &middot; 20 letters</div>
-      <div class="cands" id="cands"></div>
-    </div>
-    <div class="side">
-      <div class="box card frag" data-f="3">
-        <h4>The risk model picks the safest</h4>
-      </div>
-    </div>
-  </div>
+  <h2 class="title sm">The rules give a verdict. The model gives a number.</h2>
+  <div class="rvm" id="rvm"></div>
+  <div class="footline" id="rvmfoot"></div>
   <aside class="notes">
-    <p>So where do the rules come in?</p>
-    <p><i class="cue"></i> For every slot, the encoder generates several candidate strands. Same data, different seeds.</p>
-    <p><i class="cue"></i> The hard rules throw some out: this one has a run of five, this one is too low in GC.</p>
-    <p><i class="cue"></i> By default, any candidate that passes is as good as any other. But watch this one: it passes every hand rule, and it's still carrying a real deletion hot spot from real Nanopore reads.</p>
-    <p><i class="cue"></i> That's exactly what the risk model is for. It scores every survivor, catches the one the hand rules missed, and keeps the one that's actually safest.</p>
+    <p>So where do the rules come in? The encoder does not write one strand per slot. It builds several candidates for the same data and keeps one. This is a real slot from the real encoder.</p>
+    <p><i class="cue"></i> Six candidates. Same data, different seeds, so the letters are different every time.</p>
+    <p><i class="cue"></i> The hand rules are a yes or no. Four of these are crossed out for a run of four or five identical letters, and the encoder takes the first survivor. That is the whole decision. A rule cannot tell you that one survivor is more dangerous than another, because it does not have a number.</p>
+    <p><i class="cue"></i> Our model gives every candidate a number: its predicted chance of failing on this channel, learned from where the decoder actually fails. Now look at the same six. The strand the rules handed over scores 0.62, well above the average candidate at 0.51. The one we keep scores 0.52.</p>
+    <p><i class="cue"></i> And the sharpest part is the one the rules threw away: 0.45, the safest strand in the slot, rejected for a run of four. The hard rule still vetoes it, and whether that veto is worth its price is exactly what the audit measures per channel rather than assumes. Our own rerun says the run rule earns its place on Nanopore, so it stays.</p>
+    <p class="aside">Provenance, if asked: the candidates come from the encoder's own seed schedule on the real test file with the run settings, and the scores are the trained Nanopore risk model's. The search that found this slot is committed as scripts/rule_vs_model_case.py, and its output is in results/rule_vs_model_case.json. Nothing on this slide is hand-written. The letters shown are bases 17 to 56 of a 110 base strand, the first 40 after the seed; each score is the model's score for the whole strand.</p>
   </aside>
 </section>
 
 <!-- ================================================================ 8. What we actually built -->
 <section class="slide archlike" id="a-arch" data-title="What we actually built" data-plan="121-145"
-  data-labels="The storage path|The learned polisher|The risk model and the loop|Evaluation and the firewall">
-  <p class="kicker">In one diagram</p>
+  data-labels="The storage path|The learned polisher|The loop|The firewall">
+  <p class="kicker">One diagram</p>
   <h2 class="title sm">What we actually built</h2>
   <div class="arch" id="arch"></div>
   <aside class="notes">
-    <p>Zoom out for a second: here is the whole system in one diagram, before we walk through the pieces.</p>
-    <p><i class="cue"></i> The storage path. A channel profile describes one situation as JSON: error rates, the 5-letter context table, dropout, the read budget, costs. It is fit on real reads. The encoder is a Fountain code: for every slot it makes 8 to 32 candidate strands, puts a checksum in each, and a scorer keeps one. Simulator A plays the lab: dropouts, uneven coverage, per-read quality, errors every read shares, and context errors. The decoder chain gets the noisy reads back. Then a checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file.</p>
-    <p><i class="cue"></i> The one learned part in that path is the polisher. The classic baseline aligns the reads and votes a draft; a small dilated CNN, about 0.8 million parameters, looks at 17 vote features per position and says keep, substitute, delete, or insert.</p>
-    <p><i class="cue"></i> Around it runs the loop. Freeze the decoder, label strands by simulating each one 32 times to see where the decoder fails, train the risk model on those labels, search the settings, and hand the risk model back to the encoder so it keeps the safest candidate. At most three rounds.</p>
-    <p><i class="cue"></i> Everything is judged by one evaluation: 300 held-out trials, the fewest reads per strand at the recovery target, written to a result file that the dashboard, this deck and the demo all read. And Simulator B sits outside the loop, built from different mechanisms, only to check that a gain survives.</p>
-    <p class="aside">Indigo is learned, grey is classic code. Two learned models in the whole system. The rest of the deck walks through these pieces one at a time.</p>
+    <p>The whole system on one screen. Five boxes, and the arrows are the part worth watching.</p>
+    <p><i class="cue"></i> The storage path, left to right. The encoder is a Fountain code: for every slot it builds 8 to 32 candidate strands, puts a checksum in each, and keeps one. Simulator A plays the lab, and it is fit on real published reads: dropouts, uneven coverage, per-read quality, errors every read shares, context effects. The decoder gets the noisy clusters back. Then a failed checksum turns a wrong strand into a missing one, and the Fountain code rebuilds the file. Every number in this deck is 300 held-out trials of that path.</p>
+    <p><i class="cue"></i> One learned part in the path itself. The classic step aligns the reads and votes a draft, letter by letter. On top of it sits a dilated convolutional network of about 0.8 million parameters that reads 17 vote features per position and says keep, substitute, delete or insert.</p>
+    <p><i class="cue"></i> Now the arrow that makes this a loop rather than a pipeline. We freeze the decoder, simulate each strand 32 times to see where that decoder actually fails, and train a 63 thousand parameter risk model on those failures. That model goes back into the encoder and ranks the candidates before anything is written. The codec is shaped by the decoder it will be read with, and that loop runs at most three rounds.</p>
+    <p><i class="cue"></i> And the dashed lane is the firewall. Simulator B is a second channel built from different mechanisms, with its context table from a different dataset. Nothing is ever tuned on it. It only ever checks a result, which is why a gain that survives it is worth quoting.</p>
+    <p class="aside">Cyan is learned, grey is classic code. Two learned models in the whole system, 0.8 million and 63 thousand parameters. If asked about the channel profile: it is a JSON file per situation, error rates, the 5-letter context table, dropout, coverage and the read budget, fit on real reads.</p>
   </aside>
 </section>
 
 <!-- ================================================================ 9. Tier 2, isolated -->
 <section class="slide" id="s-tier2" data-title="Tier 2, isolated" data-plan="145-168" data-steps="4"
-  data-labels="Everything held fixed|Ranked by the hand rules|Ranked by the learned model|Reproduced with the learned decoder">
+  data-labels="The setup|Ranked by the hand rules|Ranked by the learned model|Reproduced with the learned decoder">
   <p class="kicker">Tier 2 <span class="tag">learned selection</span></p>
   <h2 class="title sm">Same codec. Same reads. Only the scorer changes.</h2>
-  <div class="t2chips" id="t2chips"></div>
   <div class="t2plot" id="t2plot"></div>
   <div class="footline" id="t2foot"></div>
   <aside class="notes">
     <p>This is the cleanest evidence in the project, so take it slowly.</p>
-    <p><i class="cue"></i> Everything is held fixed. Same codec, same redundancy, same strand length, same hard rules, the same 32 candidates per slot, the same decoder, the same seeds, the same file. One thing changes: which model ranks those candidates.</p>
+    <p><i class="cue"></i> Everything is held fixed: same codec, same redundancy of 1.6, same strand length of 140, the same hard rules, the same 32 candidates per slot, the same decoder, the same held-out seeds and the same 20 KB file. One thing changes, and it is which model ranks those candidates.</p>
     <p><i class="cue"></i> Rank them with the hand rules, and at four and a half reads per strand the file comes back in 27% of 300 trials.</p>
     <p><i class="cue"></i> Rank them with the model that learned from decoder failures, and it comes back 98.3% of the time. Seventy-one points, at a standard error of 2.7. And choosing among candidates is free: no extra strands, no extra reads, no density.</p>
     <p><i class="cue"></i> We then repeated the whole thing with the learned decoder, which is the harder test because a better decoder repairs more of what the model steers around. Strand failures still fall by 2.8 points, on our simulator and on the firewall simulator.</p>
@@ -403,27 +394,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 10. The loop -->
-<section class="slide" id="s-loop" data-title="The loop" data-plan="168-186" data-steps="4"
-  data-labels="Alternate and freeze|The default codec|Every round of tuning|What it actually bought">
-  <p class="kicker">The loop</p>
-  <h2 class="title sm">Search the settings, then judge them on one plot</h2>
-  <div class="layout">
-    <div class="cycle" id="cycle"></div>
-    <div class="plot" id="pareto"></div>
-  </div>
-  <div class="footline" id="pareto-read"></div>
-  <aside class="notes">
-    <p>How the tuned codec is found.</p>
-    <p><i class="cue"></i> Adapt the decoder and freeze it. Label strands by simulating each one 32 times. Train the risk model on those labels. Search the settings. Re-adapt. Nothing ever learns from a moving target.</p>
-    <p><i class="cue"></i> Here is the default codec: hand rules, 30% redundancy. Down is fewer reads, right is more bits per base.</p>
-    <p><i class="cue"></i> And every round of tuning, moving down and to the left.</p>
-    <p><i class="cue"></i> Read it honestly. Most of that drop is bought with density, not with the rules. Hold the density fixed and the tuned codec still wins, but by one step of the coverage grid. The clean tier-2 result is the one on the previous slide.</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 11. Tuned, not just better -->
-<section class="slide" id="s-cross" data-title="Tuned for a channel" data-plan="186-200" data-steps="3"
+<!-- ================================================================ 10. Tuned, not just better -->
+<section class="slide" id="s-cross" data-title="Tuned for a channel" data-plan="168-182" data-steps="3"
   data-labels="Each codec at home|Each codec away|What that proves">
   <p class="kicker">Evidence</p>
   <h2 class="title sm">Tuned for a channel, not just better</h2>
@@ -443,47 +415,29 @@
 </section>
 
 <!-- ================================================================ 12. Against published work -->
-<section class="slide" id="s-field" data-title="Against published decoders" data-plan="200-222" data-steps="4"
-  data-labels="The published field|Where we lose|Level with DNAformer|At a 125th of the size">
-  <p class="kicker">Against published work <span class="tag">same dataset</span></p>
-  <h2 class="title sm">Level with a 100M model. Behind the best one.</h2>
+<section class="slide" id="s-field" data-title="Against published decoders" data-plan="182-204" data-steps="4"
+  data-labels="Their model on our clusters|The two points we are behind|Ahead of their pretrained model|What that costs them">
+  <p class="kicker">Head to head <span class="tag">their model, our clusters, our protocol</span></p>
+  <h2 class="title sm">Two points off the state of the art</h2>
   <div class="fieldgrid">
     <div class="fieldchart" id="fieldchart"></div>
     <div class="costpanel" id="fieldcost"></div>
   </div>
   <div class="footline">
-    <span class="pill2 cost frag fade" data-f="2">TReconLM is ahead of us at every read count. <b>91.2 against 88.8</b> at six</span>
+    <span class="pill2 cost frag fade" data-f="2">Two points off the state of the art, at a 48th of the size: <b>88.4 against 90.4</b> at six reads, 0.8M parameters against 38.5M</span>
   </div>
   <aside class="notes">
-    <p>Where our decoder actually stands, on the same public dataset, against published numbers.</p>
-    <p><i class="cue"></i> Every line here reconstructs strands from noisy reads. The grey ones are the classical algorithms, our own classic baseline among them.</p>
-    <p><i class="cue"></i> Say this plainly: the magenta line is TReconLM, published this year, and it beats us at every read count. 76.8 against 66.1 at four reads, 91.2 against 88.8 at six. It trains on the same split we do, so we have no excuse. It is a better model, trained better, with more compute.</p>
-    <p><i class="cue"></i> The cyan line is a fine-tuned DNAformer, and we sit on top of it at four, six and ten reads, inside our own seed noise.</p>
-    <p><i class="cue"></i> And that is the point of the slide: level with a hundred million parameter model at 0.8 million, 577 thousand training examples against 1.4 billion, and thirteen minutes of training instead of GPU days. We are not the most accurate. We are the cheapest thing here that is this accurate.</p>
-    <p class="aside">Sources if asked: TReconLM, TMLR 2025, Table 7, and the fine-tuned DNAformer from the same table. Ours is our held-out split. The protocols differ in cluster counts and in exact against at-most read counts; the full comparison is written up in the repo.</p>
+    <p>This is not two papers agreeing about how to measure. We ran their released fine-tuned checkpoint on our own held-out clusters, under our protocol.</p>
+    <p><i class="cue"></i> And the first thing we found invalidates the naive version of the test: four fifths of our held-out clusters, 1,585 of 2,000, are inside their own fine-tuning split. So we score only the 415 clusters outside it. Anyone benchmarking against that checkpoint has to check the overlap first.</p>
+    <p><i class="cue"></i> On that fair subset they are ahead, and we say so: 90.4 against our 88.4 at six reads, two points. At two and four reads the gap is larger, six to nine points, and that is where their scale genuinely tells.</p>
+    <p><i class="cue"></i> We are ahead of their pretrained model at every coverage, by three to nine points.</p>
+    <p><i class="cue"></i> And what that costs them: 38.5 million parameters against our 0.8 million, 48 times, and 463 seconds against 4.6 to decode two thousand clusters on the same GPU, about a hundred times. Two points, for a model you could not run anywhere but a GPU.</p>
+    <p class="aside">The 100M model in the earlier framing is DNAformer, not TReconLM. Their checkpoint is 38.5M, measured. If asked about the cross-paper table: it gave 91.2 against 88.8, and this measurement supersedes it because it removes the protocol differences.</p>
   </aside>
 </section>
 
-<!-- ================================================================ 13. On the chip -->
-<section class="slide" id="s-device" data-title="Both models on a microcontroller" data-plan="222-238" data-steps="3"
-  data-labels="Both models on the chip|What quantizing costs|Nothing published runs here">
-  <p class="kicker">Where it runs</p>
-  <h2 class="title sm">The whole codec fits on a microcontroller</h2>
-  <div class="devgrid">
-    <div class="devchart" id="devchart"></div>
-    <div class="devfacts" id="devfacts"></div>
-  </div>
-  <aside class="notes">
-    <p>One more axis, and nobody in that comparison competes on it.</p>
-    <p><i class="cue"></i> Both learned models run on a microcontroller. The polisher quantized to int8, the risk model in float32. No laptop, no network.</p>
-    <p><i class="cue"></i> And it stays accurate there. On 300 real clusters the on-device polisher gets 229 strands exactly right, against 230 for the same model in float on a laptop, and 211 for the classic majority vote. Quantizing costs one strand.</p>
-    <p><i class="cue"></i> No published system in that comparison runs on a chip like this. This is the demo you can hold, running the same decoder that produced every number in the deck.</p>
-    <p class="aside">Numbers are from the deterministic on-device verification in the repo, 300 real clusters, int8 weights with int16 activations.</p>
-  </aside>
-</section>
-
-<!-- ================================================================ 14. The question nobody else answers -->
-<section class="slide" id="s-question" data-title="The question nobody else answers" data-plan="238-254" data-steps="3"
+<!-- ================================================================ 12. The question nobody else answers -->
+<section class="slide" id="s-question" data-title="The question nobody else answers" data-plan="204-220" data-steps="3"
   data-labels="What the field measures|What we measure|The measured verdicts">
   <p class="kicker">Our actual claim</p>
   <h2 class="title sm">The question nobody else answers</h2>
@@ -509,8 +463,8 @@
   </aside>
 </section>
 
-<!-- ================================================================ 15. What we have not shown -->
-<section class="slide" id="s-honest" data-title="What we have not shown" data-plan="254-274" data-steps="4"
+<!-- ================================================================ 13. What we have not shown -->
+<section class="slide" id="s-honest" data-title="What we have not shown" data-plan="220-240" data-steps="4"
   data-labels="The simulator against real reads|The firewall|What we retracted|What we have not shown">
   <p class="kicker">Evidence we don't fake</p>
   <h2 class="title sm">No wet lab, so everything is built to catch us out</h2>
@@ -536,11 +490,12 @@
     <p><i class="cue"></i> Then the firewall. Every gain has to survive held-out seeds and a structurally different second simulator that is never optimized on. <span class="res" data-say="firewall"></span></p>
     <p><i class="cue"></i> And two claims in this project were killed by our own reruns. Both corrections are written up with the wrong version kept visible. If a number survived that, you can lean on it.</p>
     <p><i class="cue"></i> The limit, out loud: we have shown the model's ranking transfers to real reads. We have not shown that selecting candidates by it lowers failures on real DNA. That needs strands synthesized and sequenced, and we have not done that.</p>
+    <p class="aside">If asked where it runs: both models fit on the microcontroller on the table. The 0.8M polisher runs there quantized to int8, the 63k risk model in float32, and on 300 real clusters the on-device polisher gets 229 strands exactly right against 230 for the same model in float and 211 for the classic majority vote. No laptop, no network.</p>
   </aside>
 </section>
 
-<!-- ================================================================ 16. Close -->
-<section class="slide" id="s-results" data-title="Results and close" data-plan="274-292" data-steps="2"
+<!-- ================================================================ 14. Close -->
+<section class="slide" id="s-results" data-title="Results and close" data-plan="240-258" data-steps="2"
   data-labels="What we measured|Close: tagline, team, repo">
   <p class="kicker">Results</p>
   <h2 class="title sm">What the audit measured</h2>
