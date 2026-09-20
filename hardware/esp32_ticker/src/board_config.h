@@ -15,6 +15,11 @@
 // (LGFX_ESP32_S3_BOX_V3 in LGFX_AutoDetect_ESP32_all.hpp), which is the reference we trust:
 // it names the panel, the pins, the backlight, the rotation and the touch controller.
 // Set it to 0 to fall back to the hand written configuration below.
+//
+// CONFIRMED ON THIS UNIT by the colour sweep in src/diag.cpp: configuration 0, that is
+// ILI9342C with BGR order and inversion off, is the one where every named colour bar matched
+// its label on a near black background. That is exactly what the library profile does, so
+// USE_AUTODETECT 1 is correct and the hand written values below match it.
 #define USE_AUTODETECT 1
 
 // The hand written fallback. These are the same numbers LovyanGFX's BOX-3 profile uses, and

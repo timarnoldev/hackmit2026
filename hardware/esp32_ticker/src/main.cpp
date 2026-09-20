@@ -142,8 +142,13 @@ static const uint32_t C_GAIN = 0x4FD6B5;
 static const uint32_t C_TBD = 0xF4C45A;
 static const uint32_t C_WHITE = 0xFFFFFF;
 
-static inline uint16_t rgb(uint32_t hex) {
-  return lcd.color565((hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF);
+// Colours go to the driver as RGB888 and it converts them itself. This matters: handing a
+// pre-packed RGB565 value to a sprite draw call made LovyanGFX read the 16 bit number as an
+// RGB888 one, so the paper colour 0x0F1417 arrived as 0x0008A2 and the whole panel came up
+// blue. The colour sweep in diag.cpp used color888 and looked correct, which is what pinned
+// it down. Pass the brand hex straight through and let the library do the packing.
+static inline uint32_t rgb(uint32_t hex) {
+  return lcd.color888((hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF);
 }
 
 // Linear blend in 888. t = 0 gives a, t = 1 gives b. Every fade in this firmware is one of
