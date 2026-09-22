@@ -40,7 +40,8 @@ def build(out: Path) -> Path:
     if cxx is None:
         raise SystemExit("no C++ compiler found, cannot verify the on-device decoder")
     cmd = [cxx, "-std=c++17", "-O2", "-I", str(HERE.parent / "src"), "-o", str(out),
-           str(HERE / "verify_decoder.cpp"), str(HERE.parent / "src" / "box_decoder.cpp")]
+           str(HERE / "verify_decoder.cpp"), str(HERE.parent / "src" / "box_decoder.cpp"),
+           str(HERE.parent / "src" / "box_polish.cpp"), str(HERE.parent / "src" / "box_risk.cpp")]
     subprocess.run(cmd, check=True)
     return out
 

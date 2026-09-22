@@ -31,11 +31,14 @@ static bool gReady = false;
 bool available() { return true; }
 size_t workingBytes() { return sizeof(float) * MAXL * (3 * RC + RISK_IN); }
 
+// PSRAM first, deliberately. This model runs in well under a millisecond and is nowhere
+// near the critical path, so its 96 KB belongs in the 8 MB nobody is using rather than in
+// the internal RAM the renderer and the task stacks are competing for.
 #if defined(ARDUINO) || defined(ESP_PLATFORM)
 #include "esp_heap_caps.h"
 static void *alloc(size_t n) {
-  void *p = heap_caps_malloc(n, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  return p ? p : heap_caps_malloc(n, MALLOC_CAP_SPIRAM);
+  void *p = heap_caps_malloc(n, MALLOC_CAP_SPIRAM);
+  return p ? p : heap_caps_malloc(n, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 }
 #else
 static void *alloc(size_t n) { return malloc(n); }
