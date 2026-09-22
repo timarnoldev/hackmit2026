@@ -49,7 +49,6 @@ static int16_t *gA = nullptr;  // three activation buffers, [position][channel]
 static int16_t *gB = nullptr;
 static int16_t *gR = nullptr;  // the residual held across a block
 static float *gFeat = nullptr;   // [position][feature]
-static float *gTmp = nullptr;    // [position][channel], for GroupNorm and GELU
 static float *gOpP = nullptr;    // [position][POLISH_OPS]
 static float *gInsP = nullptr;   // [position][POLISH_INS]
 static bool gReady = false;
@@ -60,7 +59,7 @@ void setYield(void (*fn)()) { gYield = fn; }
 bool available() { return true; }
 
 size_t workingBytes() {
-  return 3 * sizeof(int16_t) * MAXL * C + sizeof(float) * MAXL * (NF + C) +
+  return 3 * sizeof(int16_t) * MAXL * C + sizeof(float) * MAXL * NF +
          sizeof(float) * MAXL * (POLISH_OPS + POLISH_INS);
 }
 
@@ -70,10 +69,9 @@ bool begin() {
   gB = (int16_t *)allocFast(sizeof(int16_t) * MAXL * C);
   gR = (int16_t *)allocFast(sizeof(int16_t) * MAXL * C);
   gFeat = (float *)allocSlow(sizeof(float) * MAXL * NF);
-  gTmp = (float *)allocSlow(sizeof(float) * MAXL * C);
   gOpP = (float *)allocSlow(sizeof(float) * MAXL * POLISH_OPS);
   gInsP = (float *)allocSlow(sizeof(float) * MAXL * POLISH_INS);
-  gReady = gA && gB && gR && gFeat && gTmp && gOpP && gInsP;
+  gReady = gA && gB && gR && gFeat && gOpP && gInsP;
   return gReady;
 }
 
@@ -83,11 +81,16 @@ static inline float geluf(float x) {
   return 0.5f * x * (1.0f + tanhf(0.7978845608028654f * (x + 0.044715f * x * x * x)));
 }
 
-// GroupNorm over 8 groups then GELU, in float, from an int16 tensor into an int16 tensor.
-// Cheap next to the convolutions: a few thousand operations against millions.
+// GroupNorm over 8 groups, then GELU, then straight back to int16 in one pass.
+//
+// This used to normalise into a float scratch buffer and quantize in a second pass. Fusing
+// the three steps removes 61 KB of PSRAM and the round trip through it, which is worth more
+// than it looks: the scratch was the only part of the network's inner loop living in
+// external memory.
 static void gnGelu(const int16_t *x, float xScale, int len, const float *gw, const float *gb,
                    float outScale, int16_t *out) {
   const int per = C / POLISH_GROUPS;
+  const float invOut = 1.0f / outScale;
   for (int g = 0; g < POLISH_GROUPS; ++g) {
     const int c0 = g * per;
     double sum = 0, sq = 0;
@@ -103,23 +106,16 @@ static void gnGelu(const int16_t *x, float xScale, int len, const float *gw, con
     const double mean = sum / n;
     const double var = sq / n - mean * mean;
     const float inv = (float)(1.0 / sqrt(var + 1e-5));
+    const float fmean = (float)mean;
     for (int p = 0; p < len; ++p) {
       const int16_t *row = x + (size_t)p * C;
-      float *trow = gTmp + (size_t)p * C;
+      int16_t *orow = out + (size_t)p * C;
       for (int c = c0; c < c0 + per; ++c) {
-        const float v = ((float)row[c] * xScale - (float)mean) * inv;
-        trow[c] = geluf(v * gw[c] + gb[c]);
+        const float v = ((float)row[c] * xScale - fmean) * inv;
+        float q = geluf(v * gw[c] + gb[c]) * invOut;
+        q = q < -32767.0f ? -32767.0f : (q > 32767.0f ? 32767.0f : q);
+        orow[c] = (int16_t)lrintf(q);
       }
-    }
-  }
-  const float inv = 1.0f / outScale;
-  for (int p = 0; p < len; ++p) {
-    const float *trow = gTmp + (size_t)p * C;
-    int16_t *orow = out + (size_t)p * C;
-    for (int c = 0; c < C; ++c) {
-      float q = trow[c] * inv;
-      q = q < -32767.0f ? -32767.0f : (q > 32767.0f ? 32767.0f : q);
-      orow[c] = (int16_t)lrintf(q);
     }
   }
 }

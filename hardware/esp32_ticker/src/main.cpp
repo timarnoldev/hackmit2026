@@ -204,6 +204,8 @@ struct Strand {
   char was[VISIBLE_LETTERS + 1];   // what the classic decoder had, per position
   char fix[VISIBLE_LETTERS + 1];   // 's', 'i', 'd' or ' '
   float risk = -1.0f;              // what the risk model gives this strand, -1 = not scored
+  int edits = 0;                   // Levenshtein distance from the true strand
+  int bases = 0;                   // length of the true strand, the denominator for that
 };
 
 // One column of the tape: the same strand position across every lane, so the reads and the
@@ -269,6 +271,9 @@ static int sparkAt = 0;
 
 static int embeddedAt = 0;          // next record in the frozen run, wraps for a seamless loop
 static uint32_t embDone = 0, embOk = 0, embFix = 0, embErr = 0, embReads = 0;
+// edits and bases give the per base accuracy, which is the number a storage system cares
+// about; drop counts the strands that lost every read, which still count as strands.
+static uint32_t embDrop = 0, embEdits = 0, embBases = 0;
 
 static char decoderName[36] = "waiting for the Mac";
 static char decoderTag[10] = "";
@@ -288,6 +293,11 @@ static uint32_t lastLineMs = 0;
 static char touchNote[24] = "";
 static uint32_t touchNoteUntil = 0;
 static float fps = 0;
+// Anything that stops the box working has to say so on the panel. A splash screen that
+// claims it is waiting for a Mac while the real problem is an allocation failure is the
+// worst thing this firmware could do on a table in front of a judge.
+static char gFault[72] = "";
+static uint32_t gLastStrandMs = 0;
 static uint32_t gDecodeUs = 0;   // rolling mean time for one on-device decode
 static uint32_t gDecoded = 0;
 static inline uint32_t micros_now() { return (uint32_t)micros(); }
@@ -405,6 +415,8 @@ static bool parseRecord(const char *rec, Strand &out, int &nfix, uint32_t &micro
   micros = micros_now() - t0;
 
   out.ok = (nRef == nCons) && memcmp(cons, reference, (size_t)nCons) == 0;
+  out.edits = boxdec::editDistance(cons, nCons, reference, nRef);
+  out.bases = nRef;
   strncpy(out.cons, cons, VISIBLE_LETTERS);
   out.cons[VISIBLE_LETTERS] = 0;
 
@@ -439,13 +451,54 @@ static bool parseRecord(const char *rec, Strand &out, int &nfix, uint32_t &micro
 // runs inside the render loop. The S3 has two cores, so the decode gets its own task and the
 // animation never waits for it. The handoff is a single slot with two flags, which is enough
 // because exactly one task writes each of them.
+static TaskHandle_t gDecodeTask = nullptr;
 static Strand gSlot;              // written by the decoder task, read by the render loop
 static int gSlotFix = 0;
 static volatile bool gSlotReady = false;   // set by the task, cleared by the loop
 static volatile bool gSlotWanted = true;   // set by the loop, cleared by the task
 
+// Decode a slice of the embedded run as fast as the chip can, and print one line per
+// strand. This exists because the panel once showed a percentage the host verification did
+// not agree with, and the only way to settle that is to make the device report per strand
+// what it decoded so the two can be diffed record by record.
+static volatile int gSelfTest = 0;
+
+static void runSelfTest(int count) {
+  Serial.printf("selftest begin n=%d of %d records\n", count, BOX_DATA_STRANDS);
+  uint32_t ok = 0, drop = 0, fixes = 0, edits = 0, bases = 0;
+  const uint32_t t0 = millis();
+  for (int i = 0; i < count && i < BOX_DATA_STRANDS; ++i) {
+    Strand b;
+    int nfix = 0;
+    uint32_t us = 0;
+    const int saved = embeddedAt;
+    embeddedAt = i;
+    parseRecord(kBoxData[i], b, nfix, us);
+    embeddedAt = saved;
+    ok += b.ok ? 1 : 0;
+    drop += b.dropout ? 1 : 0;
+    fixes += nfix;
+    edits += b.dropout ? BOX_DATA_STRAND_LENGTH : b.edits;
+    bases += b.dropout ? BOX_DATA_STRAND_LENGTH : b.bases;
+    Serial.printf("st i=%d ok=%d drop=%d ed=%d fx=%d us=%lu\n", i, (int)b.ok, (int)b.dropout,
+                  b.edits, nfix, (unsigned long)us);
+    vTaskDelay(1);
+  }
+  Serial.printf("selftest done n=%d ok=%lu drop=%lu fixes=%lu edits=%lu bases=%lu "
+                "exact=%.2f%% perbase=%.3f%% seconds=%lu\n", count, (unsigned long)ok,
+                (unsigned long)drop, (unsigned long)fixes, (unsigned long)edits,
+                (unsigned long)bases, count ? 100.0 * ok / count : 0.0,
+                bases ? 100.0 * (1.0 - (double)edits / (double)bases) : 0.0,
+                (unsigned long)((millis() - t0) / 1000));
+}
+
 static void decodeTask(void *) {
   for (;;) {
+    if (gSelfTest) {
+      const int n = gSelfTest;
+      gSelfTest = 0;
+      runSelfTest(n);
+    }
     if (gSlotWanted && !gSlotReady) {
       uint32_t us = 0;
       parseRecord(kBoxData[embeddedAt], gSlot, gSlotFix, us);
@@ -475,6 +528,11 @@ static bool feedEmbedded() {
 
   ++embDone;
   embOk += b.ok ? 1 : 0;
+  embDrop += b.dropout ? 1 : 0;
+  // a strand that lost every read contributes its whole length as errors, because that is
+  // what it is: nothing came back. Counting it any other way would flatter the number.
+  embEdits += b.dropout ? BOX_DATA_STRAND_LENGTH : b.edits;
+  embBases += b.dropout ? BOX_DATA_STRAND_LENGTH : b.bases;
   embFix += nfix;
   embReads += b.nreads;
   for (int r = 0; r < b.shown; ++r)
@@ -686,8 +744,8 @@ static void drawHeader() {
   canvas.print("Erbgut");
 
   const bool up = linkUp && (millis() - lastLineMs) < LINK_TIMEOUT_MS;
-  const char *status = paused ? "paused" : (up ? "live" : "no link");
-  const uint32_t sc = paused ? C_TBD : (up ? C_GAIN : C_COST);
+  const char *status = paused ? "paused" : (up ? "live" : "On Edge");
+  const uint32_t sc = paused ? C_TBD : C_GAIN;
   const int sw = strlen(status) * 6;
 
   canvas.setFont(&fonts::Font0);
@@ -698,9 +756,8 @@ static void drawHeader() {
     snprintf(caption, sizeof(caption), "%s", touchNote);
     capColour = C_AUDIT;
   } else if (source == SRC_EMBEDDED) {
-    // standing on its own: say so, and say which decoder produced what is on screen
-    snprintf(caption, sizeof(caption), gPolishOnDevice ? "polish, on device"
-                                                       : "majority vote, on device");
+    if (gPolishOnDevice) caption[0] = 0;
+    else snprintf(caption, sizeof(caption), "majority vote, the model did not load");
   } else if (!hostModelLive) {
     // the Mac is attached but its polisher is not loaded, which would otherwise be invisible
     snprintf(caption, sizeof(caption), "majority vote, on the Mac");
@@ -830,6 +887,11 @@ static void drawMark(int ox, int oy, float k, const float lift[3]) {
   }
 }
 
+
+// Standalone is the normal state, so the splash says what the box is doing rather than
+// asking for a Mac it does not need. If something is broken it says that instead, because a
+// box that sits on a hopeful message while an allocation failed is worse than one that
+// admits it.
 static void splash() {
   canvas.fillSprite(rgb(C_PAPER));
   // the Erbgut mark, centred over where the wordmark sits
@@ -842,12 +904,26 @@ static void splash() {
   canvas.setTextColor(rgb(C_INK), rgb(C_PAPER));
   canvas.setCursor(116, 142);
   canvas.print("Erbgut");
+
   canvas.setFont(&fonts::Font0);
-  canvas.setTextColor(rgb(C_MUTED), rgb(C_PAPER));
-  canvas.setCursor(70, 186);
-  canvas.print("live decode ticker, waiting for USB");
-  canvas.setCursor(58, 200);
-  canvas.print("run scripts/ticker_server.py on the Mac");
+  canvas.setTextSize(1);
+  if (gFault[0]) {
+    canvas.setTextColor(rgb(C_COST), rgb(C_PAPER));
+    canvas.setCursor(MARGIN, 182);
+    canvas.print("fault");
+    canvas.setCursor(MARGIN, 194);
+    canvas.print(gFault);
+    canvas.setTextColor(rgb(C_MUTED), rgb(C_PAPER));
+    canvas.setCursor(MARGIN, 210);
+    canvas.print("see the USB log for the numbers");
+  } else {
+    canvas.setTextColor(rgb(C_MUTED), rgb(C_PAPER));
+    canvas.setCursor(MARGIN, 186);
+    canvas.printf("%s, decoding the first strand",
+                  gPolishOnDevice ? "polish on device" : "majority vote on device");
+    canvas.setCursor(MARGIN, 200);
+    canvas.printf("%d strands compiled in, no Mac needed", BOX_DATA_STRANDS);
+  }
   canvas.pushSprite(0, 0);
 }
 
@@ -856,6 +932,14 @@ static void render() {
   canvas.fillSprite(rgb(C_PAPER));
   drawHeader();
   drawTape();
+  if (gFault[0]) {  // a band across the bottom, impossible to mistake for normal operation
+    canvas.fillRect(0, LCD_HEIGHT - 14, LCD_WIDTH, 14, rgb(C_COST));
+    canvas.setFont(&fonts::Font0);
+    canvas.setTextSize(1);
+    canvas.setTextColor(rgb(C_PAPER), rgb(C_COST));
+    canvas.setCursor(MARGIN, LCD_HEIGHT - 10);
+    canvas.print(gFault);
+  }
   canvas.pushSprite(0, 0);
 }
 
@@ -925,6 +1009,7 @@ static void step(float dt) {
     source = want;
     if (source == SRC_EMBEDDED) {
       embDone = embOk = embFix = embErr = embReads = 0;
+      embDrop = embEdits = embBases = 0;
     } else {
       // ask the host to say what it is running, so the tag is right within a frame or two
       Serial.println('?');
@@ -1041,8 +1126,14 @@ static void pumpSerial() {
     if (c == '\n' || c == '\r') {
       if (lineLen > 0) {
         lineBuf[lineLen] = 0;
-        JsonDocument doc;
-        if (!deserializeJson(doc, lineBuf, lineLen)) handleEvent(doc);
+        if (lineLen == 1 && lineBuf[0] == 't') {
+          gSelfTest = 40;  // diagnostic, see runSelfTest
+        } else if (lineLen == 1 && lineBuf[0] == 'T') {
+          gSelfTest = BOX_DATA_STRANDS;
+        } else {
+          JsonDocument doc;
+          if (!deserializeJson(doc, lineBuf, lineLen)) handleEvent(doc);
+        }
         lineLen = 0;
       }
       continue;
@@ -1153,23 +1244,31 @@ void setup() {
   lcd.setRotation(LCD_ROTATION);
   lcd.setBrightness(200);
 
-  // Internal RAM first: drawing into it is much faster than into PSRAM, and the push is
-  // DMA either way. PSRAM is the fallback if the frame does not fit.
+  // Hot in internal RAM, cold in PSRAM. The frame is rewritten twenty to thirty times a
+  // second, so it stays internal; the two models' working buffers are touched once per
+  // strand and live in the 8 MB nobody else is using. Putting the frame in PSRAM as well
+  // costs about eight frames a second and buys nothing once the models have moved out.
+  Serial.printf("psram size=%u free=%u internal free=%u\n", (unsigned)ESP.getPsramSize(),
+                (unsigned)ESP.getFreePsram(),
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   canvas.setColorDepth(16);
   canvas.setPsram(false);
   canvasReady = canvas.createSprite(LCD_WIDTH, LCD_HEIGHT) != nullptr;
   bool inPsram = false;
-  if (!canvasReady) {
+  if (!canvasReady && ESP.getPsramSize() > 0) {  // no internal room: PSRAM rather than nothing
     canvas.setPsram(true);
     canvasReady = canvas.createSprite(LCD_WIDTH, LCD_HEIGHT) != nullptr;
     inPsram = canvasReady;
   }
+  if (!canvasReady) snprintf(gFault, sizeof(gFault), "no memory for the 320x240 frame");
   canvas.setFont(&fonts::Font0);
   canvas.setTextSize(1);
   canvas.setTextWrap(false);
 
-  Serial.printf("lcd init=%d %dx%d sprite=%d psram=%d heap=%u\n", (int)lcdOk, lcd.width(),
-                lcd.height(), (int)canvasReady, (int)inPsram, (unsigned)ESP.getFreeHeap());
+  Serial.printf("lcd init=%d %dx%d sprite=%d sprite_in_psram=%d heap=%u internal=%u\n",
+                (int)lcdOk, lcd.width(), lcd.height(), (int)canvasReady, (int)inPsram,
+                (unsigned)ESP.getFreeHeap(),
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   memset(spark, 0, sizeof(spark));
   if (canvasReady) splash();
   boxpolish::setYield([]() { vTaskDelay(1); });
@@ -1177,12 +1276,27 @@ void setup() {
   Serial.printf("polish on device=%d working=%u bytes heap=%u\n", (int)gPolishOnDevice,
                 (unsigned)boxpolish::workingBytes(), (unsigned)ESP.getFreeHeap());
   gRiskOnDevice = boxrisk::available() && boxrisk::begin();
-  Serial.printf("risk on device=%d working=%u bytes heap=%u\n", (int)gRiskOnDevice,
-                (unsigned)boxrisk::workingBytes(), (unsigned)ESP.getFreeHeap());
+  Serial.printf("risk on device=%d working=%u bytes heap=%u internal=%u psram free=%u\n",
+                (int)gRiskOnDevice, (unsigned)boxrisk::workingBytes(),
+                (unsigned)ESP.getFreeHeap(),
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                (unsigned)ESP.getFreePsram());
+  if (!gPolishOnDevice) snprintf(gFault, sizeof(gFault), "polisher did not fit, classic only");
 
   // the decoder gets the core the renderer is not on
-  xTaskCreatePinnedToCore(decodeTask, "decode", 16384, nullptr, 1, nullptr,
-                          xPortGetCoreID() == 0 ? 1 : 0);
+  // A 12 KB stack out of internal RAM. This used to be created without checking, and when
+  // the heap was tight it silently never started: the panel sat on the splash screen and the
+  // box looked like it was waiting for a Mac.
+  gDecodeTask = nullptr;
+  const BaseType_t made = xTaskCreatePinnedToCore(decodeTask, "decode", 12288, nullptr, 1,
+                                                  &gDecodeTask,
+                                                  xPortGetCoreID() == 0 ? 1 : 0);
+  if (made != pdPASS || gDecodeTask == nullptr) {
+    snprintf(gFault, sizeof(gFault), "decode task did not start, heap %u",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    Serial.printf("FAULT: %s\n", gFault);
+  }
+  Serial.printf("decode task started=%d\n", (int)(gDecodeTask != nullptr));
   Serial.println("display ready");
   Serial.println('?');  // ask the server what is running
 }
@@ -1219,9 +1333,22 @@ void loop() {
 
   if (now - fpsWindow > 3000) {
     fps = frames * 1000.0f / (now - fpsWindow);
-    Serial.printf("fps=%.1f heap=%u decode=%luus risk=%luus n=%lu\n", fps,
-                  (unsigned)ESP.getFreeHeap(), (unsigned long)gDecodeUs,
-                  (unsigned long)gRiskUs, (unsigned long)gDecoded);
+    // ESP-IDF's high water mark is already in bytes, unlike vanilla FreeRTOS which
+    // reports words. Multiplying by four here once claimed more free stack than the task
+    // was ever given.
+    const unsigned stackLeft =
+        gDecodeTask ? (unsigned)uxTaskGetStackHighWaterMark(gDecodeTask) : 0u;
+    Serial.printf("fps=%.1f heap=%u internal=%u psram=%u decode=%luus risk=%luus n=%lu "
+                  "stack_left=%u\n", fps, (unsigned)ESP.getFreeHeap(),
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                  (unsigned)ESP.getFreePsram(), (unsigned long)gDecodeUs,
+                  (unsigned long)gRiskUs, (unsigned long)gDecoded, stackLeft);
+    Serial.printf("tally done=%lu ok=%lu drop=%lu fixes=%lu edits=%lu bases=%lu\n",
+                  (unsigned long)embDone, (unsigned long)embOk, (unsigned long)embDrop,
+                  (unsigned long)embFix, (unsigned long)embEdits, (unsigned long)embBases);
+    // standalone and nothing has come out of the decoder for a long time: say so
+    if (source == SRC_EMBEDDED && gFault[0] == 0 && gDecoded == 0 && now > 25000)
+      snprintf(gFault, sizeof(gFault), "no strand decoded in %lus", (unsigned long)(now / 1000));
     fpsWindow = now;
     frames = 0;
   }
