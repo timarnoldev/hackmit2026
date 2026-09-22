@@ -1,14 +1,12 @@
 # Learning What to Avoid: Decoder Failures as a Training Signal for DNA Storage Encoders
 
-**Exposé.** Written 2026-09-22, after HackMIT 2026. Every number here is registered with its
-measurement in [`docs/NUMBERS.md`](../docs/NUMBERS.md) and reproducible from `results/`.
 
 ---
 
 ## 1. The claim
 
-DNA storage pipelines decide *what to write* using hand-written sequence rules — no homopolymer
-longer than three, GC content between 40 and 60 percent — chosen once and copied between papers.
+DNA storage pipelines decide *what to write* using hand-written sequence rules - no homopolymer
+longer than three, GC content between 40 and 60 percent - chosen once and copied between papers.
 These rules are proxies for a question they never ask: **which candidate strand is this decoder
 least likely to lose?**
 
