@@ -4,8 +4,8 @@
 
 ---
 
-DNA data storage encodes under sequence rules — no homopolymer longer than three, GC content
-between 40 and 60 percent — treated as constants of the chemistry. We find they are properties of
+DNA data storage encodes under sequence rules - no homopolymer longer than three, GC content
+between 40 and 60 percent - treated as constants of the chemistry. We find they are properties of
 the chemistry *and of the decoder*. Under algebraic error correction a strand is risky in
 proportion to how many errors it accumulates; under reconstruction from multiple reads it is risky
 in proportion to how many errors are *shared* across them, since voting repairs the rest for free.
@@ -23,5 +23,4 @@ held-out Nanopore clusters; we have not shown it lowers failures on synthesised 
 
 ---
 
-**The ask:** we think this is a workshop or methods paper and we would like someone who knows the
-field to tell us whether that judgement is right, and what it would take.
+
