@@ -49,18 +49,28 @@ where errors survive voting.**
 It also rates G and C runs above A and T runs of equal length (GGGGG 0.707 against AAAAA 0.608), a
 distinction no rule that counts identical letters can express.
 
-## 3. Where the existing work sits
+## 3. Concurrent independent work, and why it is one end of our axis
 
-There is an unpublished implementation that predicts per-sequence failure from a frozen decoder's
-simulated failures and reallocates parity accordingly
+An unpublished implementation predicts per-sequence failure from a frozen decoder's simulated
+failures and reallocates parity accordingly
 ([DNA-Storage-Reliability](https://github.com/aakibinesar/DNA-Storage-Reliability), accessed
-September 2026). Its labelling scheme is essentially ours: the fraction of ~30 simulated runs in
-which decoding fails. Its `src/` contains `consensus_voter.py` and a Reed-Solomon decoder, and
-**no learned reconstruction step**.
+September 2026; no paper, preprint or DOI attached). Its labelling scheme is close to ours: the
+fraction of ~30 simulated runs in which decoding fails.
 
-So it is not a competitor to this claim. It is one end of the axis: consensus vote plus algebraic
-correction, the configuration this exposé predicts should produce a *different* notion of risk.
-Our weakest decoder is close to theirs, and our strongest is two points off a published
+**This is concurrent independent work, not prior art.** It is unpublished, it carries no paper,
+and we built ours during a hackathon without knowledge of it. Independent convergence on the same
+labelling is evidence the construction is right, and we report it as such rather than as a claim
+against us.
+
+More to the point, it is a different object. Its `src/` contains `consensus_voter.py` and a
+Reed-Solomon decoder and **no learned reconstruction step**, so its risk model is trained against
+algebraic correction, where every wrong symbol costs the same. That setting *cannot* produce the
+finding in section 2: under Reed-Solomon a deletion context and a substitution context of equal
+error rate are equally bad, so no model trained there can learn to separate them. Ours did,
+because it was trained against a decoder that votes.
+
+So it sits at one end of the axis this exposé measures along: consensus vote plus algebraic
+correction. Our weakest decoder is near it and our strongest is two points off a published
 transformer. We have the span; nobody has measured along it.
 
 ## 4. The second result we already hold
