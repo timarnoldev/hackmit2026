@@ -1,5 +1,7 @@
 # Learning What to Avoid: Decoder Failures as a Training Signal for DNA Storage Encoders
 
+> **Superseded** by [`EXPOSE2.md`](EXPOSE2.md). Kept for the record of how the claim narrowed.
+
 
 ---
 
