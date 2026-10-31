@@ -49,29 +49,54 @@ where errors survive voting.**
 It also rates G and C runs above A and T runs of equal length (GGGGG 0.707 against AAAAA 0.608), a
 distinction no rule that counts identical letters can express.
 
-## 3. Concurrent independent work, and why it is one end of our axis
+## 3. Concurrent independent work, and what actually separates it from ours
 
 An unpublished implementation predicts per-sequence failure from a frozen decoder's simulated
 failures and reallocates parity accordingly
 ([DNA-Storage-Reliability](https://github.com/aakibinesar/DNA-Storage-Reliability), accessed
-September 2026; no paper, preprint or DOI attached). Its labelling scheme is close to ours: the
-fraction of ~30 simulated runs in which decoding fails.
+October 2026; no paper, preprint or DOI attached). Its labelling scheme is close to ours: the
+fraction of ~30 simulated runs in which decoding fails. It reaches a conclusion parallel to our
+section 5 by another road: a raw failure-risk score is nearly uncorrelated with the marginal
+benefit of extra parity (Spearman about −0.02 to −0.05), so the per-strand risk is the wrong unit
+for the decision it is used for.
 
-**This is concurrent independent work, not prior art.** It is unpublished, it carries no paper,
-and we built ours during a hackathon without knowledge of it. Independent convergence on the same
-labelling is evidence the construction is right, and we report it as such rather than as a claim
-against us.
+**This is concurrent independent work, not prior art.** It is unpublished, and we built ours
+during a hackathon without knowledge of it. Independent convergence on the same labelling is
+evidence the construction is right, and we report it as such.
 
-More to the point, it is a different object. Its `src/` contains `consensus_voter.py` and a
-Reed-Solomon decoder and **no learned reconstruction step**, so its risk model is trained against
-algebraic correction, where every wrong symbol costs the same. That setting *cannot* produce the
-finding in section 2: under Reed-Solomon a deletion context and a substitution context of equal
-error rate are equally bad, so no model trained there can learn to separate them. Ours did,
-because it was trained against a decoder that votes.
+**What separates the two, read off its code:**
 
-So it sits at one end of the axis this exposé measures along: consensus vote plus algebraic
-correction. Our weakest decoder is near it and our strongest is two points off a published
-transformer. We have the span; nobody has measured along it.
+| | DNA-Storage-Reliability | Ours |
+|---|---|---|
+| Decision | How much RS parity each strand receives, sequences fixed | Which candidate strands the encoder writes, and which global constraints hold |
+| Channel | DeSP-style; substitution rate swept 1–20%, indel rate fixed at 0.1%, homopolymers act only through PCR coverage loss, **no context-dependent and no read-shared errors** | Calibrated on real Nanopore and Illumina reads: 5-mer context table, run-length deletion factors, a per-position error component shared by all reads of a strand |
+| Decoder | Reads trimmed or padded to length, then positional vote **without alignment**, then an RS capacity check | Alignment and vote, a learned polisher, and a published transformer as arms |
+
+An earlier draft of this section argued that their setting *cannot* produce the deletion-versus-
+substitution asymmetry because under Reed-Solomon both cost the same. **That argument is wrong
+and is withdrawn.** Their voter does not align, so a single deletion shifts every later base and
+corrupts every later byte: under that decoder a deletion context is *worse* than a substitution
+context, not equal to it. And their channel has no context structure at all, so there is nothing
+context-specific for a model to find. Their setting does not refute our finding; it does not test
+it, because channel and decoder differ at the same time.
+
+The sharper statement of the difference is therefore not "algebraic against learned" but
+**shared against independent errors**. An error one read makes is outvoted by the others under
+any multi-read decoder; an error every read of a strand makes survives every one of them. Real
+Nanopore channels have such errors, and they are predictable from local context (section 3 of
+[`docs/NUMBERS.md`](../docs/NUMBERS.md): 45–66% of between-position variance, hot-spot AUC 0.80 to
+0.90, the same context families leading in two independent datasets). A channel without them,
+like theirs, leaves a risk model little to learn, which is consistent with their finding that the
+model is informative in only about a third of their configurations.
+
+Two experiments turn this from an argument into a measurement, and both run on **our** channel
+so that only one thing changes at a time:
+
+1. **Decoder class, channel fixed.** Train the risk model against the inner-RS arm and check
+   whether the deletion-versus-substitution separation shrinks, holds, or grows.
+2. **Error sharing, decoder fixed.** Regenerate the same context errors once shared across all
+   reads of a strand and once independently per read, at equal total rate. If the claim holds,
+   the model fears those contexts only in the shared case.
 
 ## 4. The second result we already hold
 

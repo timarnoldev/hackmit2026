@@ -47,7 +47,7 @@ If tier 2 doesn't hold, the honest result is still strong: the tool shows with m
 
 This matters because it decides which claims are honest.
 
-1. **Candidate selection is free.** A Fountain encoder tries many seeds per strand anyway. Picking the lowest risk candidate among 8 costs zero density; it only costs compute.
+1. **Candidate selection is free.** A Fountain encoder tries many seeds per strand anyway, and every candidate carries the same data. Picking the lowest risk candidate costs zero density; it only costs compute. It removes risk from what is written, rather than compensating for it afterwards with extra parity on risky strands; the two are complementary.
 2. **Lower strand failure is the direct effect.** If the risk model picks strands the decoder reconstructs more reliably, the per-strand failure rate drops at a given coverage.
 3. **That converts into the two numbers people pay for:**
    - **Fewer reads per strand** to hit the recovery target (cheaper reading), or

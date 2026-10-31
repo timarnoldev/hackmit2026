@@ -11,7 +11,7 @@ DNA storage pipelines follow hand-written rules such as "never more than 3 ident
 For a given channel (sequencing technology, read budget, recovery target), our tool
 
 1. **audits every rule and the redundancy level**: switches each rule on and off, measures what it costs and what it buys, and keeps only what pays off, and
-2. **learns what to avoid from decoder failures**: a risk model trained on where the decoder actually fails picks the safest candidate strands, going beyond the hand rules where the channel has patterns they don't cover.
+2. **learns what to avoid from decoder failures**: among equivalent strands that carry the same data, a risk model trained on where the decoder actually fails picks the one most likely to survive, going beyond the hand rules where the channel has patterns they don't cover.
 
 The result is a codec tuned to that channel that reaches the same recovery target with fewer reads per strand or less redundancy than the hand-tuned default, with the **same** encoder and the **same** decoder.
 
@@ -20,6 +20,8 @@ The result is a codec tuned to that channel that reaches the same recovery targe
 ## Contents
 
 **Where we stand against published work:** [docs/COMPARISON.md](docs/COMPARISON.md), written to be unflattering where the numbers are.
+
+**Where this is going:** a paper on choosing what to write by the errors that survive voting. Abstracts and exposé in [paper/](paper/).
 
 **Reproduce the headline numbers in one command:** `scripts/reproduce.sh` (decoder against the classic baseline on real held-out reads, plus the end to end demo). Every number we quote, with its provenance: [docs/NUMBERS.md](docs/NUMBERS.md), which is the registry the rest of the documentation points at.
 
@@ -88,7 +90,7 @@ The loop alternates and freezes instead of co-training, so the risk model never 
         evaluated once on held-out seeds, reported on the Pareto plot
 ```
 
-**Where the gain comes from.** A Fountain encoder tries many candidate seeds per strand anyway, so picking the safest one costs no density. Safer strands fail less often, which turns into fewer reads per strand at the recovery target, or less redundancy (more bits per base) at the same coverage. We don't claim large density gains from dropping rules alone, because in a Fountain code they are nearly free.
+**Where the gain comes from.** The same data can be written as many different strands: a Fountain encoder tries many candidate seeds per strand anyway, and each candidate carries the payload equally well. We write the one whose errors the decoder is most likely to repair. Strands are read several times and the reads vote, so errors that one read makes are outvoted for free; what survives are errors that every read of a strand makes the same way, and those depend on the sequence. Choosing the sequence therefore *avoids* risk rather than compensating for it, which is the difference to giving risky strands more parity afterwards (the two combine). It costs no density, and safer strands turn into fewer reads per strand at the recovery target, or less redundancy (more bits per base) at the same coverage. We don't claim large density gains from dropping rules alone, because in a Fountain code they are nearly free.
 
 ## How it works
 
@@ -253,13 +255,10 @@ uv run python scripts/run_loop.py --profile illumina_standard --run-id quick --q
 
 Results land in `results/<run_id>/` and show up in the dashboard. Which run backs which number is listed in [docs/NUMBERS.md](docs/NUMBERS.md) section 9.
 
-## Pitch and marketing
+## Paper and hackathon material
 
-- `marketing/deck/`: the animated web pitch deck with presenter mode (serve it, press `P`)
-- `site/`: the landing page GitHub Pages publishes
-- `marketing/`: brand identity (Erbgut), logo, one-pager, pitch script, Devpost text, social card
-
-`[TEAM: ...]` marks the places still waiting on real names.
+- `paper/`: abstracts and exposés for the paper this project is turning into. Start with [`paper/ABSTRACT_SHARED_ERRORS.md`](paper/ABSTRACT_SHARED_ERRORS.md) and [`paper/EXPOSE2.md`](paper/EXPOSE2.md).
+- `site/`, `marketing/`, `hardware/`: the HackMIT landing page (published by GitHub Pages), pitch deck, brand material and the ESP32 demo box. Kept as the hackathon record; none of it backs a number.
 
 ## Repository layout
 
